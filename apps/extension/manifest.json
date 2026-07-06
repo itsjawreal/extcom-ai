@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Ekskomen AI Reply",
+  "description": "Draft human-reviewed replies for X/Twitter posts.",
+  "version": "0.1.0",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*"
+  ],
+  "background": {
+    "service_worker": "serviceWorker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

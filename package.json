@@ -1,0 +1,15 @@
+{
+  "name": "ekskomen-ai",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:extension": "npm run build --workspace=@ekskomen/extension",
+    "dev": "npm run dev --workspace=@ekskomen/extension",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  }
+}
