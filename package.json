@@ -2,6 +2,9 @@
   "name": "ekskomen-ai",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "workspaces": [
     "apps/*"
   ],

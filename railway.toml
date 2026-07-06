@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm ci && npm run build --workspace=@ekskomen/backend"
+buildCommand = "npm run build --workspace=@ekskomen/backend"
 
 [deploy]
 startCommand = "npm run start --workspace=@ekskomen/backend"
