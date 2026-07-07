@@ -1,9 +1,14 @@
-import { DEFAULT_SETTINGS } from "../shared/constants";
 import type {
   ExtensionSettings,
   GenerateReplyRequest,
   GenerateReplyResponse,
 } from "../shared/types";
+
+const DEFAULT_SETTINGS: ExtensionSettings = {
+  backendBaseUrl: "http://localhost:3000",
+  authToken: "dev-local-token",
+  toneDefault: "degen",
+};
 
 type RuntimeMessage =
   | { type: "GET_SETTINGS" }
