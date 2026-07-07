@@ -2,12 +2,27 @@ import { injectReplyButton, PROCESSED_ATTRIBUTE } from "./injectButton";
 import { extractPost } from "./extractPost";
 import { openPanel, syncPanelPosition } from "./panel";
 
-const POST_SELECTOR = 'article[data-testid="tweet"]';
+const POST_SELECTOR = "article";
+const DEBUG_PREFIX = "[Ekskomen AI]";
 let scanQueued = false;
+let scanCount = 0;
+
+function isCandidatePost(post: HTMLElement): boolean {
+  return Boolean(
+    post.querySelector('[data-testid="reply"]') &&
+    (post.querySelector('[data-testid="tweetText"]') || post.querySelector("time")),
+  );
+}
 
 function scanPosts(root: ParentNode = document): void {
-  root.querySelectorAll<HTMLElement>(POST_SELECTOR).forEach((post) => {
-    injectReplyButton(post, (button, clickedPost) => {
+  const posts = Array.from(root.querySelectorAll<HTMLElement>(POST_SELECTOR));
+  let candidateCount = 0;
+  let injectedCount = 0;
+
+  posts.forEach((post) => {
+    if (!isCandidatePost(post)) return;
+    candidateCount += 1;
+    const injected = injectReplyButton(post, (button, clickedPost) => {
       try {
         openPanel(button, clickedPost, { context: extractPost(clickedPost) });
       } catch (error) {
@@ -19,7 +34,19 @@ function scanPosts(root: ParentNode = document): void {
         });
       }
     });
+    if (injected) injectedCount += 1;
   });
+
+  scanCount += 1;
+  if (scanCount <= 5 || injectedCount > 0) {
+    console.debug(DEBUG_PREFIX, "scan complete", {
+      scanCount,
+      articles: posts.length,
+      candidates: candidateCount,
+      injected: injectedCount,
+      path: window.location.pathname,
+    });
+  }
 }
 
 function queueScan(): void {
@@ -33,6 +60,10 @@ function queueScan(): void {
 }
 
 export function observeTimeline(): () => void {
+  console.info(DEBUG_PREFIX, "content script loaded", {
+    path: window.location.pathname,
+    title: document.title,
+  });
   scanPosts();
 
   const observer = new MutationObserver(queueScan);
