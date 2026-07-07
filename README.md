@@ -1,8 +1,8 @@
 # Ekskomen AI
 
-Chrome MV3 extension for drafting human-reviewed X/Twitter replies. The current
-prototype injects an **AI Reply** button and displays local sample replies; it
-never publishes a reply.
+Chrome MV3 extension for drafting human-reviewed X/Twitter replies. It injects
+an **AI Reply** button, calls the backend for reply options, and can insert a
+selected draft into X/Twitter's composer without publishing it.
 
 ## Development
 
@@ -25,7 +25,9 @@ npm run start --workspace=@ekskomen/backend
 ```
 
 The backend currently exposes `GET /health` and `POST /v1/generate-reply`.
-Authentication and rate limiting arrive in Milestone 5; keep it private until then.
+`POST /v1/generate-reply` now requires `Authorization: Bearer <token>`, where
+tokens come from `AUTH_TOKENS` in the backend env as comma-separated
+`token[:plan]` entries.
 OpenRouter is the default provider and uses `openrouter/auto`; both provider and
 model remain configurable through environment variables.
 
@@ -38,14 +40,16 @@ these Railway variables before enabling generation:
 OPENROUTER_API_KEY=...
 AI_DEFAULT_PROVIDER=openrouter
 AI_DEFAULT_MODEL=openrouter/auto
+AUTH_TOKENS=your-prod-token:pro
 APP_URL=https://your-app.up.railway.app
 ```
 
 Railway supplies `PORT` automatically. The deployment health check uses
 `GET /health`.
 
-Do not expose a funded provider key publicly until application authentication
-and rate limiting are enabled (Milestone 5).
+In development, the extension defaults to `http://localhost:3000` and
+`dev-local-token`. Override both in the injected panel for localhost or Railway
+hosts covered by the manifest host permissions.
 
 ## Current scope
 
@@ -53,7 +57,8 @@ and rate limiting are enabled (Milestone 5).
 - Inject one AI Reply button per post.
 - Extract the clicked post's visible text, author, timestamp, and canonical URL.
 - Show extracted context in a collapsible debug section.
-- Show a floating panel with six tones and three local sample replies.
-- Copy a sample reply.
-- Keep insertion as an explicit placeholder for Milestone 4.
+- Show a floating panel with backend URL, auth token, six tones, and optional
+  extra instruction.
+- Generate three backend replies, copy them, and insert one into the reply
+  composer.
 - Never click or trigger X/Twitter's final Post/Reply action.

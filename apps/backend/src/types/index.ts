@@ -30,15 +30,18 @@ export type GenerateReplyResponse = {
   replies: GeneratedReply[];
   usage: {
     remainingToday: number | null;
-    plan: "development";
+    plan: "free" | "pro" | "power";
   };
 };
 
 export type ApiErrorCode =
+  | "AUTH_REQUIRED"
+  | "INVALID_TOKEN"
   | "INVALID_JSON"
   | "VALIDATION_ERROR"
   | "NOT_FOUND"
   | "PROVIDER_NOT_CONFIGURED"
   | "PROVIDER_ERROR"
+  | "RATE_LIMITED"
   | "UNSAFE_REQUEST"
   | "INTERNAL_ERROR";

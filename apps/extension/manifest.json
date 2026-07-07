@@ -6,7 +6,11 @@
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://x.com/*",
-    "https://twitter.com/*"
+    "https://twitter.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://*.railway.app/*",
+    "https://*.up.railway.app/*"
   ],
   "background": {
     "service_worker": "serviceWorker.js",

@@ -9,9 +9,9 @@ function scanPosts(root: ParentNode = document): void {
   root.querySelectorAll<HTMLElement>(POST_SELECTOR).forEach((post) => {
     injectReplyButton(post, (button, clickedPost) => {
       try {
-        openPanel(button, { context: extractPost(clickedPost) });
+        openPanel(button, clickedPost, { context: extractPost(clickedPost) });
       } catch (error) {
-        openPanel(button, {
+        openPanel(button, clickedPost, {
           error:
             error instanceof Error
               ? error.message

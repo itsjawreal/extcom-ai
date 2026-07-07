@@ -1,6 +1,8 @@
 .eks-ai-reply-button,
 .eks-reply-panel button,
-.eks-reply-panel select {
+.eks-reply-panel select,
+.eks-reply-panel input,
+.eks-reply-panel textarea {
   font: 14px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -112,6 +114,47 @@
   padding: 8px;
 }
 
+.eks-tone-label input,
+.eks-tone-label textarea {
+  background: transparent;
+  border: 1px solid rgb(207, 217, 222);
+  border-radius: 8px;
+  color: inherit;
+  padding: 8px;
+}
+
+.eks-tone-label textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.eks-panel-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.eks-panel-toolbar button {
+  background: rgb(29, 155, 240);
+  border: 1px solid rgb(29, 155, 240);
+  border-radius: 9999px;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 14px;
+}
+
+.eks-panel-toolbar button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.eks-panel-usage {
+  color: rgb(83, 100, 113);
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
 .eks-reply-option {
   border: 1px solid rgb(239, 243, 244);
   border-radius: 12px;
@@ -164,6 +207,8 @@
   }
 
   .eks-tone-label select,
+  .eks-tone-label input,
+  .eks-tone-label textarea,
   .eks-reply-option,
   .eks-context-details dl {
     border-color: rgb(47, 51, 54);

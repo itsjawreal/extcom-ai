@@ -9,6 +9,12 @@ export const TONE_LABELS: Record<Tone, string> = {
   short_alpha: "Short Alpha",
 };
 
+export const DEFAULT_SETTINGS = {
+  backendBaseUrl: "http://localhost:3000",
+  authToken: "dev-local-token",
+  toneDefault: "degen",
+} as const;
+
 export const FAKE_REPLIES: Record<Tone, FakeReply[]> = {
   degen: [
     { id: "degen-1", text: "ngl this is the kind of setup CT sleeps on until it is everywhere" },

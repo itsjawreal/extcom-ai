@@ -1,5 +1,7 @@
 import type { ServerResponse } from "node:http";
+import { authenticateToken, parseAuthToken } from "../services/auth.js";
 import { generateReplies, ProviderError } from "../services/aiProvider.js";
+import { consumeRateLimit } from "../services/rateLimit.js";
 import { assertSafeRequest } from "../services/safety.js";
 import { readJsonBody, sendError, sendJson } from "../serverUtils.js";
 import {
@@ -55,10 +57,25 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
 }
 
 export async function generateReplyRoute(
-  request: NodeJS.ReadableStream,
+  request: NodeJS.ReadableStream & { headers?: Record<string, string | string[] | undefined> },
   response: ServerResponse,
   generate: GenerateFn = generateReplies,
 ): Promise<void> {
+  const authHeader = request.headers?.authorization;
+  const authToken = parseAuthToken(
+    Array.isArray(authHeader) ? authHeader[0] : authHeader,
+  );
+  if (!authToken) {
+    sendError(response, 401, "AUTH_REQUIRED", "Bearer token is required.");
+    return;
+  }
+
+  const user = authenticateToken(authToken);
+  if (!user) {
+    sendError(response, 403, "INVALID_TOKEN", "Bearer token is invalid.");
+    return;
+  }
+
   let input: GenerateReplyRequest;
   try {
     input = validateGenerateRequest(await readJsonBody(request));
@@ -73,6 +90,15 @@ export async function generateReplyRoute(
     return;
   }
 
+  const usage = consumeRateLimit(user.token, user.plan);
+  if (!usage.allowed) {
+    if (usage.retryAfterSeconds) {
+      response.setHeader("Retry-After", String(usage.retryAfterSeconds));
+    }
+    sendError(response, 429, "RATE_LIMITED", "Daily generation limit reached.");
+    return;
+  }
+
   try {
     const texts = await generate(input);
     const payload: GenerateReplyResponse = {
@@ -81,7 +107,7 @@ export async function generateReplyRoute(
         text,
         tone: input.tone,
       })),
-      usage: { remainingToday: null, plan: "development" },
+      usage: { remainingToday: usage.remainingToday, plan: user.plan },
     };
     sendJson(response, 200, payload);
   } catch (error) {

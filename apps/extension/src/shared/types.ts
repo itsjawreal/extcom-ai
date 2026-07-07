@@ -11,6 +11,12 @@ export type FakeReply = {
   text: string;
 };
 
+export type GeneratedReply = {
+  id: string;
+  text: string;
+  tone: Tone;
+};
+
 export type ExtractedPostContext = {
   postText: string;
   authorHandle?: string;
@@ -18,4 +24,24 @@ export type ExtractedPostContext = {
   postUrl?: string;
   visibleThreadText?: string[];
   timestampText?: string;
+};
+
+export type GenerateReplyRequest = ExtractedPostContext & {
+  tone: Tone;
+  extraInstruction?: string;
+  count: number;
+};
+
+export type GenerateReplyResponse = {
+  replies: GeneratedReply[];
+  usage: {
+    remainingToday: number | null;
+    plan: "free" | "pro" | "power";
+  };
+};
+
+export type ExtensionSettings = {
+  backendBaseUrl: string;
+  authToken: string;
+  toneDefault: Tone;
 };
