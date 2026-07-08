@@ -9,3 +9,4 @@ dist/
 logs.*.json
 *Zone.Identifier
 apps/backend/data/
+tutorial.md
