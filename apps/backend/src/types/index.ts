@@ -44,4 +44,5 @@ export type ApiErrorCode =
   | "PROVIDER_ERROR"
   | "RATE_LIMITED"
   | "UNSAFE_REQUEST"
+  | "ADMIN_DISABLED"
   | "INTERNAL_ERROR";

@@ -1,11 +1,10 @@
 import type { UserPlan } from "./auth.js";
-
-type UsageWindow = {
-  dayKey: string;
-  dayCount: number;
-  minuteKey: string;
-  minuteCount: number;
-};
+import {
+  getUsageWindow,
+  resetUsageWindows,
+  saveUsageWindow,
+  type StoredUsageWindow,
+} from "./store.js";
 
 type RateLimitConfig = {
   perMinute: number;
@@ -24,8 +23,6 @@ const PLAN_LIMITS: Record<UserPlan, RateLimitConfig> = {
   power: { perMinute: 60, perDay: 1000 },
 };
 
-const usageByToken = new Map<string, UsageWindow>();
-
 function getDayKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -38,9 +35,9 @@ export function consumeRateLimit(token: string, plan: UserPlan, now = new Date()
   const limits = PLAN_LIMITS[plan];
   const dayKey = getDayKey(now);
   const minuteKey = getMinuteKey(now);
-  const current = usageByToken.get(token);
+  const current = getUsageWindow(token);
 
-  const usage: UsageWindow = current && current.dayKey === dayKey
+  const usage: StoredUsageWindow = current && current.dayKey === dayKey
     ? current
     : { dayKey, dayCount: 0, minuteKey, minuteCount: 0 };
 
@@ -50,12 +47,12 @@ export function consumeRateLimit(token: string, plan: UserPlan, now = new Date()
   }
 
   if (usage.dayCount >= limits.perDay) {
-    usageByToken.set(token, usage);
+    saveUsageWindow(token, usage);
     return { allowed: false, remainingToday: 0, retryAfterSeconds: 86_400 };
   }
 
   if (usage.minuteCount >= limits.perMinute) {
-    usageByToken.set(token, usage);
+    saveUsageWindow(token, usage);
     return {
       allowed: false,
       remainingToday: Math.max(0, limits.perDay - usage.dayCount),
@@ -65,7 +62,7 @@ export function consumeRateLimit(token: string, plan: UserPlan, now = new Date()
 
   usage.dayCount += 1;
   usage.minuteCount += 1;
-  usageByToken.set(token, usage);
+  saveUsageWindow(token, usage);
 
   return {
     allowed: true,
@@ -74,7 +71,7 @@ export function consumeRateLimit(token: string, plan: UserPlan, now = new Date()
 }
 
 export function resetRateLimits(): void {
-  usageByToken.clear();
+  resetUsageWindows();
 }
 
 export const rateLimitInternals = { PLAN_LIMITS };

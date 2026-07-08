@@ -1,3 +1,5 @@
+import { findUser } from "./store.js";
+
 export type UserPlan = "free" | "pro" | "power";
 
 export type AuthenticatedUser = {
@@ -32,6 +34,11 @@ export function authenticateToken(token: string | null): AuthenticatedUser | nul
     if (configuredToken === token) {
       return { token, plan: normalizePlan(configuredPlan) };
     }
+  }
+
+  const storedUser = findUser(token);
+  if (storedUser) {
+    return { token, plan: storedUser.plan };
   }
 
   if (process.env.NODE_ENV !== "production" && token === DEFAULT_DEV_TOKEN) {
