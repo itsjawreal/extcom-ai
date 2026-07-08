@@ -27,8 +27,8 @@ This is a copilot, not a bot:
 ### Option A — Docker (recommended for a VPS)
 
 ```bash
-git clone <this repo>
-cd ekskomen.ai
+git clone https://github.com/itsjawreal/extcom-ai.git
+cd extcom-ai
 cp .env.example .env       # fill in OPENROUTER_API_KEY and AUTH_TOKENS
 docker compose up -d --build
 curl http://localhost:3000/health
