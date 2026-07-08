@@ -13,4 +13,5 @@ export const DEFAULT_SETTINGS = {
   backendBaseUrl: "http://localhost:3000",
   authToken: "dev-local-token",
   toneDefault: "degen",
+  defaultInstruction: "",
 } as const;

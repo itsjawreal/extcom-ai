@@ -39,4 +39,10 @@ export type ExtensionSettings = {
   backendBaseUrl: string;
   authToken: string;
   toneDefault: Tone;
+  defaultInstruction: string;
+};
+
+export type ConnectionStatus = {
+  plan: "free" | "pro" | "power";
+  remainingToday: number;
 };

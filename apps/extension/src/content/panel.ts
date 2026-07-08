@@ -1,12 +1,8 @@
-import { TONE_LABELS } from "../shared/constants";
 import { insertReplyIntoComposer } from "./replyComposer";
 import type {
-  ExtensionSettings,
   ExtractedPostContext,
-  GenerateReplyRequest,
   GenerateReplyResponse,
   GeneratedReply,
-  Tone,
 } from "../shared/types";
 
 type PanelInput =
@@ -39,7 +35,6 @@ function findReanchorTarget(): { anchor: HTMLButtonElement; post: HTMLElement } 
 async function sendRuntimeMessage<T>(message: unknown): Promise<T> {
   const response = await chrome.runtime.sendMessage(message) as {
     ok: boolean;
-    settings?: ExtensionSettings;
     data?: GenerateReplyResponse;
     error?: string;
   };
@@ -93,7 +88,7 @@ function renderUsage(panel: HTMLElement, usage?: GenerateReplyResponse["usage"])
   const usageNode = panel.querySelector<HTMLElement>("[data-usage]");
   if (!usageNode) return;
   if (!usage) {
-    usageNode.textContent = "Token & backend are set via the toolbar icon.";
+    usageNode.textContent = "Tone, token & backend live in the toolbar popup.";
     return;
   }
   const remaining = usage.remainingToday === null ? "?" : String(usage.remainingToday);
@@ -240,39 +235,17 @@ function renderContext(panel: HTMLElement, input: PanelInput): void {
   container.append(details);
 }
 
-async function hydrateSettings(panel: HTMLElement): Promise<void> {
-  const response = await sendRuntimeMessage<{ ok: true; settings: ExtensionSettings }>({
-    type: "GET_SETTINGS",
-  });
-  panel.querySelector<HTMLSelectElement>("[data-tone-selector]")!.value = response.settings.toneDefault;
-  renderUsage(panel);
-}
-
-async function persistToneDefault(panel: HTMLElement): Promise<void> {
-  await sendRuntimeMessage<{ ok: true; settings: ExtensionSettings }>({
-    type: "SAVE_SETTINGS",
-    settings: {
-      toneDefault: panel.querySelector<HTMLSelectElement>("[data-tone-selector]")!.value as Tone,
-    },
-  });
-}
-
 async function generateRepliesForPanel(
   panel: HTMLElement,
   context: ExtractedPostContext,
 ): Promise<void> {
   setPanelLoading(panel, true);
   try {
-    await persistToneDefault(panel);
-    const input: GenerateReplyRequest = {
-      ...context,
-      tone: panel.querySelector<HTMLSelectElement>("[data-tone-selector]")!.value as Tone,
-      extraInstruction: panel.querySelector<HTMLTextAreaElement>("[data-extra-instruction]")!.value.trim() || undefined,
-      count: 3,
-    };
+    // Tone and standing instruction come from the popup settings; the service
+    // worker fills them in.
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse }>({
       type: "GENERATE_REPLY",
-      input,
+      input: { ...context, count: 3 },
     });
     renderReplies(panel, response.data.replies);
     renderUsage(panel, response.data.usage);
@@ -303,14 +276,6 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     </header>
     <div data-context></div>
     <div data-reply-controls>
-      <label class="eks-tone-label">
-        Tone
-        <select data-tone-selector></select>
-      </label>
-      <label class="eks-tone-label">
-        Extra instruction
-        <textarea rows="3" data-extra-instruction placeholder="Optional direction for this reply batch"></textarea>
-      </label>
       <div class="eks-panel-toolbar">
         <button type="button" data-generate-button>Generate</button>
         <span class="eks-panel-usage" data-usage></span>
@@ -322,15 +287,6 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   `;
 
   renderContext(panel, input);
-
-  const selector = panel.querySelector<HTMLSelectElement>("[data-tone-selector]");
-  if (!selector) return;
-  for (const [value, label] of Object.entries(TONE_LABELS)) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = label;
-    selector.append(option);
-  }
   panel.querySelector(".eks-panel-close")?.addEventListener("click", closePanel);
 
   document.body.append(panel);
@@ -345,7 +301,6 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     panel.querySelector<HTMLButtonElement>("[data-generate-button]")?.addEventListener("click", () => {
       void generateRepliesForPanel(panel, input.context);
     });
-    void hydrateSettings(panel);
   }
 }
 

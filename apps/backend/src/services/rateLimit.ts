@@ -70,6 +70,16 @@ export function consumeRateLimit(token: string, plan: UserPlan, now = new Date()
   };
 }
 
+export function peekRateLimit(token: string, plan: UserPlan, now = new Date()): UsageSnapshot {
+  const limits = PLAN_LIMITS[plan];
+  const current = getUsageWindow(token);
+  const dayCount = current && current.dayKey === getDayKey(now) ? current.dayCount : 0;
+  return {
+    allowed: dayCount < limits.perDay,
+    remainingToday: Math.max(0, limits.perDay - dayCount),
+  };
+}
+
 export function resetRateLimits(): void {
   resetUsageWindows();
 }

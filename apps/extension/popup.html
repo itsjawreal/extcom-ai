@@ -5,47 +5,90 @@
   <title>Ekskomen AI</title>
   <style>
     :root {
-      color-scheme: light dark;
+      color-scheme: dark;
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     body {
       margin: 0;
-      width: 320px;
+      width: 340px;
       padding: 16px;
       font-size: 13px;
+      background: #0b1220;
+      color: #e7ecf5;
     }
     h1 {
-      margin: 0 0 12px;
+      margin: 0 0 14px;
       font-size: 15px;
+      letter-spacing: 0.2px;
+    }
+    .status-card {
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+      text-align: center;
+      background: #111c33;
+      border: 1px solid #1e2c4a;
+    }
+    .status-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 7px;
+      background: #6b7280;
+      vertical-align: baseline;
+    }
+    .status-card[data-state="connected"] .status-dot { background: #22c55e; }
+    .status-card[data-state="error"] .status-dot { background: #ef4444; }
+    .status-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 4px;
+    }
+    .status-detail {
+      margin: 0 0 12px;
+      color: #93a1b8;
+      min-height: 16px;
+    }
+    .status-card button {
+      width: auto;
+      padding: 7px 22px;
     }
     label {
       display: block;
       margin-bottom: 10px;
       font-weight: 600;
     }
-    input, select {
+    input, select, textarea {
       display: block;
       width: 100%;
       box-sizing: border-box;
       margin-top: 4px;
-      padding: 6px 8px;
+      padding: 7px 9px;
       font: inherit;
       font-weight: 400;
-      border: 1px solid #8884;
-      border-radius: 6px;
-      background: transparent;
+      border: 1px solid #24334f;
+      border-radius: 8px;
+      background: #0e1729;
+      color: inherit;
+      resize: vertical;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #1d9bf0;
     }
     button {
       width: 100%;
-      padding: 8px;
+      padding: 9px;
       font: inherit;
-      font-weight: 600;
+      font-weight: 700;
       border: none;
-      border-radius: 6px;
+      border-radius: 999px;
       background: #1d9bf0;
       color: #fff;
       cursor: pointer;
     }
+    button:hover { background: #1a8cd8; }
     button:disabled {
       opacity: 0.6;
       cursor: default;
@@ -54,18 +97,28 @@
       min-height: 18px;
       margin: 8px 0 0;
       text-align: center;
+      color: #93a1b8;
     }
     .hint {
       margin: 12px 0 0;
-      color: #888;
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.5;
     }
   </style>
 </head>
 <body>
   <h1>✦ Ekskomen AI Reply</h1>
+
+  <section class="status-card" id="status-card" data-state="unknown">
+    <p class="status-title"><span class="status-dot"></span><span id="connection-title">Checking…</span></p>
+    <p class="status-detail" id="connection-detail"></p>
+    <button id="test-connection" type="button">Test connection</button>
+  </section>
+
   <label>
     Backend URL
-    <input id="backend-url" type="url" placeholder="https://your-backend.up.railway.app" />
+    <input id="backend-url" type="url" placeholder="https://your-backend.example.com" />
   </label>
   <label>
     Access token
@@ -75,9 +128,13 @@
     Default tone
     <select id="tone-default"></select>
   </label>
+  <label>
+    Standing instruction (optional)
+    <textarea id="default-instruction" rows="3" placeholder="e.g. keep it under 15 words, never use hashtags"></textarea>
+  </label>
   <button id="save" type="button">Save</button>
   <p class="status" id="status" aria-live="polite"></p>
-  <p class="hint">Replies stay human-in-the-loop: drafts are inserted into the composer, you always press Post yourself.</p>
+  <p class="hint">On X, the ✦ AI Reply button only generates drafts using these settings. Posting always stays manual.</p>
   <script type="module" src="/src/popup/popup.ts"></script>
 </body>
 </html>

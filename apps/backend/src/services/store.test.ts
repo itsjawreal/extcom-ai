@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { authenticateToken } from "./auth.js";
-import { consumeRateLimit, resetRateLimits } from "./rateLimit.js";
+import { consumeRateLimit, peekRateLimit, resetRateLimits } from "./rateLimit.js";
 import { createUser, findUser, listUsers } from "./store.js";
 
 test("createUser issues a token that authenticates with its plan", () => {
@@ -29,4 +29,15 @@ test("usage windows persist across consumeRateLimit calls", () => {
   const first = consumeRateLimit(user.token, "free", now);
   const second = consumeRateLimit(user.token, "free", now);
   assert.equal(first.remainingToday - second.remainingToday, 1);
+});
+
+test("peekRateLimit reports remaining quota without consuming it", () => {
+  resetRateLimits();
+  const user = createUser("free");
+  const now = new Date("2026-07-08T03:00:00.000Z");
+  consumeRateLimit(user.token, "free", now);
+  const before = peekRateLimit(user.token, "free", now);
+  const after = peekRateLimit(user.token, "free", now);
+  assert.equal(before.remainingToday, after.remainingToday);
+  assert.equal(consumeRateLimit(user.token, "free", now).remainingToday, before.remainingToday - 1);
 });

@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { adminTokensRoute } from "./routes/adminTokens.js";
 import { generateReplyRoute } from "./routes/generateReply.js";
 import { healthRoute } from "./routes/health.js";
+import { meRoute } from "./routes/me.js";
 import { sendError } from "./serverUtils.js";
 
 function isAllowedOrigin(origin: string | undefined): origin is string {
@@ -38,6 +39,10 @@ export function createAppServer() {
     const url = new URL(request.url || "/", "http://localhost");
     if (request.method === "GET" && url.pathname === "/health") {
       healthRoute(response);
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/v1/me") {
+      meRoute(request, response);
       return;
     }
     if (request.method === "POST" && url.pathname === "/v1/generate-reply") {
