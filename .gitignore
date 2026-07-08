@@ -7,3 +7,5 @@ dist/
 !.env.example
 *:Zone.Identifier
 logs.*.json
+*Zone.Identifier
+apps/backend/data/
