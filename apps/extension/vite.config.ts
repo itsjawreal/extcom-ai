@@ -15,26 +15,37 @@ function copyManifest(): Plugin {
   };
 }
 
-export default defineConfig({
-  plugins: [copyManifest()],
-  build: {
-    outDir: "dist",
-    emptyOutDir: true,
-    sourcemap: true,
-    rollupOptions: {
-      input: {
-        content: resolve(import.meta.dirname, "src/content/index.ts"),
-        serviceWorker: resolve(
-          import.meta.dirname,
-          "src/background/serviceWorker.ts",
-        ),
-      },
-      output: {
-        entryFileNames: "[name].js",
-        chunkFileNames: "chunks/[name]-[hash].js",
-        assetFileNames: (assetInfo) =>
-          assetInfo.name?.endsWith(".css") ? "content.css" : "assets/[name][extname]",
+// content.js and pageInsert.js are loaded as classic (non-module) scripts, so
+// they must not share ES-module chunks with other entries. The popup (a real
+// module page) is built in a second pass (--mode popup) to keep the main
+// entries self-contained.
+export default defineConfig(({ mode }) => {
+  const isPopupBuild = mode === "popup";
+
+  return {
+    plugins: isPopupBuild ? [] : [copyManifest()],
+    build: {
+      outDir: "dist",
+      emptyOutDir: !isPopupBuild,
+      sourcemap: true,
+      rollupOptions: {
+        input: isPopupBuild
+          ? { popup: resolve(import.meta.dirname, "popup.html") }
+          : {
+              content: resolve(import.meta.dirname, "src/content/index.ts"),
+              pageInsert: resolve(import.meta.dirname, "src/page/pageInsert.ts"),
+              serviceWorker: resolve(
+                import.meta.dirname,
+                "src/background/serviceWorker.ts",
+              ),
+            },
+        output: {
+          entryFileNames: "[name].js",
+          chunkFileNames: "chunks/[name]-[hash].js",
+          assetFileNames: (assetInfo) =>
+            assetInfo.name?.endsWith(".css") ? "content.css" : "assets/[name][extname]",
+        },
       },
     },
-  },
+  };
 });

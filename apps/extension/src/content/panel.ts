@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, TONE_LABELS } from "../shared/constants";
+import { TONE_LABELS } from "../shared/constants";
 import { insertReplyIntoComposer } from "./replyComposer";
 import type {
   ExtensionSettings,
@@ -16,7 +16,25 @@ type PanelInput =
 let activePanel: HTMLElement | null = null;
 let activeAnchor: HTMLButtonElement | null = null;
 let activePost: HTMLElement | null = null;
+let activePostKey: string | null = null;
 let positionQueued = false;
+
+function getPostKey(post: HTMLElement): string | null {
+  const timeLink = post.querySelector("time")?.closest("a");
+  const match = timeLink?.getAttribute("href")?.match(/\/status\/(\d+)/);
+  return match?.[1] || null;
+}
+
+function findReanchorTarget(): { anchor: HTMLButtonElement; post: HTMLElement } | null {
+  if (!activePostKey) return null;
+  for (const button of document.querySelectorAll<HTMLButtonElement>(".eks-ai-reply-button")) {
+    const post = button.closest("article");
+    if (post instanceof HTMLElement && getPostKey(post) === activePostKey) {
+      return { anchor: button, post };
+    }
+  }
+  return null;
+}
 
 async function sendRuntimeMessage<T>(message: unknown): Promise<T> {
   const response = await chrome.runtime.sendMessage(message) as {
@@ -75,7 +93,7 @@ function renderUsage(panel: HTMLElement, usage?: GenerateReplyResponse["usage"])
   const usageNode = panel.querySelector<HTMLElement>("[data-usage]");
   if (!usageNode) return;
   if (!usage) {
-    usageNode.textContent = "Set backend URL + token, then generate.";
+    usageNode.textContent = "Token & backend are set via the toolbar icon.";
     return;
   }
   const remaining = usage.remainingToday === null ? "?" : String(usage.remainingToday);
@@ -116,11 +134,31 @@ function renderReplies(panel: HTMLElement, replies: GeneratedReply[]): void {
       if (!activePost) return;
       try {
         await insertReplyIntoComposer(activePost, reply.text);
-        showStatus(panel, "Reply inserted into composer.");
+        closePanel();
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Composer insertion failed.";
+
+        if (message === "Reply composer could not be filled.") {
+          try {
+            await navigator.clipboard.writeText(reply.text);
+            showStatus(
+              panel,
+              "Composer opened, but X blocked auto-insert. Reply copied. Paste with Ctrl+V.",
+            );
+            return;
+          } catch {
+            showStatus(
+              panel,
+              "Composer opened, but X blocked auto-insert and clipboard copy failed.",
+            );
+            return;
+          }
+        }
+
         showStatus(
           panel,
-          error instanceof Error ? error.message : "Composer insertion failed.",
+          message,
         );
       }
     });
@@ -136,13 +174,21 @@ export function closePanel(): void {
   activePanel = null;
   activeAnchor = null;
   activePost = null;
+  activePostKey = null;
 }
 
 export function syncPanelPosition(): void {
   if (!activePanel || !activeAnchor) return;
   if (!activeAnchor.isConnected) {
-    closePanel();
-    return;
+    // X rerenders replace post nodes while the user reads drafts. Re-attach to
+    // the same post's freshly injected button; close only when the post is gone.
+    const target = findReanchorTarget();
+    if (!target) {
+      closePanel();
+      return;
+    }
+    activeAnchor = target.anchor;
+    activePost = target.post;
   }
   positionPanel(activePanel, activeAnchor);
 }
@@ -198,24 +244,17 @@ async function hydrateSettings(panel: HTMLElement): Promise<void> {
   const response = await sendRuntimeMessage<{ ok: true; settings: ExtensionSettings }>({
     type: "GET_SETTINGS",
   });
-  const settings = response.settings;
-  panel.querySelector<HTMLInputElement>("[data-backend-url]")!.value = settings.backendBaseUrl;
-  panel.querySelector<HTMLInputElement>("[data-auth-token]")!.value = settings.authToken;
-  panel.querySelector<HTMLSelectElement>("[data-tone-selector]")!.value = settings.toneDefault;
+  panel.querySelector<HTMLSelectElement>("[data-tone-selector]")!.value = response.settings.toneDefault;
   renderUsage(panel);
 }
 
-async function persistSettings(panel: HTMLElement): Promise<ExtensionSettings> {
-  const settings: ExtensionSettings = {
-    backendBaseUrl: panel.querySelector<HTMLInputElement>("[data-backend-url]")!.value.trim(),
-    authToken: panel.querySelector<HTMLInputElement>("[data-auth-token]")!.value.trim(),
-    toneDefault: panel.querySelector<HTMLSelectElement>("[data-tone-selector]")!.value as Tone,
-  };
-  const response = await sendRuntimeMessage<{ ok: true; settings: ExtensionSettings }>({
+async function persistToneDefault(panel: HTMLElement): Promise<void> {
+  await sendRuntimeMessage<{ ok: true; settings: ExtensionSettings }>({
     type: "SAVE_SETTINGS",
-    settings,
+    settings: {
+      toneDefault: panel.querySelector<HTMLSelectElement>("[data-tone-selector]")!.value as Tone,
+    },
   });
-  return response.settings;
 }
 
 async function generateRepliesForPanel(
@@ -224,7 +263,7 @@ async function generateRepliesForPanel(
 ): Promise<void> {
   setPanelLoading(panel, true);
   try {
-    const settings = await persistSettings(panel);
+    await persistToneDefault(panel);
     const input: GenerateReplyRequest = {
       ...context,
       tone: panel.querySelector<HTMLSelectElement>("[data-tone-selector]")!.value as Tone,
@@ -234,7 +273,6 @@ async function generateRepliesForPanel(
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse }>({
       type: "GENERATE_REPLY",
       input,
-      settings,
     });
     renderReplies(panel, response.data.replies);
     renderUsage(panel, response.data.usage);
@@ -265,14 +303,6 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     </header>
     <div data-context></div>
     <div data-reply-controls>
-      <label class="eks-tone-label">
-        Backend URL
-        <input type="url" data-backend-url placeholder="${DEFAULT_SETTINGS.backendBaseUrl}" />
-      </label>
-      <label class="eks-tone-label">
-        Auth token
-        <input type="password" data-auth-token placeholder="${DEFAULT_SETTINGS.authToken}" />
-      </label>
       <label class="eks-tone-label">
         Tone
         <select data-tone-selector></select>
@@ -307,6 +337,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   activePanel = panel;
   activeAnchor = anchor;
   activePost = post;
+  activePostKey = getPostKey(post);
   positionPanel(panel, anchor);
   renderUsage(panel);
 

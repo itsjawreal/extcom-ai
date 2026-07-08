@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Ekskomen AI</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    body {
+      margin: 0;
+      width: 320px;
+      padding: 16px;
+      font-size: 13px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 15px;
+    }
+    label {
+      display: block;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    input, select {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 4px;
+      padding: 6px 8px;
+      font: inherit;
+      font-weight: 400;
+      border: 1px solid #8884;
+      border-radius: 6px;
+      background: transparent;
+    }
+    button {
+      width: 100%;
+      padding: 8px;
+      font: inherit;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      background: #1d9bf0;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .status {
+      min-height: 18px;
+      margin: 8px 0 0;
+      text-align: center;
+    }
+    .hint {
+      margin: 12px 0 0;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <h1>✦ Ekskomen AI Reply</h1>
+  <label>
+    Backend URL
+    <input id="backend-url" type="url" placeholder="https://your-backend.up.railway.app" />
+  </label>
+  <label>
+    Access token
+    <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" />
+  </label>
+  <label>
+    Default tone
+    <select id="tone-default"></select>
+  </label>
+  <button id="save" type="button">Save</button>
+  <p class="status" id="status" aria-live="polite"></p>
+  <p class="hint">Replies stay human-in-the-loop: drafts are inserted into the composer, you always press Post yourself.</p>
+  <script type="module" src="/src/popup/popup.ts"></script>
+</body>
+</html>

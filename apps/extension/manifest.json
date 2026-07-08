@@ -8,10 +8,13 @@
     "https://x.com/*",
     "https://twitter.com/*",
     "http://localhost/*",
-    "http://127.0.0.1/*",
-    "https://*.railway.app/*",
-    "https://*.up.railway.app/*"
+    "http://127.0.0.1/*"
   ],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Ekskomen AI Reply settings"
+  },
   "background": {
     "service_worker": "serviceWorker.js",
     "type": "module"
@@ -22,6 +25,18 @@
       "js": ["content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["pageInsert.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["pageInsert.js"],
+      "matches": ["https://x.com/*", "https://twitter.com/*"]
     }
   ]
 }

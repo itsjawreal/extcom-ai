@@ -13,7 +13,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
 type RuntimeMessage =
   | { type: "GET_SETTINGS" }
   | { type: "SAVE_SETTINGS"; settings: Partial<ExtensionSettings> }
-  | { type: "GENERATE_REPLY"; input: GenerateReplyRequest; settings: ExtensionSettings };
+  | { type: "GENERATE_REPLY"; input: GenerateReplyRequest };
 
 type RuntimeResponse =
   | { ok: true; settings?: ExtensionSettings; data?: GenerateReplyResponse }
@@ -39,8 +39,8 @@ async function generateReply(
   settings: ExtensionSettings,
 ): Promise<GenerateReplyResponse> {
   const baseUrl = settings.backendBaseUrl.trim().replace(/\/$/, "");
-  if (!baseUrl) throw new Error("Backend URL is required.");
-  if (!settings.authToken.trim()) throw new Error("Auth token is required.");
+  if (!baseUrl) throw new Error("Backend URL is not set. Open the Ekskomen icon in the toolbar to configure it.");
+  if (!settings.authToken.trim()) throw new Error("Access token is not set. Open the Ekskomen icon in the toolbar to add it.");
 
   const response = await fetch(`${baseUrl}/v1/generate-reply`, {
     method: "POST",
@@ -93,9 +93,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
       if (message?.type === "GENERATE_REPLY") {
+        // Settings are always read from the service worker's own storage so a
+        // compromised page cannot redirect the token to an arbitrary backend.
         sendResponse({
           ok: true,
-          data: await generateReply(message.input, message.settings),
+          data: await generateReply(message.input, await getSettings()),
         } satisfies RuntimeResponse);
         return;
       }

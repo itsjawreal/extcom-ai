@@ -6,11 +6,6 @@ export type Tone =
   | "respectful"
   | "short_alpha";
 
-export type FakeReply = {
-  id: string;
-  text: string;
-};
-
 export type GeneratedReply = {
   id: string;
   text: string;
