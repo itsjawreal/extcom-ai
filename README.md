@@ -1,4 +1,4 @@
-# Ekskomen AI Reply
+# Extcom AI Reply
 
 A self-hosted, human-in-the-loop AI reply copilot for X/Twitter. A Chrome
 extension adds an **✦ AI Reply** button to posts; your own backend generates
@@ -12,6 +12,18 @@ inserted into the reply composer, and **you always press Post yourself**.
 ```txt
 Chrome extension ──(your access token)──▶ your backend ──(your API key)──▶ AI provider
 ```
+
+### Where configuration lives
+
+- **Backend/server environment:** `OPENROUTER_API_KEY` or `OPENAI_API_KEY`,
+  `AUTH_TOKENS`, optional `ADMIN_SECRET`, model, and database path.
+- **Extension popup:** public backend URL, one backend access token, default
+  tone, and optional standing instruction.
+
+Never put an AI-provider API key or admin secret in the extension. Anything
+stored by a browser extension must be treated as user-visible. The backend
+access token identifies the user and enforces quota; it does not grant direct
+access to the AI provider account.
 
 ## What it deliberately does NOT do
 
@@ -43,7 +55,7 @@ Requires Node.js ≥ 22.
 
 ```bash
 npm ci
-npm run build --workspace=@ekskomen/backend
+npm run build --workspace=@extcom-ai/backend
 cd apps/backend
 cp ../../.env.example .env  # fill it in
 npm start
@@ -78,7 +90,7 @@ and `POST|GET /v1/admin/tokens` (admin secret, optional).
 
 ```bash
 npm ci
-npm run build --workspace=@ekskomen/extension
+npm run build --workspace=@extcom-ai/extension
 ```
 
 Then in Chrome (or any Chromium browser):
@@ -88,8 +100,8 @@ Then in Chrome (or any Chromium browser):
 
 ## 3. Connect them
 
-1. Click the **Ekskomen AI Reply** icon in the toolbar.
-2. Enter your backend URL (e.g. `https://ekskomen.example.com`) and the access
+1. Click the **Extcom AI Reply** icon in the toolbar.
+2. Enter your backend URL (e.g. `https://extcom.example.com`) and the access
    token you put in `AUTH_TOKENS`, pick a default tone, **Save**. Chrome will
    ask to allow access to your backend's domain — accept it.
 3. Open [x.com](https://x.com), find a post, click **✦ AI Reply** → Generate →
@@ -116,8 +128,8 @@ power 60/min & 1000/day (see `apps/backend/src/services/rateLimit.ts`).
 
 ```bash
 npm ci
-npm run dev --workspace=@ekskomen/backend    # tsx watch on :3000
-npm run dev --workspace=@ekskomen/extension  # vite build --watch
+npm run dev --workspace=@extcom-ai/backend    # tsx watch on :3000
+npm run dev --workspace=@extcom-ai/extension  # vite build --watch
 npm run typecheck                            # all workspaces
 npm test                                     # backend node:test suite
 ```

@@ -56,14 +56,6 @@ function insertIntoComposer(composer: HTMLElement, text: string): boolean {
     inserted = false;
   }
 
-  if (!inserted) {
-    try {
-      inserted = document.execCommand("insertHTML", false, text);
-    } catch {
-      inserted = false;
-    }
-  }
-
   if (!inserted) return false;
 
   editable.dispatchEvent(new InputEvent("beforeinput", {

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Ekskomen AI Reply",
+  "name": "Extcom AI Reply",
   "description": "Draft human-reviewed replies for X/Twitter posts.",
   "version": "0.1.0",
   "permissions": ["storage", "activeTab"],
@@ -13,7 +13,7 @@
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Ekskomen AI Reply settings"
+    "default_title": "Extcom AI Reply settings"
   },
   "background": {
     "service_worker": "serviceWorker.js",

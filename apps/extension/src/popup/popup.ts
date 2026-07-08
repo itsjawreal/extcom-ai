@@ -18,6 +18,7 @@ const toneSelect = document.getElementById("tone-default") as HTMLSelectElement;
 const instructionInput = document.getElementById("default-instruction") as HTMLTextAreaElement;
 const saveButton = document.getElementById("save") as HTMLButtonElement;
 const statusNode = document.getElementById("status") as HTMLParagraphElement;
+let connectionCheckId = 0;
 
 function showStatus(message: string): void {
   statusNode.textContent = message;
@@ -40,6 +41,7 @@ for (const [value, label] of Object.entries(TONE_LABELS)) {
 }
 
 async function checkConnection(): Promise<void> {
+  const checkId = ++connectionCheckId;
   testButton.disabled = true;
   renderConnection("unknown", "Checking…");
   try {
@@ -47,19 +49,21 @@ async function checkConnection(): Promise<void> {
     if (!response.ok || !response.connection) {
       throw new Error(response.error || "Connection failed.");
     }
+    if (checkId !== connectionCheckId) return;
     renderConnection(
       "connected",
       "Connected",
       `Plan ${response.connection.plan} • ${response.connection.remainingToday} replies left today`,
     );
   } catch (error) {
+    if (checkId !== connectionCheckId) return;
     renderConnection(
       "error",
       "Not connected",
       error instanceof Error ? error.message : "Connection failed.",
     );
   } finally {
-    testButton.disabled = false;
+    if (checkId === connectionCheckId) testButton.disabled = false;
   }
 }
 
@@ -105,11 +109,26 @@ async function saveSettings(): Promise<void> {
     }) as RuntimeResponse;
     showStatus(response.ok ? "Settings saved." : response.error || "Save failed.");
     if (response.ok) void checkConnection();
+  } catch (error) {
+    showStatus(error instanceof Error ? error.message : "Save failed.");
   } finally {
     saveButton.disabled = false;
   }
 }
 
+async function initializePopup(): Promise<void> {
+  try {
+    await loadSettings();
+    await checkConnection();
+  } catch (error) {
+    renderConnection(
+      "error",
+      "Not connected",
+      error instanceof Error ? error.message : "Could not load settings.",
+    );
+  }
+}
+
 saveButton.addEventListener("click", () => void saveSettings());
 testButton.addEventListener("click", () => void checkConnection());
-void loadSettings().then(checkConnection);
+void initializePopup();

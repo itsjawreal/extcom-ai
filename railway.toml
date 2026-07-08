@@ -1,9 +1,9 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm run build --workspace=@ekskomen/backend"
+buildCommand = "npm run build --workspace=@extcom-ai/backend"
 
 [deploy]
-startCommand = "npm run start --workspace=@ekskomen/backend"
+startCommand = "npm run start --workspace=@extcom-ai/backend"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"

@@ -139,7 +139,13 @@ function getComposerText(editable: HTMLElement): string {
   return editable.textContent?.replace(/\u00a0/g, " ").trim() || "";
 }
 
-function tryPasteIntoComposer(editable: HTMLElement, text: string): boolean {
+function composerContainsText(editable: HTMLElement, text: string): boolean {
+  const actual = getComposerText(editable);
+  const expected = text.replace(/\u00a0/g, " ").trim();
+  return actual === expected || actual.includes(expected);
+}
+
+async function tryPasteIntoComposer(editable: HTMLElement, text: string): Promise<boolean> {
   if (typeof DataTransfer === "undefined" || typeof ClipboardEvent === "undefined") {
     return false;
   }
@@ -147,12 +153,20 @@ function tryPasteIntoComposer(editable: HTMLElement, text: string): boolean {
   try {
     const transfer = new DataTransfer();
     transfer.setData("text/plain", text);
-    const pasted = editable.dispatchEvent(new ClipboardEvent("paste", {
+    const notCanceled = editable.dispatchEvent(new ClipboardEvent("paste", {
       bubbles: true,
       cancelable: true,
       clipboardData: transfer,
     }));
-    return pasted && getComposerText(editable).length > 0;
+    if (composerContainsText(editable, text)) return true;
+
+    // Controlled editors normally cancel paste while applying it themselves.
+    // Give that handler one frame to update state before trying another method;
+    // otherwise the same reply can be inserted twice.
+    if (!notCanceled) {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    }
+    return composerContainsText(editable, text);
   } catch {
     return false;
   }
@@ -175,7 +189,7 @@ async function insertTextIntoComposer(composer: HTMLElement, text: string): Prom
   const currentText = getComposerText(editable);
   setSelection(editable, currentText ? "all" : "end");
 
-  if (tryPasteIntoComposer(editable, text)) {
+  if (await tryPasteIntoComposer(editable, text)) {
     editable.focus();
     return true;
   }
@@ -189,14 +203,6 @@ async function insertTextIntoComposer(composer: HTMLElement, text: string): Prom
     inserted = document.execCommand("insertText", false, text);
   } catch {
     inserted = false;
-  }
-
-  if (!inserted) {
-    try {
-      inserted = document.execCommand("insertHTML", false, text);
-    } catch {
-      inserted = false;
-    }
   }
 
   if (!inserted) {

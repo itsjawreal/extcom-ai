@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { consumeRateLimit, rateLimitInternals, resetRateLimits } from "./rateLimit.js";
+import {
+  consumeRateLimit,
+  peekRateLimit,
+  rateLimitInternals,
+  refundRateLimit,
+  resetRateLimits,
+} from "./rateLimit.js";
 
 test("tracks daily remaining usage", () => {
   resetRateLimits();
@@ -18,6 +24,21 @@ test("blocks when minute limit is exceeded", () => {
   const blocked = consumeRateLimit("token-b", "free", now);
   assert.equal(blocked.allowed, false);
   assert.equal(blocked.retryAfterSeconds, 60);
+  assert.equal(blocked.limitedBy, "minute");
+});
+
+test("refunds a reserved generation after provider failure", () => {
+  resetRateLimits();
+  const now = new Date("2026-07-08T01:00:30.000Z");
+  const reserved = consumeRateLimit("token-refund", "free", now);
+  assert.equal(reserved.remainingToday, rateLimitInternals.PLAN_LIMITS.free.perDay - 1);
+
+  refundRateLimit("token-refund", now);
+
+  assert.equal(
+    peekRateLimit("token-refund", "free", now).remainingToday,
+    rateLimitInternals.PLAN_LIMITS.free.perDay,
+  );
 });
 
 test("resets minute counts on the next minute", () => {

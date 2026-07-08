@@ -41,10 +41,10 @@ async function getSettings(): Promise<ExtensionSettings> {
 }
 
 function requireBackend(settings: ExtensionSettings): { baseUrl: string; token: string } {
-  const baseUrl = settings.backendBaseUrl.trim().replace(/\/$/, "");
-  if (!baseUrl) throw new Error("Backend URL is not set. Open the Ekskomen icon in the toolbar to configure it.");
+  const baseUrl = settings.backendBaseUrl.trim().replace(/\/+$/, "");
+  if (!baseUrl) throw new Error("Backend URL is not set. Open the Extcom AI icon in the toolbar to configure it.");
   const token = settings.authToken.trim();
-  if (!token) throw new Error("Access token is not set. Open the Ekskomen icon in the toolbar to add it.");
+  if (!token) throw new Error("Access token is not set. Open the Extcom AI icon in the toolbar to add it.");
   return { baseUrl, token };
 }
 
@@ -113,7 +113,7 @@ async function generateReply(
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.info("Ekskomen AI Reply installed");
+  console.info("Extcom AI Reply installed");
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

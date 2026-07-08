@@ -1,5 +1,5 @@
 {
-  "name": "ekskomen-ai",
+  "name": "extcom-ai",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -10,8 +10,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "build:extension": "npm run build --workspace=@ekskomen/extension",
-    "dev": "npm run dev --workspace=@ekskomen/extension",
+    "build:extension": "npm run build --workspace=@extcom-ai/extension",
+    "dev": "npm run dev --workspace=@extcom-ai/extension",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"
   }

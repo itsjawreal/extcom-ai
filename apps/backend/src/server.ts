@@ -60,6 +60,6 @@ export function createAppServer() {
 if (process.env.NODE_ENV !== "test") {
   const port = Number(process.env.PORT || 3000);
   createAppServer().listen(port, () => {
-    console.info(`Ekskomen backend listening on http://localhost:${port}`);
+    console.info(`Extcom AI backend listening on http://localhost:${port}`);
   });
 }

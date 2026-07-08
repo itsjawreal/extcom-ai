@@ -15,6 +15,7 @@ export type UsageSnapshot = {
   allowed: boolean;
   remainingToday: number;
   retryAfterSeconds?: number;
+  limitedBy?: "minute" | "day";
 };
 
 const PLAN_LIMITS: Record<UserPlan, RateLimitConfig> = {
@@ -29,6 +30,15 @@ function getDayKey(date: Date): string {
 
 function getMinuteKey(date: Date): string {
   return date.toISOString().slice(0, 16);
+}
+
+function secondsUntilNextUtcDay(date: Date): number {
+  const next = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate() + 1,
+  );
+  return Math.max(1, Math.ceil((next - date.getTime()) / 1_000));
 }
 
 export function consumeRateLimit(token: string, plan: UserPlan, now = new Date()): UsageSnapshot {
@@ -48,7 +58,12 @@ export function consumeRateLimit(token: string, plan: UserPlan, now = new Date()
 
   if (usage.dayCount >= limits.perDay) {
     saveUsageWindow(token, usage);
-    return { allowed: false, remainingToday: 0, retryAfterSeconds: 86_400 };
+    return {
+      allowed: false,
+      remainingToday: 0,
+      retryAfterSeconds: secondsUntilNextUtcDay(now),
+      limitedBy: "day",
+    };
   }
 
   if (usage.minuteCount >= limits.perMinute) {
@@ -56,7 +71,8 @@ export function consumeRateLimit(token: string, plan: UserPlan, now = new Date()
     return {
       allowed: false,
       remainingToday: Math.max(0, limits.perDay - usage.dayCount),
-      retryAfterSeconds: 60,
+      retryAfterSeconds: Math.max(1, 60 - now.getUTCSeconds()),
+      limitedBy: "minute",
     };
   }
 
@@ -68,6 +84,19 @@ export function consumeRateLimit(token: string, plan: UserPlan, now = new Date()
     allowed: true,
     remainingToday: Math.max(0, limits.perDay - usage.dayCount),
   };
+}
+
+// Generation reserves quota before calling the provider. Release that
+// reservation when the provider fails so users only pay for successful output.
+export function refundRateLimit(token: string, reservedAt: Date): void {
+  const current = getUsageWindow(token);
+  if (!current || current.dayKey !== getDayKey(reservedAt)) return;
+
+  current.dayCount = Math.max(0, current.dayCount - 1);
+  if (current.minuteKey === getMinuteKey(reservedAt)) {
+    current.minuteCount = Math.max(0, current.minuteCount - 1);
+  }
+  saveUsageWindow(token, current);
 }
 
 export function peekRateLimit(token: string, plan: UserPlan, now = new Date()): UsageSnapshot {

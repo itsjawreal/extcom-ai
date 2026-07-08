@@ -1,7 +1,7 @@
 import type { ServerResponse } from "node:http";
 import { authenticateToken, parseAuthToken } from "../services/auth.js";
 import { generateReplies, ProviderError } from "../services/aiProvider.js";
-import { consumeRateLimit } from "../services/rateLimit.js";
+import { consumeRateLimit, refundRateLimit } from "../services/rateLimit.js";
 import { assertSafeRequest } from "../services/safety.js";
 import { readJsonBody, sendError, sendJson } from "../serverUtils.js";
 import {
@@ -90,12 +90,16 @@ export async function generateReplyRoute(
     return;
   }
 
-  const usage = consumeRateLimit(user.token, user.plan);
+  const reservedAt = new Date();
+  const usage = consumeRateLimit(user.token, user.plan, reservedAt);
   if (!usage.allowed) {
     if (usage.retryAfterSeconds) {
       response.setHeader("Retry-After", String(usage.retryAfterSeconds));
     }
-    sendError(response, 429, "RATE_LIMITED", "Daily generation limit reached.");
+    const message = usage.limitedBy === "minute"
+      ? "Per-minute generation limit reached."
+      : "Daily generation limit reached.";
+    sendError(response, 429, "RATE_LIMITED", message);
     return;
   }
 
@@ -111,6 +115,7 @@ export async function generateReplyRoute(
     };
     sendJson(response, 200, payload);
   } catch (error) {
+    refundRateLimit(user.token, reservedAt);
     if (error instanceof ProviderError) {
       const code = error.statusCode === 503 ? "PROVIDER_NOT_CONFIGURED" : "PROVIDER_ERROR";
       sendError(response, error.statusCode, code, error.message);

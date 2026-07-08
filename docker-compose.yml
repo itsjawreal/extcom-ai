@@ -4,6 +4,10 @@ services:
     restart: unless-stopped
     ports:
       - "${PORT:-3000}:3000"
+    environment:
+      # PORT controls the host port only; keep the container listener aligned
+      # with the fixed target and Dockerfile health check.
+      PORT: "3000"
     env_file:
       - .env
     volumes:

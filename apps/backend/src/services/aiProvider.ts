@@ -120,7 +120,7 @@ export async function generateWithOpenRouter(
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
     "Content-Type": "application/json",
-    "X-Title": "Ekskomen AI",
+    "X-Title": "Extcom AI",
   };
   if (process.env.APP_URL) headers["HTTP-Referer"] = process.env.APP_URL;
 

@@ -7,9 +7,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/backend/package.json ./apps/backend/package.json
 COPY apps/extension/package.json ./apps/extension/package.json
-RUN npm ci --workspace=@ekskomen/backend
+RUN npm ci --workspace=@extcom-ai/backend
 COPY apps/backend ./apps/backend
-RUN npm run build --workspace=@ekskomen/backend
+RUN npm run build --workspace=@extcom-ai/backend
 
 FROM node:24-alpine
 ENV NODE_ENV=production

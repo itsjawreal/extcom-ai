@@ -3,7 +3,7 @@ import { extractPost } from "./extractPost";
 import { openPanel, syncPanelPosition } from "./panel";
 
 const POST_SELECTOR = "article";
-const DEBUG_PREFIX = "[Ekskomen AI]";
+const DEBUG_PREFIX = "[Extcom AI]";
 let scanQueued = false;
 let scanCount = 0;
 
