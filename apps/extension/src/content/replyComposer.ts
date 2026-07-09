@@ -219,6 +219,7 @@ async function insertTextIntoComposer(composer: HTMLElement, text: string): Prom
 
 export async function insertReplyIntoComposer(post: HTMLElement, text: string): Promise<void> {
   let composer = findExistingInlineComposer(post);
+  let openedFreshModal = false;
 
   if (!composer) {
     const replyButton = post.querySelector<HTMLElement>(REPLY_CONTROL_SELECTOR);
@@ -226,6 +227,7 @@ export async function insertReplyIntoComposer(post: HTMLElement, text: string): 
 
     const existingComposers = new Set(getVisibleComposers());
     replyButton.click();
+    openedFreshModal = true;
 
     composer = null;
     for (let attempt = 0; !composer && attempt < 16; attempt += 1) {
@@ -235,7 +237,15 @@ export async function insertReplyIntoComposer(post: HTMLElement, text: string): 
   }
 
   if (!composer) throw new Error("Reply composer did not open.");
-  await wait(200);
+
+  // A modal that just opened keeps swapping its composer node for a bit
+  // (entry animation, media/GIF toolbar mounting) before it settles. Writing
+  // into it too early lands on a node X is about to discard, which still
+  // reads back as "filled" from the detached reference even though the
+  // modal on screen stays empty. Give it longer and re-fetch right before
+  // the first write.
+  await wait(openedFreshModal ? 400 : 200);
+  composer = findComposer() || composer;
 
   let inserted = await insertTextIntoComposer(composer, text);
   if (!inserted) {
@@ -248,6 +258,18 @@ export async function insertReplyIntoComposer(post: HTMLElement, text: string): 
   if (!inserted) {
     throw new Error("Reply composer could not be filled.");
   }
+
+  // Verify against whatever composer is actually live right now, not the
+  // (possibly stale/detached) reference we just wrote into.
   await wait(50);
-  resolveEditableTarget(composer).focus();
+  const finalComposer = findComposer() || composer;
+  const finalEditable = resolveEditableTarget(finalComposer);
+  if (!composerContainsText(finalEditable, text)) {
+    const reinserted = await insertTextIntoComposer(finalComposer, text);
+    if (!reinserted) throw new Error("Reply composer could not be filled.");
+    resolveEditableTarget(finalComposer).focus();
+    return;
+  }
+
+  finalEditable.focus();
 }
