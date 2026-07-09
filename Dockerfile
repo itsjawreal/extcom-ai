@@ -18,7 +18,9 @@ ENV PORT=3000
 ENV DATABASE_PATH=/data/ekskomen.db
 WORKDIR /app
 COPY --from=build /app/apps/backend/dist ./dist
-VOLUME /data
+# No VOLUME instruction here: Railway's Dockerfile builder rejects it. Mount
+# a persistent volume/disk at /data on whichever platform you deploy to.
+RUN mkdir -p /data
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD wget -qO- "http://127.0.0.1:${PORT}/health" || exit 1

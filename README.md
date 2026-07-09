@@ -61,12 +61,25 @@ cp ../../.env.example .env  # fill it in
 npm start
 ```
 
-### Option C — Railway
+### Option C — Any Docker-based PaaS
 
-The root `railway.toml` builds and starts only the backend workspace. Set the
-same variables as in `.env.example` in the Railway dashboard; Railway supplies
-`PORT` automatically and the health check uses `GET /health`. Attach a volume
-and point `DATABASE_PATH` at it if you use admin-issued tokens.
+The Dockerfile is the primary, portable deployment contract: it works the
+same way on Railway, Render, Fly.io, Northflank, Zeabur, or any other
+platform that can build from a Dockerfile. Set the variables from
+`.env.example` in the platform's dashboard/CLI and attach persistent storage
+mounted at `/data` (SQLite lives there). Per-platform walkthroughs:
+
+| Platform | Build method | Persistent storage |
+| --- | --- | --- |
+| [Railway](docs/deploy-railway.md) | Dockerfile | Railway Volume mounted to `/data` |
+| [Render](docs/deploy-render.md) | Dockerfile | Persistent Disk mounted to `/data` |
+| [Fly.io](docs/deploy-fly.md) | Dockerfile | Fly Volume mounted to `/data` |
+| Northflank | Dockerfile | Volume mounted to `/data` |
+| Zeabur | Dockerfile | Volume mounted to `/data` |
+| [VPS](docs/deploy-vps.md) | Docker Compose | Docker named volume mounted to `/data` |
+
+Without persistent storage mounted at `/data`, the SQLite database (issued
+tokens, usage counters) is lost on every redeploy or restart.
 
 ### Environment variables
 
