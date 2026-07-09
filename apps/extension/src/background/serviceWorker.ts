@@ -24,6 +24,7 @@ const MAX_DRAFT_COUNT = 3;
 
 const HISTORY_CAP = 50;
 const HISTORY_TEXT_TRUNCATE = 200;
+const MAX_INSTRUCTION_LENGTH = 500;
 
 const DEFAULT_USAGE_STATS: UsageStats = {
   totalGenerations: 0,
@@ -185,12 +186,22 @@ async function generateReply(
 ): Promise<GenerateReplyResponse> {
   const { baseUrl, token } = requireBackend(settings);
 
-  // Tone, standing instruction, draft count, and max length are popup-level
-  // settings; the on-post panel only triggers generation.
+  // Tone, draft count, and max length are popup-level settings the panel can
+  // override per-generation. The panel's one-off instruction (if any) is
+  // appended to the standing instruction rather than replacing it, so a
+  // saved standing instruction still always applies. Clamped to the
+  // backend's 500-char limit — otherwise a too-long combined string gets
+  // silently dropped there (including the standing instruction) with no
+  // error surfaced anywhere.
+  const combinedInstruction = [settings.defaultInstruction.trim(), rawInput.extraInstruction?.trim()]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, MAX_INSTRUCTION_LENGTH);
+
   const input: GenerateReplyRequest = {
     ...rawInput,
     tone: rawInput.tone ?? settings.toneDefault,
-    extraInstruction: rawInput.extraInstruction ?? (settings.defaultInstruction.trim() || undefined),
+    extraInstruction: combinedInstruction || undefined,
     count: rawInput.count ?? settings.draftCount,
     maxLength: rawInput.maxLength ?? settings.maxReplyLength,
   };

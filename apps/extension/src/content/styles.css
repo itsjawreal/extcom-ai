@@ -66,6 +66,46 @@
   margin-bottom: 12px;
 }
 
+.eks-panel-config {
+  align-items: end;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.eks-panel-config .eks-tone-label {
+  flex: 1;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.eks-count-label {
+  display: grid;
+  font: 600 13px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  gap: 6px;
+}
+
+.eks-count-group {
+  display: flex;
+  gap: 4px;
+}
+
+.eks-count-group button {
+  background: transparent;
+  border: 1px solid rgb(207, 217, 222);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 10px;
+}
+
+.eks-count-group button[aria-pressed="true"] {
+  background: rgb(29, 155, 240);
+  border-color: rgb(29, 155, 240);
+  color: white;
+}
+
 .eks-context {
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin-bottom: 12px;
@@ -128,6 +168,30 @@
   resize: vertical;
 }
 
+.eks-extra-details {
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin-bottom: 12px;
+}
+
+.eks-extra-details summary {
+  color: rgb(29, 155, 240);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.eks-extra-details textarea {
+  background: transparent;
+  border: 1px solid rgb(207, 217, 222);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: inherit;
+  margin-top: 8px;
+  min-height: 50px;
+  padding: 8px;
+  resize: vertical;
+  width: 100%;
+}
+
 .eks-panel-toolbar {
   align-items: center;
   display: flex;
@@ -150,6 +214,13 @@
   opacity: 0.7;
 }
 
+.eks-reply-panel button:disabled,
+.eks-reply-panel select:disabled,
+.eks-reply-panel textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .eks-panel-usage {
   color: rgb(83, 100, 113);
   font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -165,6 +236,13 @@
 .eks-reply-option p {
   font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: 0 0 10px;
+}
+
+.eks-reply-char-count {
+  color: rgb(83, 100, 113);
+  font: 11px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: -6px 0 10px;
+  text-align: right;
 }
 
 .eks-reply-actions {
@@ -185,6 +263,29 @@
 .eks-reply-actions button:last-child {
   background: rgb(29, 155, 240);
   color: white;
+}
+
+.eks-reply-option-loading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.eks-skeleton-line {
+  animation: eks-skeleton-pulse 1.2s ease-in-out infinite;
+  background: rgba(120, 120, 120, 0.25);
+  border-radius: 6px;
+  height: 12px;
+  margin-bottom: 8px;
+}
+
+.eks-skeleton-line-short {
+  margin-bottom: 0;
+  width: 60%;
+}
+
+@keyframes eks-skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
 .eks-panel-note,
@@ -209,6 +310,8 @@
   .eks-tone-label select,
   .eks-tone-label input,
   .eks-tone-label textarea,
+  .eks-count-group button,
+  .eks-extra-details textarea,
   .eks-reply-option,
   .eks-context-details dl {
     border-color: rgb(47, 51, 54);
