@@ -1,12 +1,22 @@
 import { TONE_LABELS } from "../shared/constants";
-import type { ConnectionStatus, ExtensionSettings, Tone } from "../shared/types";
+import type { ConnectionStatus, ExtensionSettings, Tone, UsageStats } from "../shared/types";
 
 type RuntimeResponse = {
   ok: boolean;
   settings?: ExtensionSettings;
   connection?: ConnectionStatus;
+  usageStats?: UsageStats;
   error?: string;
 };
+
+const viewStats = document.getElementById("view-stats") as HTMLElement;
+const viewSettings = document.getElementById("view-settings") as HTMLElement;
+const openSettingsButton = document.getElementById("open-settings") as HTMLButtonElement;
+const backButton = document.getElementById("back-to-stats") as HTMLButtonElement;
+const clearHistoryButton = document.getElementById("clear-history") as HTMLButtonElement;
+const statGenerations = document.getElementById("stat-generations") as HTMLElement;
+const statInserted = document.getElementById("stat-inserted") as HTMLElement;
+const historyList = document.getElementById("history-list") as HTMLElement;
 
 const statusCard = document.getElementById("status-card") as HTMLElement;
 const connectionTitle = document.getElementById("connection-title") as HTMLElement;
@@ -16,9 +26,31 @@ const backendUrlInput = document.getElementById("backend-url") as HTMLInputEleme
 const authTokenInput = document.getElementById("auth-token") as HTMLInputElement;
 const toneSelect = document.getElementById("tone-default") as HTMLSelectElement;
 const instructionInput = document.getElementById("default-instruction") as HTMLTextAreaElement;
+const maxLengthInput = document.getElementById("max-length") as HTMLInputElement;
+const maxLengthValue = document.getElementById("max-length-value") as HTMLElement;
+const draftCountGroup = document.getElementById("draft-count") as HTMLElement;
+const draftCountButtons = Array.from(draftCountGroup.querySelectorAll<HTMLButtonElement>("button"));
 const saveButton = document.getElementById("save") as HTMLButtonElement;
 const statusNode = document.getElementById("status") as HTMLParagraphElement;
 let connectionCheckId = 0;
+let draftCount = 3;
+
+function setDraftCount(count: number): void {
+  draftCount = count;
+  for (const button of draftCountButtons) {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.count) === count));
+  }
+}
+
+draftCountGroup.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-count]");
+  if (!button) return;
+  setDraftCount(Number(button.dataset.count));
+});
+
+maxLengthInput.addEventListener("input", () => {
+  maxLengthValue.textContent = maxLengthInput.value;
+});
 
 function showStatus(message: string): void {
   statusNode.textContent = message;
@@ -77,6 +109,9 @@ async function loadSettings(): Promise<void> {
   authTokenInput.value = response.settings.authToken;
   toneSelect.value = response.settings.toneDefault;
   instructionInput.value = response.settings.defaultInstruction;
+  maxLengthInput.value = String(response.settings.maxReplyLength);
+  maxLengthValue.textContent = String(response.settings.maxReplyLength);
+  setDraftCount(response.settings.draftCount);
 }
 
 async function requestBackendPermission(backendBaseUrl: string): Promise<void> {
@@ -99,6 +134,8 @@ async function saveSettings(): Promise<void> {
       authToken: authTokenInput.value.trim(),
       toneDefault: toneSelect.value as Tone,
       defaultInstruction: instructionInput.value.trim(),
+      maxReplyLength: Number(maxLengthInput.value),
+      draftCount,
     };
     if (settings.backendBaseUrl) {
       await requestBackendPermission(settings.backendBaseUrl);
@@ -116,19 +153,99 @@ async function saveSettings(): Promise<void> {
   }
 }
 
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+function relativeTime(iso: string): string {
+  const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h ago`;
+  return `${Math.floor(diffHour / 24)}d ago`;
+}
+
+function renderUsageStats(stats: UsageStats): void {
+  statGenerations.textContent = String(stats.totalGenerations);
+  statInserted.textContent = String(stats.totalInserted);
+
+  historyList.replaceChildren();
+  if (stats.history.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "history-empty";
+    empty.textContent = "No generations yet.";
+    historyList.append(empty);
+    return;
+  }
+
+  for (const entry of stats.history) {
+    const item = document.createElement("div");
+    item.className = "history-item";
+
+    const text = document.createElement("p");
+    text.textContent = `"${truncate(entry.postText, 80)}"`;
+
+    const meta = document.createElement("div");
+    meta.className = "history-meta";
+    const left = document.createElement("span");
+    left.textContent = `${relativeTime(entry.createdAt)} · ${TONE_LABELS[entry.tone] ?? entry.tone}`;
+    const right = document.createElement("span");
+    right.className = "inserted-tag";
+    right.textContent = entry.inserted ? "✓ Inserted" : "";
+    meta.append(left, right);
+
+    item.append(text, meta);
+    historyList.append(item);
+  }
+}
+
+async function loadUsageStats(): Promise<void> {
+  const response = await chrome.runtime.sendMessage({ type: "GET_USAGE_STATS" }) as RuntimeResponse;
+  if (!response.ok || !response.usageStats) return;
+  renderUsageStats(response.usageStats);
+}
+
+async function clearHistory(): Promise<void> {
+  clearHistoryButton.disabled = true;
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "CLEAR_USAGE_STATS" }) as RuntimeResponse;
+    if (response.ok && response.usageStats) renderUsageStats(response.usageStats);
+    showStatus(response.ok ? "History cleared." : response.error || "Clear failed.");
+  } finally {
+    clearHistoryButton.disabled = false;
+  }
+}
+
+function switchView(view: "stats" | "settings"): void {
+  viewStats.hidden = view !== "stats";
+  viewSettings.hidden = view !== "settings";
+  if (view === "settings") {
+    void loadSettings();
+  } else {
+    void checkConnection();
+    void loadUsageStats();
+  }
+}
+
+openSettingsButton.addEventListener("click", () => switchView("settings"));
+backButton.addEventListener("click", () => switchView("stats"));
+clearHistoryButton.addEventListener("click", () => void clearHistory());
+saveButton.addEventListener("click", () => void saveSettings());
+testButton.addEventListener("click", () => void checkConnection());
+
 async function initializePopup(): Promise<void> {
   try {
-    await loadSettings();
     await checkConnection();
+    await loadUsageStats();
   } catch (error) {
     renderConnection(
       "error",
       "Not connected",
-      error instanceof Error ? error.message : "Could not load settings.",
+      error instanceof Error ? error.message : "Could not load data.",
     );
   }
 }
 
-saveButton.addEventListener("click", () => void saveSettings());
-testButton.addEventListener("click", () => void checkConnection());
 void initializePopup();

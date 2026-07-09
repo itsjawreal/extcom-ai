@@ -17,10 +17,105 @@
       color: #e7ecf5;
     }
     h1 {
-      margin: 0 0 14px;
+      margin: 0;
       font-size: 15px;
       letter-spacing: 0.2px;
     }
+    .popup-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .icon-button {
+      width: auto;
+      padding: 5px 10px;
+      font-size: 14px;
+      font-weight: 400;
+      background: #111c33;
+      border: 1px solid #1e2c4a;
+      border-radius: 8px;
+      color: #e7ecf5;
+    }
+    .icon-button:hover { background: #16223f; }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .settings-header h1 { font-size: 14px; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat-tile {
+      border-radius: 12px;
+      padding: 12px;
+      background: #111c33;
+      border: 1px solid #1e2c4a;
+      text-align: center;
+    }
+    .stat-tile .stat-value {
+      display: block;
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .stat-tile .stat-label {
+      display: block;
+      margin-top: 2px;
+      color: #93a1b8;
+      font-size: 11px;
+    }
+    .history-heading {
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #93a1b8;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .history-list {
+      max-height: 260px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .history-item {
+      border-radius: 10px;
+      padding: 10px;
+      background: #111c33;
+      border: 1px solid #1e2c4a;
+    }
+    .history-item p {
+      margin: 0 0 6px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .history-item .history-meta {
+      display: flex;
+      justify-content: space-between;
+      color: #64748b;
+      font-size: 11px;
+    }
+    .history-item .history-meta .inserted-tag {
+      color: #22c55e;
+    }
+    .history-empty {
+      color: #64748b;
+      text-align: center;
+      padding: 18px 0;
+    }
+    .button-secondary {
+      margin-top: 10px;
+      background: transparent;
+      border: 1px solid #3a2a2a;
+      color: #f87171;
+    }
+    .button-secondary:hover { background: #1a1013; }
     .status-card {
       border-radius: 14px;
       padding: 16px;
@@ -105,36 +200,113 @@
       font-size: 12px;
       line-height: 1.5;
     }
+    .field-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .field-row-value {
+      font-weight: 400;
+      color: #93a1b8;
+    }
+    input[type="range"] {
+      padding: 0;
+      accent-color: #1d9bf0;
+      background: transparent;
+      border: none;
+    }
+    .segmented {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .segmented button {
+      flex: 1;
+      padding: 7px 0;
+      font-weight: 600;
+      background: #0e1729;
+      border: 1px solid #24334f;
+      color: #93a1b8;
+    }
+    .segmented button[aria-pressed="true"] {
+      background: #1d9bf0;
+      border-color: #1d9bf0;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
-  <h1>✦ Extcom AI Reply</h1>
+  <header class="popup-header">
+    <h1>✦ Extcom AI Reply</h1>
+    <button id="open-settings" class="icon-button" type="button" aria-label="Settings">⚙</button>
+  </header>
 
-  <section class="status-card" id="status-card" data-state="unknown">
-    <p class="status-title"><span class="status-dot"></span><span id="connection-title">Checking…</span></p>
-    <p class="status-detail" id="connection-detail"></p>
-    <button id="test-connection" type="button">Test connection</button>
+  <section id="view-stats">
+    <section class="status-card" id="status-card" data-state="unknown">
+      <p class="status-title"><span class="status-dot"></span><span id="connection-title">Checking…</span></p>
+      <p class="status-detail" id="connection-detail"></p>
+      <button id="test-connection" type="button">Test connection</button>
+    </section>
+
+    <div class="stats-grid">
+      <div class="stat-tile">
+        <span class="stat-value" id="stat-generations">0</span>
+        <span class="stat-label">Total generations</span>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-value" id="stat-inserted">0</span>
+        <span class="stat-label">Drafts inserted</span>
+      </div>
+    </div>
+
+    <p class="history-heading">Recent history</p>
+    <div class="history-list" id="history-list"></div>
   </section>
 
-  <label>
-    Backend URL
-    <input id="backend-url" type="url" placeholder="https://your-backend.example.com" />
-  </label>
-  <label>
-    Access token
-    <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" />
-  </label>
-  <label>
-    Default tone
-    <select id="tone-default"></select>
-  </label>
-  <label>
-    Standing instruction (optional)
-    <textarea id="default-instruction" rows="3" placeholder="e.g. keep it under 15 words, never use hashtags"></textarea>
-  </label>
-  <button id="save" type="button">Save</button>
-  <p class="status" id="status" aria-live="polite"></p>
-  <p class="hint">On X, the ✦ AI Reply button only generates drafts using these settings. Posting always stays manual.</p>
+  <section id="view-settings" hidden>
+    <div class="settings-header">
+      <button id="back-to-stats" class="icon-button" type="button" aria-label="Back">←</button>
+      <h1>Settings</h1>
+    </div>
+
+    <label>
+      Backend URL
+      <input id="backend-url" type="url" placeholder="https://your-backend.example.com" />
+    </label>
+    <label>
+      Access token
+      <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" />
+    </label>
+    <label>
+      Default tone
+      <select id="tone-default"></select>
+    </label>
+    <label>
+      Standing instruction (optional)
+      <textarea id="default-instruction" rows="3" placeholder="e.g. never use hashtags"></textarea>
+    </label>
+    <label>
+      <span class="field-row">
+        <span>Max reply length</span>
+        <span class="field-row-value"><span id="max-length-value">220</span> characters</span>
+      </span>
+      <input id="max-length" type="range" min="50" max="280" step="10" value="220" />
+    </label>
+    <label>
+      Draft options per generation
+      <div class="segmented" id="draft-count" role="group" aria-label="Draft options per generation">
+        <button type="button" data-count="1" aria-pressed="false">1</button>
+        <button type="button" data-count="2" aria-pressed="false">2</button>
+        <button type="button" data-count="3" aria-pressed="true">3</button>
+      </div>
+    </label>
+    <button id="save" type="button">Save</button>
+    <p class="status" id="status" aria-live="polite"></p>
+    <p class="hint">On X, the ✦ AI Reply button only generates drafts using these settings. Posting always stays manual.</p>
+    <button id="clear-history" class="button-secondary" type="button">Clear history</button>
+  </section>
+
   <script type="module" src="/src/popup/popup.ts"></script>
 </body>
 </html>

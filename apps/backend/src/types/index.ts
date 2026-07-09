@@ -18,6 +18,7 @@ export type GenerateReplyRequest = {
   tone: Tone;
   extraInstruction?: string;
   count: number;
+  maxLength: number;
 };
 
 export type GeneratedReply = {

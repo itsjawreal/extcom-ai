@@ -32,6 +32,11 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     throw new Error("count must be an integer between 1 and 3.");
   }
 
+  const maxLength = body.maxLength === undefined ? 220 : body.maxLength;
+  if (!Number.isInteger(maxLength) || Number(maxLength) < 50 || Number(maxLength) > 280) {
+    throw new Error("maxLength must be an integer between 50 and 280.");
+  }
+
   let visibleThreadText: string[] | undefined;
   if (body.visibleThreadText !== undefined) {
     if (!Array.isArray(body.visibleThreadText) || body.visibleThreadText.length > 5) {
@@ -48,6 +53,7 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     postText,
     tone: body.tone as GenerateReplyRequest["tone"],
     count: Number(count),
+    maxLength: Number(maxLength),
     authorHandle: optionalString(body.authorHandle, 100),
     authorName: optionalString(body.authorName, 200),
     postUrl: optionalString(body.postUrl, 2_000),

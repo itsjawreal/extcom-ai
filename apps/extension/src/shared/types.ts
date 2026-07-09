@@ -25,6 +25,7 @@ export type GenerateReplyRequest = ExtractedPostContext & {
   tone: Tone;
   extraInstruction?: string;
   count: number;
+  maxLength: number;
 };
 
 export type GenerateReplyResponse = {
@@ -40,9 +41,27 @@ export type ExtensionSettings = {
   authToken: string;
   toneDefault: Tone;
   defaultInstruction: string;
+  maxReplyLength: number;
+  draftCount: number;
 };
 
 export type ConnectionStatus = {
   plan: "free" | "pro" | "power";
   remainingToday: number;
+};
+
+export type HistoryEntry = {
+  id: string;
+  createdAt: string;
+  postText: string;
+  postUrl?: string;
+  tone: Tone;
+  drafts: string[];
+  inserted: boolean;
+};
+
+export type UsageStats = {
+  totalGenerations: number;
+  totalInserted: number;
+  history: HistoryEntry[];
 };

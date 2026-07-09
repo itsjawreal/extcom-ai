@@ -3,7 +3,9 @@ import type {
   ExtensionSettings,
   GenerateReplyRequest,
   GenerateReplyResponse,
+  HistoryEntry,
   Tone,
+  UsageStats,
 } from "../shared/types";
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -11,15 +13,44 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   authToken: "dev-local-token",
   toneDefault: "degen",
   defaultInstruction: "",
+  maxReplyLength: 220,
+  draftCount: 3,
 };
 
-type GenerateInput = Omit<GenerateReplyRequest, "tone"> & { tone?: Tone };
+const MIN_REPLY_LENGTH = 50;
+const MAX_REPLY_LENGTH = 280;
+const MIN_DRAFT_COUNT = 1;
+const MAX_DRAFT_COUNT = 3;
+
+const HISTORY_CAP = 50;
+const HISTORY_TEXT_TRUNCATE = 200;
+
+const DEFAULT_USAGE_STATS: UsageStats = {
+  totalGenerations: 0,
+  totalInserted: 0,
+  history: [],
+};
+
+function clampInt(value: unknown, fallback: number, min: number, max: number): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(num)));
+}
+
+type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength"> & {
+  tone?: Tone;
+  count?: number;
+  maxLength?: number;
+};
 
 type RuntimeMessage =
   | { type: "GET_SETTINGS" }
   | { type: "SAVE_SETTINGS"; settings: Partial<ExtensionSettings> }
   | { type: "CHECK_CONNECTION" }
-  | { type: "GENERATE_REPLY"; input: GenerateInput };
+  | { type: "GENERATE_REPLY"; input: GenerateInput }
+  | { type: "GET_USAGE_STATS" }
+  | { type: "CLEAR_USAGE_STATS" }
+  | { type: "RECORD_INSERT"; historyId: string };
 
 type RuntimeResponse =
   | {
@@ -27,6 +58,8 @@ type RuntimeResponse =
       settings?: ExtensionSettings;
       data?: GenerateReplyResponse;
       connection?: ConnectionStatus;
+      usageStats?: UsageStats;
+      historyId?: string;
     }
   | { ok: false; error: string };
 
@@ -37,6 +70,13 @@ async function getSettings(): Promise<ExtensionSettings> {
     authToken: String(stored.authToken || DEFAULT_SETTINGS.authToken),
     toneDefault: stored.toneDefault || DEFAULT_SETTINGS.toneDefault,
     defaultInstruction: String(stored.defaultInstruction ?? ""),
+    maxReplyLength: clampInt(
+      stored.maxReplyLength,
+      DEFAULT_SETTINGS.maxReplyLength,
+      MIN_REPLY_LENGTH,
+      MAX_REPLY_LENGTH,
+    ),
+    draftCount: clampInt(stored.draftCount, DEFAULT_SETTINGS.draftCount, MIN_DRAFT_COUNT, MAX_DRAFT_COUNT),
   };
 }
 
@@ -70,18 +110,89 @@ async function saveSettings(settings: Partial<ExtensionSettings>): Promise<Exten
   return next;
 }
 
+function truncateForHistory(text: string): string {
+  return text.length > HISTORY_TEXT_TRUNCATE ? `${text.slice(0, HISTORY_TEXT_TRUNCATE)}…` : text;
+}
+
+// Stored under its own "usageStats" key so it never collides with the
+// settings object shape read/written by getSettings()/saveSettings() above.
+async function getUsageStats(): Promise<UsageStats> {
+  const stored = await chrome.storage.local.get({ usageStats: DEFAULT_USAGE_STATS });
+  const stats = stored.usageStats as Partial<UsageStats> | undefined;
+  return {
+    totalGenerations: Number.isFinite(stats?.totalGenerations) ? Number(stats?.totalGenerations) : 0,
+    totalInserted: Number.isFinite(stats?.totalInserted) ? Number(stats?.totalInserted) : 0,
+    history: Array.isArray(stats?.history) ? (stats?.history as HistoryEntry[]) : [],
+  };
+}
+
+async function saveUsageStats(stats: UsageStats): Promise<void> {
+  await chrome.storage.local.set({ usageStats: stats });
+}
+
+async function recordGeneration(
+  input: GenerateInput,
+  data: GenerateReplyResponse,
+  settings: ExtensionSettings,
+): Promise<string> {
+  const historyId = crypto.randomUUID();
+  const entry: HistoryEntry = {
+    id: historyId,
+    createdAt: new Date().toISOString(),
+    postText: truncateForHistory(input.postText),
+    postUrl: input.postUrl,
+    tone: data.replies[0]?.tone ?? input.tone ?? settings.toneDefault,
+    drafts: data.replies.map((reply) => reply.text),
+    inserted: false,
+  };
+
+  const stats = await getUsageStats();
+  stats.totalGenerations += 1;
+  stats.history = [entry, ...stats.history].slice(0, HISTORY_CAP);
+  await saveUsageStats(stats);
+  return historyId;
+}
+
+async function recordInsert(historyId: string): Promise<void> {
+  const stats = await getUsageStats();
+  const entry = stats.history.find((item) => item.id === historyId);
+  // Entry may already be gone (cap eviction) or already marked — either way,
+  // this is a fire-and-forget signal from the panel, not something worth
+  // surfacing an error for.
+  if (!entry || entry.inserted) return;
+  entry.inserted = true;
+  stats.totalInserted += 1;
+  await saveUsageStats(stats);
+}
+
+// The backend prompts the AI to respect maxLength, but providers don't always
+// comply exactly (especially the OpenAI path, which has no schema-level
+// enforcement). Truncate here so drafts shown in the panel never exceed what
+// the user configured.
+function truncateReply(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  const cut = text.slice(0, maxLength);
+  // Prefer breaking on a word boundary so a mid-word cut doesn't look broken,
+  // but only if that doesn't throw away a large chunk of the allowed length.
+  const lastSpace = cut.lastIndexOf(" ");
+  const trimmed = lastSpace > maxLength * 0.6 ? cut.slice(0, lastSpace) : cut;
+  return trimmed.trimEnd();
+}
+
 async function generateReply(
   rawInput: GenerateInput,
   settings: ExtensionSettings,
 ): Promise<GenerateReplyResponse> {
   const { baseUrl, token } = requireBackend(settings);
 
-  // Tone and standing instruction are popup-level settings; the on-post panel
-  // only triggers generation.
+  // Tone, standing instruction, draft count, and max length are popup-level
+  // settings; the on-post panel only triggers generation.
   const input: GenerateReplyRequest = {
     ...rawInput,
     tone: rawInput.tone ?? settings.toneDefault,
     extraInstruction: rawInput.extraInstruction ?? (settings.defaultInstruction.trim() || undefined),
+    count: rawInput.count ?? settings.draftCount,
+    maxLength: rawInput.maxLength ?? settings.maxReplyLength,
   };
 
   const response = await fetch(`${baseUrl}/v1/generate-reply`, {
@@ -107,7 +218,10 @@ async function generateReply(
   }
 
   return {
-    replies: body.replies,
+    replies: body.replies.map((reply) => ({
+      ...reply,
+      text: truncateReply(reply.text, input.maxLength),
+    })),
     usage: body.usage,
   };
 }
@@ -144,10 +258,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message?.type === "GENERATE_REPLY") {
         // Settings are always read from the service worker's own storage so a
         // compromised page cannot redirect the token to an arbitrary backend.
-        sendResponse({
-          ok: true,
-          data: await generateReply(message.input, await getSettings()),
-        } satisfies RuntimeResponse);
+        const settings = await getSettings();
+        const data = await generateReply(message.input, settings);
+        const historyId = await recordGeneration(message.input, data, settings);
+        sendResponse({ ok: true, data, historyId } satisfies RuntimeResponse);
+        return;
+      }
+      if (message?.type === "GET_USAGE_STATS") {
+        sendResponse({ ok: true, usageStats: await getUsageStats() } satisfies RuntimeResponse);
+        return;
+      }
+      if (message?.type === "CLEAR_USAGE_STATS") {
+        await saveUsageStats(DEFAULT_USAGE_STATS);
+        sendResponse({ ok: true, usageStats: DEFAULT_USAGE_STATS } satisfies RuntimeResponse);
+        return;
+      }
+      if (message?.type === "RECORD_INSERT") {
+        await recordInsert(message.historyId);
+        sendResponse({ ok: true } satisfies RuntimeResponse);
         return;
       }
 

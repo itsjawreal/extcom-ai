@@ -36,6 +36,7 @@ async function sendRuntimeMessage<T>(message: unknown): Promise<T> {
   const response = await chrome.runtime.sendMessage(message) as {
     ok: boolean;
     data?: GenerateReplyResponse;
+    historyId?: string;
     error?: string;
   };
   if (!response.ok) throw new Error(response.error || "Extension request failed.");
@@ -95,7 +96,7 @@ function renderUsage(panel: HTMLElement, usage?: GenerateReplyResponse["usage"])
   usageNode.textContent = `Plan ${usage.plan} • ${remaining} left today`;
 }
 
-function renderReplies(panel: HTMLElement, replies: GeneratedReply[]): void {
+function renderReplies(panel: HTMLElement, replies: GeneratedReply[], historyId?: string): void {
   const list = panel.querySelector<HTMLElement>("[data-reply-list]");
   if (!list) return;
   list.replaceChildren();
@@ -129,6 +130,10 @@ function renderReplies(panel: HTMLElement, replies: GeneratedReply[]): void {
       if (!activePost) return;
       try {
         await insertReplyIntoComposer(activePost, reply.text);
+        if (historyId) {
+          // Fire-and-forget: don't make Insert feel slow waiting on this.
+          void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId });
+        }
         closePanel();
       } catch (error) {
         const message =
@@ -241,13 +246,13 @@ async function generateRepliesForPanel(
 ): Promise<void> {
   setPanelLoading(panel, true);
   try {
-    // Tone and standing instruction come from the popup settings; the service
-    // worker fills them in.
-    const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse }>({
+    // Tone, standing instruction, draft count, and max length all come from
+    // the popup settings; the service worker fills them in.
+    const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse; historyId?: string }>({
       type: "GENERATE_REPLY",
-      input: { ...context, count: 3 },
+      input: context,
     });
-    renderReplies(panel, response.data.replies);
+    renderReplies(panel, response.data.replies, response.historyId);
     renderUsage(panel, response.data.usage);
     showStatus(panel, "Replies generated.");
   } catch (error) {

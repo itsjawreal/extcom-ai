@@ -21,7 +21,7 @@ Rules:
 - Do not harass, threaten, dox, impersonate, or target protected groups.
 - Do not produce spammy or repetitive replies.
 - Never instruct software to publish or auto-post.
-- Keep every reply under 220 characters.
+- Keep every reply within the character limit given in the user message. This is a hard limit, not a suggestion.
 - Match the selected tone and stay relevant to the post.
 - Return only JSON matching this shape: {"replies":[{"text":"..."}]}.`;
 
@@ -44,6 +44,9 @@ ${input.tone} — ${TONE_GUIDANCE[input.tone]}
 
 Extra user instruction:
 ${input.extraInstruction || "None"}
+
+Character limit per reply:
+${input.maxLength} (hard limit, do not exceed)
 
 Generate ${input.count} distinct replies. Return JSON only.`;
 }

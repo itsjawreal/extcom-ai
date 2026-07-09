@@ -149,7 +149,7 @@ export async function generateWithOpenRouter(
                 maxItems: input.count,
                 items: {
                   type: "object",
-                  properties: { text: { type: "string", maxLength: 220 } },
+                  properties: { text: { type: "string", maxLength: input.maxLength } },
                   required: ["text"],
                   additionalProperties: false,
                 },
