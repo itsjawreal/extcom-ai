@@ -1,86 +1,86 @@
-const REQUEST_EVENT = "ekskomen:page-insert-request";
-const RESPONSE_EVENT = "ekskomen:page-insert-response";
+// This classic script can run more than once in the same main-world window \u2014
+// e.g. X.com's speculation-rules prerendering activates a page that already
+// executed this script once, then Chrome injects it again. A runtime flag
+// alone doesn't help: `const`/`function` at the top level would already throw
+// "Identifier has already been declared" on the second execution before any
+// check runs. Keep every declaration inside this guarded block so a repeat
+// execution only re-evaluates the `if` (always legal) and does nothing else.
+if (!(window as typeof window & { __ekskomenPageInsertInstalled__?: boolean }).__ekskomenPageInsertInstalled__) {
+  (window as typeof window & { __ekskomenPageInsertInstalled__?: boolean }).__ekskomenPageInsertInstalled__ = true;
 
-type InsertRequest = {
-  id: string;
-  targetAttribute: string;
-  text: string;
-};
+  const REQUEST_EVENT = "ekskomen:page-insert-request";
+  const RESPONSE_EVENT = "ekskomen:page-insert-response";
 
-function getText(element: HTMLElement): string {
-  return element.textContent?.replace(/\u00a0/g, " ").trim() || "";
-}
+  type InsertRequest = {
+    id: string;
+    targetAttribute: string;
+    text: string;
+  };
 
-function resolveEditableTarget(composer: HTMLElement): HTMLElement {
-  if (composer.matches('[contenteditable="true"]')) return composer;
-  const active = document.activeElement;
-  if (active instanceof HTMLElement && composer.contains(active)) {
-    const focusedEditable = active.closest<HTMLElement>('[contenteditable="true"], [role="textbox"]');
-    if (focusedEditable && composer.contains(focusedEditable)) return focusedEditable;
-  }
-  return composer.querySelector<HTMLElement>('[contenteditable="true"], [role="textbox"]') || composer;
-}
+  const getText = (element: HTMLElement): string =>
+    element.textContent?.replace(/\u00a0/g, " ").trim() || "";
 
-function setSelection(editable: HTMLElement, mode: "all" | "end"): boolean {
-  const selection = window.getSelection();
-  if (!selection || !editable.isConnected) return false;
-
-  try {
-    const range = document.createRange();
-    range.selectNodeContents(editable);
-    range.collapse(mode === "end");
-    selection.removeAllRanges();
-    selection.addRange(range);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function insertIntoComposer(composer: HTMLElement, text: string): boolean {
-  const editable = resolveEditableTarget(composer);
-  editable.focus();
-  editable.click();
-
-  const currentText = getText(editable);
-  setSelection(editable, currentText ? "all" : "end");
-
-  let inserted = false;
-  try {
-    if (currentText) {
-      document.execCommand("delete");
-      setSelection(editable, "end");
+  const resolveEditableTarget = (composer: HTMLElement): HTMLElement => {
+    if (composer.matches('[contenteditable="true"]')) return composer;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && composer.contains(active)) {
+      const focusedEditable = active.closest<HTMLElement>('[contenteditable="true"], [role="textbox"]');
+      if (focusedEditable && composer.contains(focusedEditable)) return focusedEditable;
     }
-    inserted = document.execCommand("insertText", false, text);
-  } catch {
-    inserted = false;
-  }
+    return composer.querySelector<HTMLElement>('[contenteditable="true"], [role="textbox"]') || composer;
+  };
 
-  if (!inserted) return false;
+  const setSelection = (editable: HTMLElement, mode: "all" | "end"): boolean => {
+    const selection = window.getSelection();
+    if (!selection || !editable.isConnected) return false;
 
-  editable.dispatchEvent(new InputEvent("beforeinput", {
-    bubbles: true,
-    cancelable: true,
-    inputType: "insertText",
-    data: text,
-  }));
-  editable.dispatchEvent(new InputEvent("input", {
-    bubbles: true,
-    inputType: "insertText",
-    data: text,
-  }));
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(editable);
+      range.collapse(mode === "end");
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
-  return getText(editable).length > 0;
-}
+  const insertIntoComposer = (composer: HTMLElement, text: string): boolean => {
+    const editable = resolveEditableTarget(composer);
+    editable.focus();
+    editable.click();
 
-// This script can be registered twice on the same main-world window: once as a
-// MAIN-world content script and once via the fallback <script> injection in
-// pageBridge.ts. Guard so only one listener ever handles insert requests.
-const INSTALL_FLAG = "__ekskomenPageInsertInstalled__";
-const pageWindow = window as typeof window & { [INSTALL_FLAG]?: boolean };
+    const currentText = getText(editable);
+    setSelection(editable, currentText ? "all" : "end");
 
-if (!pageWindow[INSTALL_FLAG]) {
-  pageWindow[INSTALL_FLAG] = true;
+    let inserted = false;
+    try {
+      if (currentText) {
+        document.execCommand("delete");
+        setSelection(editable, "end");
+      }
+      inserted = document.execCommand("insertText", false, text);
+    } catch {
+      inserted = false;
+    }
+
+    if (!inserted) return false;
+
+    editable.dispatchEvent(new InputEvent("beforeinput", {
+      bubbles: true,
+      cancelable: true,
+      inputType: "insertText",
+      data: text,
+    }));
+    editable.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      inputType: "insertText",
+      data: text,
+    }));
+
+    return getText(editable).length > 0;
+  };
 
   document.addEventListener(REQUEST_EVENT, (event) => {
     const customEvent = event as CustomEvent<InsertRequest>;
