@@ -33,7 +33,7 @@ destination = "/data"
 ```bash
 fly secrets set AI_DEFAULT_PROVIDER=openrouter
 fly secrets set OPENROUTER_API_KEY=your-openrouter-key
-fly secrets set AUTH_TOKENS=your-long-random-token:pro
+fly secrets set AUTH_TOKENS=your-long-random-token:power
 fly secrets set DATABASE_PATH=/data/ekskomen.db
 ```
 
