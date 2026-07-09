@@ -4,7 +4,25 @@ export type Tone =
   | "smart"
   | "funny"
   | "respectful"
-  | "short_alpha";
+  | "short_alpha"
+  | "one_liner"
+  | "single_word"
+  | "ct_maxi"
+  | "alpha_drop"
+  | "unhinged_degen"
+  | "hype_founder"
+  | "bold_populist"
+  | "unhinged_meme"
+  | "supportive_hype"
+  | "contrarian_take"
+  | "engager_question"
+  | "sarcastic_dry"
+  | "wholesome"
+  | "hot_take"
+  | "roast"
+  | "formal_corporate"
+  | "philosophical"
+  | "coach_motivational";
 
 export type GeneratedReply = {
   id: string;
@@ -26,6 +44,7 @@ export type GenerateReplyRequest = ExtractedPostContext & {
   extraInstruction?: string;
   count: number;
   maxLength: number;
+  useEmoji: boolean;
 };
 
 export type GenerateReplyResponse = {
@@ -43,6 +62,7 @@ export type ExtensionSettings = {
   defaultInstruction: string;
   maxReplyLength: number;
   draftCount: number;
+  useEmoji: boolean;
 };
 
 export type ConnectionStatus = {

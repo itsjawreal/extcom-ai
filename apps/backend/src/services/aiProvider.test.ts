@@ -35,7 +35,7 @@ test("OpenRouter is the default provider and requires its server-side key", asyn
 
   const { generateReplies } = await import("./aiProvider.js");
   await assert.rejects(
-    generateReplies({ postText: "Post", tone: "smart", count: 3, maxLength: 220 }),
+    generateReplies({ postText: "Post", tone: "smart", count: 3, maxLength: 220, useEmoji: false }),
     /OPENROUTER_API_KEY is not configured/,
   );
 
@@ -73,6 +73,7 @@ test("sends an OpenRouter chat completion with structured output", async () => {
       tone: "smart",
       count: 3,
       maxLength: 220,
+      useEmoji: false,
     });
     assert.deepEqual(replies, ["one", "two", "three"]);
     assert.equal(requestBody?.model, "openrouter/auto");

@@ -104,6 +104,13 @@
     .history-item .history-meta .inserted-tag {
       color: #22c55e;
     }
+    .history-item .history-meta a.inserted-tag {
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .history-item .history-meta a.inserted-tag:hover {
+      text-decoration: underline;
+    }
     .history-empty {
       color: #64748b;
       text-align: center;
@@ -299,6 +306,13 @@
         <button type="button" data-count="1" aria-pressed="false">1</button>
         <button type="button" data-count="2" aria-pressed="false">2</button>
         <button type="button" data-count="3" aria-pressed="true">3</button>
+      </div>
+    </label>
+    <label>
+      Use emoji
+      <div class="segmented" id="use-emoji" role="group" aria-label="Use emoji">
+        <button type="button" data-emoji="off" aria-pressed="false">Off</button>
+        <button type="button" data-emoji="on" aria-pressed="true">On</button>
       </div>
     </label>
     <button id="save" type="button">Save</button>

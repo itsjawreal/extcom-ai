@@ -17,12 +17,24 @@ Request body:
   "visibleThreadText": [],
   "tone": "smart",
   "extraInstruction": "Keep it concise",
-  "count": 3
+  "count": 3,
+  "maxLength": 220,
+  "useEmoji": true
 }
 ```
 
-Valid tones: `degen`, `bullish`, `smart`, `funny`, `respectful`, and
-`short_alpha`. `count` must be between 1 and 3.
+Valid tones: `degen`, `bullish`, `smart`, `funny`, `respectful`, `short_alpha`,
+`one_liner`, `single_word`, `ct_maxi`, `alpha_drop`, `unhinged_degen`,
+`hype_founder`, `bold_populist`, `unhinged_meme`, `supportive_hype`,
+`contrarian_take`, `engager_question`, `sarcastic_dry`, `wholesome`,
+`hot_take`, `roast`, `formal_corporate`, `philosophical`, and
+`coach_motivational`.
+
+`count` must be between 1 and 3 (default `3`). `maxLength` must be between 50
+and 280 characters (default `220`) — replies are also hard-truncated
+client-side if a provider ignores it. `useEmoji` is a boolean (default
+`true`); when `false` it's a hard override that beats any emoji habit implied
+by the selected tone.
 
 Authentication and rate-limit behavior:
 

@@ -5,6 +5,24 @@ export const TONES = [
   "funny",
   "respectful",
   "short_alpha",
+  "one_liner",
+  "single_word",
+  "ct_maxi",
+  "alpha_drop",
+  "unhinged_degen",
+  "hype_founder",
+  "bold_populist",
+  "unhinged_meme",
+  "supportive_hype",
+  "contrarian_take",
+  "engager_question",
+  "sarcastic_dry",
+  "wholesome",
+  "hot_take",
+  "roast",
+  "formal_corporate",
+  "philosophical",
+  "coach_motivational",
 ] as const;
 
 export type Tone = (typeof TONES)[number];
@@ -19,6 +37,7 @@ export type GenerateReplyRequest = {
   extraInstruction?: string;
   count: number;
   maxLength: number;
+  useEmoji: boolean;
 };
 
 export type GeneratedReply = {

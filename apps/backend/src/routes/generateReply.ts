@@ -37,6 +37,11 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     throw new Error("maxLength must be an integer between 50 and 280.");
   }
 
+  const useEmoji = body.useEmoji === undefined ? true : body.useEmoji;
+  if (typeof useEmoji !== "boolean") {
+    throw new Error("useEmoji must be a boolean.");
+  }
+
   let visibleThreadText: string[] | undefined;
   if (body.visibleThreadText !== undefined) {
     if (!Array.isArray(body.visibleThreadText) || body.visibleThreadText.length > 5) {
@@ -54,6 +59,7 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     tone: body.tone as GenerateReplyRequest["tone"],
     count: Number(count),
     maxLength: Number(maxLength),
+    useEmoji,
     authorHandle: optionalString(body.authorHandle, 100),
     authorName: optionalString(body.authorName, 200),
     postUrl: optionalString(body.postUrl, 2_000),

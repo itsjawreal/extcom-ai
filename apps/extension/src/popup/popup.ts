@@ -30,10 +30,13 @@ const maxLengthInput = document.getElementById("max-length") as HTMLInputElement
 const maxLengthValue = document.getElementById("max-length-value") as HTMLElement;
 const draftCountGroup = document.getElementById("draft-count") as HTMLElement;
 const draftCountButtons = Array.from(draftCountGroup.querySelectorAll<HTMLButtonElement>("button"));
+const useEmojiGroup = document.getElementById("use-emoji") as HTMLElement;
+const useEmojiButtons = Array.from(useEmojiGroup.querySelectorAll<HTMLButtonElement>("button"));
 const saveButton = document.getElementById("save") as HTMLButtonElement;
 const statusNode = document.getElementById("status") as HTMLParagraphElement;
 let connectionCheckId = 0;
 let draftCount = 3;
+let useEmoji = true;
 
 function setDraftCount(count: number): void {
   draftCount = count;
@@ -42,10 +45,23 @@ function setDraftCount(count: number): void {
   }
 }
 
+function setUseEmoji(value: boolean): void {
+  useEmoji = value;
+  for (const button of useEmojiButtons) {
+    button.setAttribute("aria-pressed", String((button.dataset.emoji === "on") === value));
+  }
+}
+
 draftCountGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-count]");
   if (!button) return;
   setDraftCount(Number(button.dataset.count));
+});
+
+useEmojiGroup.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-emoji]");
+  if (!button) return;
+  setUseEmoji(button.dataset.emoji === "on");
 });
 
 maxLengthInput.addEventListener("input", () => {
@@ -112,6 +128,7 @@ async function loadSettings(): Promise<void> {
   maxLengthInput.value = String(response.settings.maxReplyLength);
   maxLengthValue.textContent = String(response.settings.maxReplyLength);
   setDraftCount(response.settings.draftCount);
+  setUseEmoji(response.settings.useEmoji);
 }
 
 async function requestBackendPermission(backendBaseUrl: string): Promise<void> {
@@ -136,6 +153,7 @@ async function saveSettings(): Promise<void> {
       defaultInstruction: instructionInput.value.trim(),
       maxReplyLength: Number(maxLengthInput.value),
       draftCount,
+      useEmoji,
     };
     if (settings.backendBaseUrl) {
       await requestBackendPermission(settings.backendBaseUrl);
@@ -191,9 +209,22 @@ function renderUsageStats(stats: UsageStats): void {
     meta.className = "history-meta";
     const left = document.createElement("span");
     left.textContent = `${relativeTime(entry.createdAt)} · ${TONE_LABELS[entry.tone] ?? entry.tone}`;
-    const right = document.createElement("span");
+    let right: HTMLElement;
+    if (entry.inserted && entry.postUrl) {
+      // We only ever know the URL of the post being replied to, not the
+      // resulting reply's own URL — posting stays manual, so the extension
+      // never learns what tweet X creates from an insert.
+      const link = document.createElement("a");
+      link.href = entry.postUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "✓ Inserted";
+      right = link;
+    } else {
+      right = document.createElement("span");
+      right.textContent = entry.inserted ? "✓ Inserted" : "";
+    }
     right.className = "inserted-tag";
-    right.textContent = entry.inserted ? "✓ Inserted" : "";
     meta.append(left, right);
 
     item.append(text, meta);

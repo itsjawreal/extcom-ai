@@ -67,16 +67,10 @@
 }
 
 .eks-panel-config {
-  align-items: end;
+  align-items: start;
   display: flex;
-  gap: 10px;
+  gap: 16px;
   margin-bottom: 12px;
-}
-
-.eks-panel-config .eks-tone-label {
-  flex: 1;
-  margin-bottom: 0;
-  min-width: 0;
 }
 
 .eks-count-label {

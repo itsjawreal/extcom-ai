@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   defaultInstruction: "",
   maxReplyLength: 220,
   draftCount: 3,
+  useEmoji: true,
 };
 
 const MIN_REPLY_LENGTH = 50;
@@ -38,10 +39,11 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   return Math.min(max, Math.max(min, Math.round(num)));
 }
 
-type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength"> & {
+type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji"> & {
   tone?: Tone;
   count?: number;
   maxLength?: number;
+  useEmoji?: boolean;
 };
 
 type RuntimeMessage =
@@ -78,6 +80,7 @@ async function getSettings(): Promise<ExtensionSettings> {
       MAX_REPLY_LENGTH,
     ),
     draftCount: clampInt(stored.draftCount, DEFAULT_SETTINGS.draftCount, MIN_DRAFT_COUNT, MAX_DRAFT_COUNT),
+    useEmoji: typeof stored.useEmoji === "boolean" ? stored.useEmoji : DEFAULT_SETTINGS.useEmoji,
   };
 }
 
@@ -204,6 +207,7 @@ async function generateReply(
     extraInstruction: combinedInstruction || undefined,
     count: rawInput.count ?? settings.draftCount,
     maxLength: rawInput.maxLength ?? settings.maxReplyLength,
+    useEmoji: rawInput.useEmoji ?? settings.useEmoji,
   };
 
   const response = await fetch(`${baseUrl}/v1/generate-reply`, {

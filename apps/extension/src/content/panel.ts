@@ -220,10 +220,11 @@ async function regenerateSlot(
   try {
     const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
     const tone = (toneSelect?.value || undefined) as Tone | undefined;
+    const useEmoji = readUseEmoji(panel);
     const extraInstruction = readExtraInstruction(panel);
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse; historyId?: string }>({
       type: "GENERATE_REPLY",
-      input: { ...context, tone, count: 1, extraInstruction },
+      input: { ...context, tone, count: 1, useEmoji, extraInstruction },
     });
     const newReply = response.data.replies[0];
     if (!newReply) throw new Error("No draft returned.");
@@ -335,6 +336,17 @@ function readDraftCount(panel: HTMLElement): number | undefined {
   return active ? Number(active.dataset.count) : undefined;
 }
 
+function setUseEmojiGroup(panel: HTMLElement, value: boolean): void {
+  panel.querySelectorAll<HTMLButtonElement>("[data-emoji-group] button").forEach((button) => {
+    button.setAttribute("aria-pressed", String((button.dataset.emoji === "on") === value));
+  });
+}
+
+function readUseEmoji(panel: HTMLElement): boolean | undefined {
+  const active = panel.querySelector<HTMLButtonElement>('[data-emoji-group] button[aria-pressed="true"]');
+  return active ? active.dataset.emoji === "on" : undefined;
+}
+
 function readExtraInstruction(panel: HTMLElement): string | undefined {
   const textarea = panel.querySelector<HTMLTextAreaElement>("[data-extra-instruction]");
   return textarea?.value.trim() || undefined;
@@ -347,12 +359,12 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
   try {
     const response = await chrome.runtime.sendMessage({ type: "GET_SETTINGS" }) as {
       ok: boolean;
-      settings?: { toneDefault?: Tone; draftCount?: number; maxReplyLength?: number };
+      settings?: { toneDefault?: Tone; draftCount?: number; maxReplyLength?: number; useEmoji?: boolean };
     };
     if (!response.ok || !response.settings) return;
 
-    // A fast user can click tone/draft-count before this fetch resolves (e.g.
-    // right after opening the panel while the service worker is still
+    // A fast user can click tone/draft-count/emoji before this fetch resolves
+    // (e.g. right after opening the panel while the service worker is still
     // waking up). Don't silently revert a choice they already made.
     if (panel.dataset.controlsTouched !== "true") {
       const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
@@ -361,6 +373,9 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
       }
       if (response.settings.draftCount) {
         setDraftCountGroup(panel, response.settings.draftCount);
+      }
+      if (typeof response.settings.useEmoji === "boolean") {
+        setUseEmojiGroup(panel, response.settings.useEmoji);
       }
     }
     if (response.settings.maxReplyLength) {
@@ -379,18 +394,19 @@ async function generateRepliesForPanel(
   setPanelLoading(panel, true);
   renderSkeleton(panel, readDraftCount(panel) ?? 3);
   try {
-    // Max length comes from the popup settings; tone, draft count, and a
-    // one-off extra instruction can be overridden per-generation via the
-    // panel's own controls (fall back to the settings defaults when
-    // untouched — the extra instruction is added on top of the standing
-    // instruction, not a replacement for it, see serviceWorker.ts).
+    // Max length comes from the popup settings; tone, draft count, emoji
+    // preference, and a one-off extra instruction can be overridden
+    // per-generation via the panel's own controls (fall back to the settings
+    // defaults when untouched — the extra instruction is added on top of the
+    // standing instruction, not a replacement for it, see serviceWorker.ts).
     const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
     const tone = (toneSelect?.value || undefined) as Tone | undefined;
     const count = readDraftCount(panel);
+    const useEmoji = readUseEmoji(panel);
     const extraInstruction = readExtraInstruction(panel);
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse; historyId?: string }>({
       type: "GENERATE_REPLY",
-      input: { ...context, tone, count, extraInstruction },
+      input: { ...context, tone, count, useEmoji, extraInstruction },
     });
     renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context);
     renderUsage(panel, response.data.usage);
@@ -422,17 +438,24 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     </header>
     <div data-context></div>
     <div data-reply-controls>
+      <label class="eks-tone-label">
+        Tone
+        <select data-tone-select></select>
+      </label>
       <div class="eks-panel-config">
-        <label class="eks-tone-label">
-          Tone
-          <select data-tone-select></select>
-        </label>
         <div class="eks-count-label">
           Drafts
           <div class="eks-count-group" data-count-group role="group" aria-label="Number of drafts">
             <button type="button" data-count="1" aria-pressed="false">1</button>
             <button type="button" data-count="2" aria-pressed="false">2</button>
             <button type="button" data-count="3" aria-pressed="true">3</button>
+          </div>
+        </div>
+        <div class="eks-count-label">
+          Emoji
+          <div class="eks-count-group" data-emoji-group role="group" aria-label="Use emoji">
+            <button type="button" data-emoji="off" aria-pressed="false">Off</button>
+            <button type="button" data-emoji="on" aria-pressed="true">On</button>
           </div>
         </div>
       </div>
@@ -466,6 +489,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     if (!button) return;
     panel.dataset.controlsTouched = "true";
     setDraftCountGroup(panel, Number(button.dataset.count));
+  });
+
+  panel.querySelector("[data-emoji-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-emoji]");
+    if (!button) return;
+    panel.dataset.controlsTouched = "true";
+    setUseEmojiGroup(panel, button.dataset.emoji === "on");
   });
 
   void initPanelSettings(panel);
