@@ -17,8 +17,10 @@ Chrome extension ──(your access token)──▶ your backend ──(your API
 
 - **Backend/server environment:** `OPENROUTER_API_KEY` or `OPENAI_API_KEY`,
   `AUTH_TOKENS`, optional `ADMIN_SECRET`, model, and database path.
-- **Extension popup:** public backend URL, one backend access token, default
-  tone, and optional standing instruction.
+- **Extension popup (Settings → Default):** default tone, standing
+  instruction, default reply length, draft count, use emoji, read images.
+- **Extension popup (Settings → Advanced):** public backend URL, one backend
+  access token.
 
 Never put an AI-provider API key or admin secret in the extension. Anything
 stored by a browser extension must be treated as user-visible. The backend
@@ -113,12 +115,33 @@ Then in Chrome (or any Chromium browser):
 
 ## 3. Connect them
 
-1. Click the **Extcom AI Reply** icon in the toolbar.
-2. Enter your backend URL (e.g. `https://extcom.example.com`) and the access
-   token you put in `AUTH_TOKENS`, pick a default tone, **Save**. Chrome will
-   ask to allow access to your backend's domain — accept it.
-3. Open [x.com](https://x.com), find a post, click **✦ AI Reply** → Generate →
-   Insert. Edit the draft if you like, then press Post yourself.
+1. Click the **Extcom AI Reply** icon in the toolbar. The popup opens to a
+   Stats view (connection status, total generations, recent history) — click
+   the gear (⚙) for Settings.
+2. In Settings → **Default** tab: enter your default tone (24 available,
+   from `degen` to `roast` to `philosophical` — see `docs/API.md` for the
+   full list), standing instruction, default reply length, draft count, and
+   whether to use emoji by default.
+3. In Settings → **Advanced** tab: enter your backend URL (e.g.
+   `https://extcom.example.com`) and the access token you put in
+   `AUTH_TOKENS`, then **Save**. Chrome will ask to allow access to your
+   backend's domain — accept it.
+4. Open [x.com](https://x.com), find a post, click **✦ AI Reply**. Tone,
+   draft count, reply length, and emoji can all be overridden per-generation
+   right in the on-page panel — it just falls back to your popup defaults
+   when left untouched. Generate → Insert. Edit the draft if you like, then
+   press Post yourself.
+
+### Optional: let it read images in posts
+
+The panel can attach an image from the post (first one found) to the AI
+request so replies can reference charts, memes, or screenshots — off by
+default. Toggle **Read images** in Settings → Default, or per-generation in
+the on-page panel (it only appears when the post has an image). This
+**requires `AI_DEFAULT_MODEL` to be a vision-capable model** (e.g. a
+multimodal model on OpenRouter, or `gpt-4o`/`gpt-4.1`-class models on
+OpenAI) — non-vision models typically just ignore the image rather than
+erroring. See `docs/API.md` for the exact request shape.
 
 ## Sharing your server (optional)
 
