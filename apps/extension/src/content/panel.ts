@@ -16,6 +16,7 @@ let activeAnchor: HTMLButtonElement | null = null;
 let activePost: HTMLElement | null = null;
 let activePostKey: string | null = null;
 let positionQueued = false;
+let activeToneList: HTMLElement | null = null;
 
 function getPostKey(post: HTMLElement): string | null {
   const timeLink = post.querySelector("time")?.closest("a");
@@ -248,6 +249,7 @@ async function regenerateSlot(
 }
 
 export function closePanel(): void {
+  closeToneList();
   activePanel?.remove();
   activePanel = null;
   activeAnchor = null;
@@ -327,6 +329,72 @@ function populateToneSelect(select: HTMLSelectElement): void {
   }
 }
 
+// Tone's visible control is a custom trigger + list (see eks-select-list in
+// styles.css) rather than the native <select> popup, whose list background
+// can't be reliably themed cross-browser — that was the white-on-white Tone
+// dropdown bug. The <select> itself stays in the DOM, hidden, purely to hold
+// the value so the rest of the panel's read/write logic doesn't change.
+function syncToneTrigger(panel: HTMLElement): void {
+  const select = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
+  const label = panel.querySelector<HTMLElement>("[data-tone-trigger-label]");
+  if (select && label) label.textContent = TONE_LABELS[select.value as Tone] ?? select.value;
+}
+
+function closeToneList(): void {
+  activeToneList?.remove();
+  activeToneList = null;
+  activePanel?.querySelector<HTMLButtonElement>("[data-tone-trigger]")?.setAttribute("aria-expanded", "false");
+}
+
+function positionToneList(list: HTMLElement, trigger: HTMLElement): void {
+  const rect = trigger.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom - 12;
+  const spaceAbove = rect.top - 12;
+  const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+
+  list.style.width = `${rect.width}px`;
+  list.style.left = `${rect.left}px`;
+  list.style.maxHeight = `${Math.min(240, Math.max(120, openUp ? spaceAbove : spaceBelow))}px`;
+  if (openUp) {
+    list.style.top = "";
+    list.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+  } else {
+    list.style.bottom = "";
+    list.style.top = `${rect.bottom + 4}px`;
+  }
+}
+
+function openToneList(panel: HTMLElement, trigger: HTMLButtonElement, select: HTMLSelectElement): void {
+  closeToneList();
+  const list = document.createElement("ul");
+  list.className = "eks-select-list";
+  list.setAttribute("role", "listbox");
+
+  for (const [value, label] of Object.entries(TONE_LABELS)) {
+    const item = document.createElement("li");
+    item.setAttribute("role", "option");
+    item.dataset.value = value;
+    item.textContent = label;
+    if (value === select.value) item.setAttribute("aria-selected", "true");
+    list.append(item);
+  }
+
+  list.addEventListener("click", (event) => {
+    const item = (event.target as HTMLElement).closest<HTMLLIElement>("li[data-value]");
+    if (!item?.dataset.value) return;
+    select.value = item.dataset.value;
+    panel.dataset.controlsTouched = "true";
+    syncToneTrigger(panel);
+    closeToneList();
+    trigger.focus();
+  });
+
+  document.body.append(list);
+  positionToneList(list, trigger);
+  trigger.setAttribute("aria-expanded", "true");
+  activeToneList = list;
+}
+
 function setDraftCountGroup(panel: HTMLElement, count: number): void {
   panel.querySelectorAll<HTMLButtonElement>("[data-count-group] button").forEach((button) => {
     button.setAttribute("aria-pressed", String(Number(button.dataset.count) === count));
@@ -402,6 +470,7 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
       const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
       if (toneSelect && response.settings.toneDefault) {
         toneSelect.value = response.settings.toneDefault;
+        syncToneTrigger(panel);
       }
       if (response.settings.draftCount) {
         setDraftCountGroup(panel, response.settings.draftCount);
@@ -474,10 +543,14 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     </header>
     <div data-context></div>
     <div data-reply-controls>
-      <label class="eks-tone-label">
+      <div class="eks-tone-label">
         Tone
-        <select data-tone-select></select>
-      </label>
+        <select data-tone-select hidden aria-hidden="true" tabindex="-1"></select>
+        <button type="button" class="eks-select-trigger" data-tone-trigger aria-haspopup="listbox" aria-expanded="false">
+          <span data-tone-trigger-label></span>
+          <span class="eks-select-caret" aria-hidden="true">▾</span>
+        </button>
+      </div>
       <label class="eks-tone-label">
         <span class="eks-field-row">
           <span>Max length</span>
@@ -527,10 +600,16 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   panel.querySelector(".eks-panel-close")?.addEventListener("click", closePanel);
 
   const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
-  if (toneSelect) {
+  const toneTrigger = panel.querySelector<HTMLButtonElement>("[data-tone-trigger]");
+  if (toneSelect && toneTrigger) {
     populateToneSelect(toneSelect);
-    toneSelect.addEventListener("change", () => {
-      panel.dataset.controlsTouched = "true";
+    syncToneTrigger(panel);
+    toneTrigger.addEventListener("click", () => {
+      if (activeToneList) {
+        closeToneList();
+      } else {
+        openToneList(panel, toneTrigger, toneSelect);
+      }
     });
   }
 
@@ -585,15 +664,53 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   }
 }
 
-window.addEventListener("resize", queuePanelPosition);
-window.addEventListener("scroll", queuePanelPosition, { capture: true, passive: true });
+window.addEventListener("resize", () => {
+  closeToneList();
+  queuePanelPosition();
+});
+window.addEventListener(
+  "scroll",
+  (event) => {
+    // Scroll doesn't bubble, but capture-phase listeners on window still fire
+    // for scrolling inside any descendant — including the tone list's own
+    // overflow-y:auto. Without this check, scrolling (or clicking its
+    // scrollbar track, which jumps the scroll position) closes the list
+    // instead of letting the user scroll through the tone options.
+    if (activeToneList && event.target instanceof Node && activeToneList.contains(event.target)) {
+      return;
+    }
+    closeToneList();
+    queuePanelPosition();
+  },
+  { capture: true, passive: true },
+);
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closePanel();
+  if (event.key !== "Escape") return;
+  if (activeToneList) {
+    closeToneList();
+    return;
+  }
+  closePanel();
 });
 
 document.addEventListener("pointerdown", (event) => {
   const target = event.target;
-  if (!(target instanceof Node) || !activePanel || !activeAnchor) return;
+  if (!(target instanceof Node)) return;
+
+  const insideToneList = activeToneList?.contains(target) ?? false;
+
+  if (activeToneList && !insideToneList) {
+    const trigger = activePanel?.querySelector<HTMLElement>("[data-tone-trigger]");
+    if (!trigger || !trigger.contains(target)) closeToneList();
+  }
+
+  // The tone list is appended to <body>, outside the panel's own subtree
+  // (so it isn't clipped by the panel's overflow-y:auto) — without this,
+  // clicking an option reads as "outside the panel" and closes the whole
+  // panel instead of just picking a tone.
+  if (insideToneList) return;
+
+  if (!activePanel || !activeAnchor) return;
   if (!activePanel.contains(target) && !activeAnchor.contains(target)) closePanel();
 });
