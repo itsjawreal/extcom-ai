@@ -3,7 +3,7 @@ import { TONES, type GenerateReplyRequest, type Tone } from "../types/index.js";
 const TONE_GUIDANCE: Record<Tone, string> = {
   degen: "Casual and crypto-native. Short, light slang, no cringe overhype.",
   bullish: "Positive and confident without financial guarantees.",
-  smart: "Analytical, calm, and signal-focused. Avoid excessive hype.",
+  smart: "Analytical, calm, and signal-focused. Avoid excessive hype. Sound like a sharp person casually reacting, not a formal report — short clauses, not one long analyst run-on sentence.",
   funny: "Brief, light humor. Never insulting or offensive.",
   respectful: "Polite and useful. Add value without clout-chasing.",
   short_alpha: "Extremely concise and insight-like. No filler.",
@@ -32,7 +32,7 @@ export const SYSTEM_PROMPT = `You are an expert social reply assistant for X/Twi
 Generate short, natural, human-sounding replies to the supplied post.
 
 Rules:
-- Do not sound like a bot.
+- Do not sound like a bot. Write like a real person casually typing, not a formal report: vary sentence length, use short fragments and natural pauses (commas, dashes, or a line break between two ideas) instead of one long, evenly-paced run-on sentence every time.
 - Do not use hashtags unless requested.
 - Do not make financial guarantees or claim insider information.
 - Do not harass, threaten, dox, impersonate, or target protected groups.
