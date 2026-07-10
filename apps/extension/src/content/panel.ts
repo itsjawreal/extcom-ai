@@ -378,6 +378,32 @@ function syncToneTrigger(panel: HTMLElement): void {
   const select = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
   const label = panel.querySelector<HTMLElement>("[data-tone-trigger-label]");
   if (select && label) label.textContent = toneLabel(select.value);
+  syncQuickTones(panel);
+}
+
+function syncQuickTones(panel: HTMLElement): void {
+  const select = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
+  const container = panel.querySelector<HTMLElement>("[data-quick-tones]");
+  if (!select || !container) return;
+  container.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.tone === select.value));
+  });
+}
+
+function renderQuickTones(panel: HTMLElement, favoriteTones: Tone[]): void {
+  const container = panel.querySelector<HTMLElement>("[data-quick-tones]");
+  const select = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
+  if (!container || !select) return;
+  container.replaceChildren();
+  container.hidden = favoriteTones.length === 0;
+  for (const tone of favoriteTones) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.tone = tone;
+    button.textContent = TONE_LABELS[tone] ?? tone;
+    button.setAttribute("aria-pressed", String(tone === select.value));
+    container.append(button);
+  }
 }
 
 function closeToneList(): void {
@@ -526,6 +552,7 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
         maxReplyLength?: number | "auto";
         useEmoji?: boolean;
         readImages?: boolean;
+        favoriteTones?: Tone[];
       };
     };
     if (!response.ok || !response.settings) return;
@@ -553,6 +580,10 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
         setReadImagesGroup(panel, response.settings.readImages);
       }
     }
+    // The quick-tone chips themselves aren't a "current value" to protect
+    // from a race — render them regardless of controlsTouched, clicking one
+    // is itself a fresh user action.
+    renderQuickTones(panel, response.settings.favoriteTones ?? []);
   } catch {
     // Extension context gone or message failed — controls just keep their
     // static markup defaults.
@@ -613,6 +644,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     <div data-reply-controls>
       <div class="eks-tone-label">
         Tone
+        <div class="eks-quick-tones" data-quick-tones hidden></div>
         <select data-tone-select hidden aria-hidden="true" tabindex="-1"></select>
         <button type="button" class="eks-select-trigger" data-tone-trigger aria-haspopup="listbox" aria-expanded="false">
           <span data-tone-trigger-label></span>
@@ -684,6 +716,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       } else {
         openToneList(panel, toneTrigger, toneSelect);
       }
+    });
+    panel.querySelector("[data-quick-tones]")?.addEventListener("click", (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tone]");
+      if (!button?.dataset.tone) return;
+      toneSelect.value = button.dataset.tone;
+      panel.dataset.controlsTouched = "true";
+      syncToneTrigger(panel);
     });
   }
 

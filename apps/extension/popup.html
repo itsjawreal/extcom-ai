@@ -422,6 +422,41 @@
       border-color: var(--border);
     }
 
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .chip-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .chip-row button,
+    .chip-grid button {
+      width: auto;
+      height: 28px;
+      padding: 0 11px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 999px;
+      background: var(--panel);
+      border: 1px solid var(--border-soft);
+      color: var(--muted);
+    }
+    .chip-row button[aria-pressed="true"],
+    .chip-grid button[aria-pressed="true"] {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--text);
+    }
+    .chip-grid button:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
+
     .tabs {
       display: flex;
       gap: 6px;
@@ -566,10 +601,19 @@
 
   <section id="view-tone" data-view-panel="tone" hidden>
     <h1 class="view-title">Tone / Default</h1>
+    <div class="chip-row" id="quick-tones-row" hidden></div>
     <label>
       Default tone
       <select id="tone-default"></select>
     </label>
+    <div class="field-block">
+      <span class="field-row">
+        <span>Favorite tones</span>
+        <span class="field-row-value" id="favorite-tones-count">0/5</span>
+      </span>
+      <div class="chip-grid" id="favorite-tones-grid"></div>
+      <p class="hint field-hint">Pick up to 5 — they show as quick buttons above, and in the on-page panel.</p>
+    </div>
     <label>
       Standing instruction (optional)
       <textarea id="default-instruction" rows="3" placeholder="e.g. never use hashtags"></textarea>

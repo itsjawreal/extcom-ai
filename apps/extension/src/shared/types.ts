@@ -70,6 +70,10 @@ export type ExtensionSettings = {
   draftCount: number;
   useEmoji: boolean;
   readImages: boolean;
+  // Pinned tones shown as quick-pick chips in the popup and the on-page
+  // panel, on top of the full tone dropdown. Capped at 5, "auto" excluded
+  // (it's already always the first dropdown option).
+  favoriteTones: Tone[];
 };
 
 export type ConnectionStatus = {

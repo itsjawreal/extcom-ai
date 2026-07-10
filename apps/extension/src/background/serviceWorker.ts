@@ -1,3 +1,4 @@
+import { TONE_LABELS } from "../shared/constants";
 import type {
   ConnectionStatus,
   ExtensionSettings,
@@ -17,12 +18,15 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   draftCount: 3,
   useEmoji: true,
   readImages: false,
+  favoriteTones: [],
 };
 
 const MIN_REPLY_LENGTH = 50;
 const MAX_REPLY_LENGTH = 280;
 const MIN_DRAFT_COUNT = 1;
 const MAX_DRAFT_COUNT = 3;
+const MAX_FAVORITE_TONES = 5;
+const VALID_TONES = new Set(Object.keys(TONE_LABELS));
 
 const HISTORY_CAP = 50;
 const HISTORY_TEXT_TRUNCATE = 200;
@@ -43,6 +47,12 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
 function normalizeMaxLength(value: unknown, fallback: number | "auto"): number | "auto" {
   if (value === "auto") return "auto";
   return clampInt(value, fallback === "auto" ? MAX_REPLY_LENGTH : fallback, MIN_REPLY_LENGTH, MAX_REPLY_LENGTH);
+}
+
+function normalizeFavoriteTones(value: unknown): Tone[] {
+  if (!Array.isArray(value)) return [];
+  const deduped = [...new Set(value.filter((item): item is Tone => typeof item === "string" && VALID_TONES.has(item)))];
+  return deduped.slice(0, MAX_FAVORITE_TONES);
 }
 
 type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji"> & {
@@ -84,6 +94,7 @@ async function getSettings(): Promise<ExtensionSettings> {
     draftCount: clampInt(stored.draftCount, DEFAULT_SETTINGS.draftCount, MIN_DRAFT_COUNT, MAX_DRAFT_COUNT),
     useEmoji: typeof stored.useEmoji === "boolean" ? stored.useEmoji : DEFAULT_SETTINGS.useEmoji,
     readImages: typeof stored.readImages === "boolean" ? stored.readImages : DEFAULT_SETTINGS.readImages,
+    favoriteTones: normalizeFavoriteTones(stored.favoriteTones),
   };
 }
 

@@ -49,6 +49,11 @@ const readImagesButtons = Array.from(readImagesGroup.querySelectorAll<HTMLButton
 const saveAdvancedButton = document.getElementById("save-advanced") as HTMLButtonElement;
 const statusToneNode = document.getElementById("status-tone") as HTMLParagraphElement;
 const statusAdvancedNode = document.getElementById("status-advanced") as HTMLParagraphElement;
+const quickTonesRow = document.getElementById("quick-tones-row") as HTMLElement;
+const favoriteTonesGrid = document.getElementById("favorite-tones-grid") as HTMLElement;
+const favoriteTonesCount = document.getElementById("favorite-tones-count") as HTMLElement;
+
+const MAX_FAVORITE_TONES = 5;
 
 let connectionCheckId = 0;
 let draftCount = 3;
@@ -57,6 +62,7 @@ let readImages = false;
 let maxLengthMode: "auto" | "manual" = "manual";
 let latestUsageStats: UsageStats = { totalGenerations: 0, totalInserted: 0, history: [] };
 let historyFilter: HistoryFilter = "all";
+let favoriteTones: Tone[] = [];
 
 function switchView(view: View): void {
   for (const [name, panel] of Object.entries(viewPanels) as [View, HTMLElement][]) {
@@ -158,8 +164,70 @@ maxLengthInput.addEventListener("input", () => {
 // dragging) — avoids saving on every tick of the drag.
 maxLengthInput.addEventListener("change", saveToneSettings);
 
-toneSelect.addEventListener("change", saveToneSettings);
+toneSelect.addEventListener("change", () => {
+  syncQuickTonesActive();
+  saveToneSettings();
+});
 instructionInput.addEventListener("input", saveToneSettingsDebounced);
+
+function syncQuickTonesActive(): void {
+  quickTonesRow.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.tone === toneSelect.value));
+  });
+}
+
+function renderQuickTones(): void {
+  quickTonesRow.replaceChildren();
+  quickTonesRow.hidden = favoriteTones.length === 0;
+  for (const tone of favoriteTones) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.tone = tone;
+    button.textContent = TONE_LABELS[tone] ?? tone;
+    button.setAttribute("aria-pressed", String(tone === toneSelect.value));
+    quickTonesRow.append(button);
+  }
+}
+
+quickTonesRow.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tone]");
+  if (!button?.dataset.tone) return;
+  toneSelect.value = button.dataset.tone;
+  syncQuickTonesActive();
+  saveToneSettings();
+});
+
+function renderFavoriteTonesGrid(): void {
+  favoriteTonesGrid.replaceChildren();
+  favoriteTonesCount.textContent = `${favoriteTones.length}/${MAX_FAVORITE_TONES}`;
+  const atCap = favoriteTones.length >= MAX_FAVORITE_TONES;
+  for (const [value, label] of Object.entries(TONE_LABELS)) {
+    const pinned = favoriteTones.includes(value as Tone);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.tone = value;
+    button.textContent = label;
+    button.setAttribute("aria-pressed", String(pinned));
+    button.disabled = !pinned && atCap;
+    favoriteTonesGrid.append(button);
+  }
+}
+
+favoriteTonesGrid.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tone]");
+  if (!button?.dataset.tone) return;
+  const tone = button.dataset.tone as Tone;
+  if (favoriteTones.includes(tone)) {
+    favoriteTones = favoriteTones.filter((item) => item !== tone);
+  } else if (favoriteTones.length < MAX_FAVORITE_TONES) {
+    favoriteTones = [...favoriteTones, tone];
+  } else {
+    return;
+  }
+  renderFavoriteTonesGrid();
+  renderQuickTones();
+  saveToneSettings();
+});
 
 historyTabs.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-history-filter]");
@@ -244,6 +312,9 @@ async function loadSettings(): Promise<void> {
   setDraftCount(response.settings.draftCount);
   setUseEmoji(response.settings.useEmoji);
   setReadImages(response.settings.readImages);
+  favoriteTones = response.settings.favoriteTones ?? [];
+  renderFavoriteTonesGrid();
+  renderQuickTones();
 }
 
 async function requestBackendPermission(backendBaseUrl: string): Promise<void> {
@@ -277,6 +348,7 @@ async function saveSettings(
       draftCount,
       useEmoji,
       readImages,
+      favoriteTones,
     };
     // Persist first: chrome.permissions.request() below can pop a native
     // "allow access" prompt that backgrounds/closes this popup, killing its
