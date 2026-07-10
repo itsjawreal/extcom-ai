@@ -38,7 +38,7 @@ Rules:
 - Do not harass, threaten, dox, impersonate, or target protected groups.
 - Do not produce spammy or repetitive replies.
 - Never instruct software to publish or auto-post.
-- Keep every reply within the character limit given in the user message. This is a hard limit, not a suggestion.
+- Keep every reply within the character limit given in the user message. This is a hard limit, not a suggestion — write a complete, self-contained thought that already fits; never write a longer reply and expect it to be cut off.
 - Follow the emoji preference given in the user message — it overrides any emoji habit implied by the selected tone.
 - If an image is attached, use its visible content (chart, meme, screenshot, etc.) to make the reply more specific and relevant.
 - Match the selected tone and stay relevant to the post.
@@ -65,7 +65,7 @@ Extra user instruction:
 ${input.extraInstruction || "None"}
 
 Character limit per reply:
-${input.maxLength} (hard limit, do not exceed)
+${input.maxLength} characters, hard limit. The reply as written must already be complete and fit within this — do not write a longer reply that relies on being cut off.
 
 Emoji preference:
 ${input.useEmoji ? "Emojis are OK if they fit the tone naturally, but don't overuse them." : "Do not use any emojis in this reply, even if the tone would normally suggest them."}

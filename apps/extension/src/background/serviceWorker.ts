@@ -188,16 +188,31 @@ async function recordInsert(historyId: string): Promise<void> {
 
 // The backend prompts the AI to respect maxLength, but providers don't always
 // comply exactly (especially the OpenAI path, which has no schema-level
-// enforcement). Truncate here so drafts shown in the panel never exceed what
-// the user configured.
+// enforcement) — this is a safety net, not the primary length control.
+// Slicing an overlong reply at the nearest word boundary produces a dangling
+// half-thought ("...faces its own unique challenges and"), which reads as
+// broken rather than trimmed. Prefer ending on a complete sentence if one
+// fits; otherwise fall back to a word boundary and mark it with an ellipsis
+// so it's visibly a cut, not a finished reply.
+function lastSentenceEnd(window: string): number | null {
+  let lastEnd = -1;
+  for (const match of window.matchAll(/[.!?](?=\s|$)/g)) {
+    lastEnd = match.index ?? lastEnd;
+  }
+  return lastEnd >= 0 ? lastEnd : null;
+}
+
 function truncateReply(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
-  const cut = text.slice(0, maxLength);
-  // Prefer breaking on a word boundary so a mid-word cut doesn't look broken,
-  // but only if that doesn't throw away a large chunk of the allowed length.
+
+  const sentenceEnd = lastSentenceEnd(text.slice(0, maxLength));
+  if (sentenceEnd !== null) return text.slice(0, sentenceEnd + 1).trimEnd();
+
+  // Reserve 1 char for the ellipsis so the marked result still fits maxLength.
+  const cut = text.slice(0, maxLength - 1);
   const lastSpace = cut.lastIndexOf(" ");
-  const trimmed = lastSpace > maxLength * 0.6 ? cut.slice(0, lastSpace) : cut;
-  return trimmed.trimEnd();
+  const trimmed = lastSpace > maxLength * 0.5 ? cut.slice(0, lastSpace) : cut;
+  return `${trimmed.trimEnd()}…`;
 }
 
 async function generateReply(
