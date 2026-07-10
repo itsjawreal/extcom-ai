@@ -63,6 +63,13 @@ let maxLengthMode: "auto" | "manual" = "manual";
 let latestUsageStats: UsageStats = { totalGenerations: 0, totalInserted: 0, history: [] };
 let historyFilter: HistoryFilter = "all";
 let favoriteTones: Tone[] = [];
+// Guards saveSettings() from firing before loadSettings() has populated the
+// inputs at least once. Auto-save reads every input's current .value,
+// including backendUrlInput/authTokenInput, which start out empty in the
+// static HTML — a control clicked fast enough to race the initial
+// GET_SETTINGS round-trip would otherwise save those as blank, clobbering
+// the user's configured backend/token.
+let settingsLoaded = false;
 
 function switchView(view: View): void {
   for (const [name, panel] of Object.entries(viewPanels) as [View, HTMLElement][]) {
@@ -297,6 +304,7 @@ async function loadSettings(): Promise<void> {
     showStatus(statusAdvancedNode, response.error || "Could not load settings.");
     return;
   }
+  settingsLoaded = true;
   backendUrlInput.value = response.settings.backendBaseUrl;
   authTokenInput.value = response.settings.authToken;
   toneSelect.value = response.settings.toneDefault;
@@ -337,6 +345,10 @@ async function saveSettings(
   // re-check — they're only meaningful after an Advanced save.
   { checkConnectionAfter = true }: { checkConnectionAfter?: boolean } = {},
 ): Promise<void> {
+  // Inputs haven't been populated from storage yet — saving now would
+  // persist their blank/default markup values over whatever's actually
+  // stored (see the settingsLoaded comment at its declaration).
+  if (!settingsLoaded) return;
   if (triggerButton) triggerButton.disabled = true;
   try {
     const settings: ExtensionSettings = {

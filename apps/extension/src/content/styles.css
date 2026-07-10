@@ -135,11 +135,6 @@
   width: auto;
 }
 
-.eks-generate-fab:disabled {
-  cursor: wait;
-  opacity: 0.7;
-}
-
 .eks-reply-panel .eks-panel-close {
   background: transparent;
   border: 0;
@@ -519,10 +514,6 @@
   padding: 8px;
   resize: vertical;
   width: 100%;
-}
-
-.eks-panel-toolbar {
-  margin-bottom: 12px;
 }
 
 .eks-reply-panel button:disabled,

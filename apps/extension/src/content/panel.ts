@@ -157,7 +157,7 @@ function renderUsage(panel: HTMLElement, usage?: GenerateReplyResponse["usage"],
   usageNode.textContent = `Plan ${usage.plan} • ${remaining} left today${toneSuffix}`;
 }
 
-type PanelReply = { reply: GeneratedReply; historyId?: string };
+type PanelReply = { reply: GeneratedReply; historyId?: string; usedKinds?: Set<"reply" | "quote"> };
 
 function toPanelReplies(replies: GeneratedReply[], historyId?: string): PanelReply[] {
   return replies.map((reply) => ({ reply, historyId }));
@@ -166,10 +166,12 @@ function toPanelReplies(replies: GeneratedReply[], historyId?: string): PanelRep
 // Marks a draft card as used instead of disabling it — the same draft can
 // still be inserted as a reply AND quoted elsewhere, so the badge just
 // tracks which actions have been taken, it never blocks further ones.
-function markDraftUsed(card: HTMLElement, kind: "reply" | "quote"): void {
-  const used = new Set((card.dataset.usedKinds || "").split(",").filter(Boolean));
-  used.add(kind);
-  card.dataset.usedKinds = [...used].join(",");
+// State lives on the PanelReply object (not just the DOM node): regenerating
+// a *different* slot rebuilds the whole list from scratch via renderReplies,
+// and item.slice() in regenerateSlot keeps the same object reference for
+// every untouched slot — tracking only the DOM would silently lose the
+// badge for slots that weren't the one being regenerated.
+function applyUsedBadge(card: HTMLElement, used: Set<"reply" | "quote">): void {
   card.classList.add("eks-reply-option-used");
 
   let badge = card.querySelector<HTMLElement>(".eks-reply-used-badge");
@@ -185,11 +187,11 @@ function markDraftUsed(card: HTMLElement, kind: "reply" | "quote"): void {
 async function performInsert(
   panel: HTMLElement,
   kind: "reply" | "quote",
-  reply: GeneratedReply,
-  historyId: string | undefined,
+  item: PanelReply,
   card: HTMLElement,
 ): Promise<void> {
   if (!activePost) return;
+  const { reply, historyId } = item;
 
   const filledFailureMessage = kind === "reply"
     ? "Reply composer could not be filled."
@@ -209,7 +211,10 @@ async function performInsert(
     // useful (e.g. insert this one as a reply, then quote a different one)
     // and the panel is already guarded against accidental outside-click/
     // Escape close while drafts are showing, so nothing gets lost.
-    markDraftUsed(card, kind);
+    const used = item.usedKinds ?? new Set<"reply" | "quote">();
+    used.add(kind);
+    item.usedKinds = used;
+    applyUsedBadge(card, used);
     showStatus(panel, kind === "reply" ? "Inserted into the reply box." : "Inserted into the Quote Tweet.");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Composer insertion failed.";
@@ -247,9 +252,10 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
 
   const maxLength = readMaxLength(panel) ?? 220;
 
-  items.forEach(({ reply, historyId }, index) => {
-    const item = document.createElement("article");
-    item.className = "eks-reply-option";
+  items.forEach((item, index) => {
+    const { reply } = item;
+    const card = document.createElement("article");
+    card.className = "eks-reply-option";
 
     const text = document.createElement("p");
     text.textContent = reply.text;
@@ -291,16 +297,17 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
     quoteButton.textContent = "Quote";
     quoteButton.setAttribute("aria-label", "Insert this draft into a Quote Tweet");
     quoteButton.setAttribute("data-tooltip", "Insert into Quote Tweet");
-    quoteButton.addEventListener("click", () => void performInsert(panel, "quote", reply, historyId, item));
+    quoteButton.addEventListener("click", () => void performInsert(panel, "quote", item, card));
 
     const insertButton = document.createElement("button");
     insertButton.type = "button";
     insertButton.textContent = "Insert";
-    insertButton.addEventListener("click", () => void performInsert(panel, "reply", reply, historyId, item));
+    insertButton.addEventListener("click", () => void performInsert(panel, "reply", item, card));
 
     actions.append(copyButton, regenerateButton, quoteButton, insertButton);
-    item.append(text, charCount, actions);
-    list.append(item);
+    card.append(text, charCount, actions);
+    if (item.usedKinds?.size) applyUsedBadge(card, item.usedKinds);
+    list.append(card);
   });
 }
 
