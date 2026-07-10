@@ -372,6 +372,10 @@
       border: none;
       cursor: pointer;
     }
+    input[type="range"]:disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
 
     .segmented {
       display: flex;
@@ -506,9 +510,13 @@
       <label>
         <span class="field-row">
           <span>Default reply length</span>
-          <span class="field-row-value"><span id="max-length-value">220</span> characters</span>
+          <span class="field-row-value"><span id="max-length-value">220</span><span id="max-length-suffix"> characters</span></span>
         </span>
         <input id="max-length" type="range" min="50" max="280" step="10" value="220" />
+        <div class="segmented" id="max-length-mode" role="group" aria-label="Reply length mode">
+          <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
+          <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
+        </div>
       </label>
       <label>
         Draft options per generation

@@ -28,6 +28,9 @@ const toneSelect = document.getElementById("tone-default") as HTMLSelectElement;
 const instructionInput = document.getElementById("default-instruction") as HTMLTextAreaElement;
 const maxLengthInput = document.getElementById("max-length") as HTMLInputElement;
 const maxLengthValue = document.getElementById("max-length-value") as HTMLElement;
+const maxLengthSuffix = document.getElementById("max-length-suffix") as HTMLElement;
+const maxLengthModeGroup = document.getElementById("max-length-mode") as HTMLElement;
+const maxLengthModeButtons = Array.from(maxLengthModeGroup.querySelectorAll<HTMLButtonElement>("button"));
 const draftCountGroup = document.getElementById("draft-count") as HTMLElement;
 const draftCountButtons = Array.from(draftCountGroup.querySelectorAll<HTMLButtonElement>("button"));
 const useEmojiGroup = document.getElementById("use-emoji") as HTMLElement;
@@ -43,6 +46,7 @@ let connectionCheckId = 0;
 let draftCount = 3;
 let useEmoji = true;
 let readImages = false;
+let maxLengthMode: "auto" | "manual" = "manual";
 
 function switchSettingsTab(tab: "default" | "advanced"): void {
   tabPanelDefault.hidden = tab !== "default";
@@ -79,6 +83,16 @@ function setReadImages(value: boolean): void {
   }
 }
 
+function setMaxLengthMode(mode: "auto" | "manual"): void {
+  maxLengthMode = mode;
+  for (const button of maxLengthModeButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.lengthMode === mode));
+  }
+  maxLengthInput.disabled = mode === "auto";
+  maxLengthValue.textContent = mode === "auto" ? "Auto" : maxLengthInput.value;
+  maxLengthSuffix.textContent = mode === "auto" ? "" : " characters";
+}
+
 draftCountGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-count]");
   if (!button) return;
@@ -95,6 +109,12 @@ readImagesGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-images]");
   if (!button) return;
   setReadImages(button.dataset.images === "on");
+});
+
+maxLengthModeGroup.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-length-mode]");
+  if (!button) return;
+  setMaxLengthMode(button.dataset.lengthMode === "auto" ? "auto" : "manual");
 });
 
 maxLengthInput.addEventListener("input", () => {
@@ -158,8 +178,13 @@ async function loadSettings(): Promise<void> {
   authTokenInput.value = response.settings.authToken;
   toneSelect.value = response.settings.toneDefault;
   instructionInput.value = response.settings.defaultInstruction;
-  maxLengthInput.value = String(response.settings.maxReplyLength);
-  maxLengthValue.textContent = String(response.settings.maxReplyLength);
+  // The slider always needs a numeric value to fall back to if the user
+  // switches from Auto back to Manual, so it keeps the last-known number (or
+  // its own default) even while Auto is active and the slider is disabled.
+  if (response.settings.maxReplyLength !== "auto") {
+    maxLengthInput.value = String(response.settings.maxReplyLength);
+  }
+  setMaxLengthMode(response.settings.maxReplyLength === "auto" ? "auto" : "manual");
   setDraftCount(response.settings.draftCount);
   setUseEmoji(response.settings.useEmoji);
   setReadImages(response.settings.readImages);
@@ -185,7 +210,7 @@ async function saveSettings(): Promise<void> {
       authToken: authTokenInput.value.trim(),
       toneDefault: toneSelect.value as Tone,
       defaultInstruction: instructionInput.value.trim(),
-      maxReplyLength: Number(maxLengthInput.value),
+      maxReplyLength: maxLengthMode === "auto" ? "auto" : Number(maxLengthInput.value),
       draftCount,
       useEmoji,
       readImages,

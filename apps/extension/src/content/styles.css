@@ -248,6 +248,10 @@
   padding: 0;
 }
 
+.eks-tone-label input[type="range"]:disabled {
+  pointer-events: none;
+}
+
 .eks-tone-label input[type="range"]::-webkit-slider-runnable-track {
   background: transparent;
   border-radius: 999px;
@@ -330,7 +334,8 @@
 
 .eks-reply-panel button:disabled,
 .eks-reply-panel select:disabled,
-.eks-reply-panel textarea:disabled {
+.eks-reply-panel textarea:disabled,
+.eks-reply-panel input:disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }

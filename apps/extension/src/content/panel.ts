@@ -80,6 +80,18 @@ function setControlsDisabled(panel: HTMLElement, disabled: boolean): void {
     if (element.dataset.panelClose === "true") return;
     element.disabled = disabled;
   });
+
+  // Re-enabling shouldn't un-disable the max-length slider while Length mode
+  // is Auto — that disabled state is a mode choice, not a loading state.
+  if (!disabled) {
+    const activeMode = panel.querySelector<HTMLButtonElement>(
+      '[data-length-mode-group] button[aria-pressed="true"]',
+    );
+    const maxLengthInput = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
+    if (maxLengthInput && activeMode?.dataset.lengthMode === "auto") {
+      maxLengthInput.disabled = true;
+    }
+  }
 }
 
 function setPanelLoading(panel: HTMLElement, loading: boolean): void {
@@ -133,7 +145,7 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
 
     const charCount = document.createElement("p");
     charCount.className = "eks-reply-char-count";
-    charCount.textContent = `${reply.text.length}/${maxLength}`;
+    charCount.textContent = maxLength === "auto" ? `${reply.text.length} chars` : `${reply.text.length}/${maxLength}`;
 
     const actions = document.createElement("div");
     actions.className = "eks-reply-actions";
@@ -428,16 +440,35 @@ function readReadImages(panel: HTMLElement): boolean | undefined {
   return active ? active.dataset.images === "on" : undefined;
 }
 
-function readMaxLength(panel: HTMLElement): number | undefined {
+function setLengthMode(panel: HTMLElement, mode: "auto" | "manual"): void {
+  const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
+  const display = panel.querySelector<HTMLElement>("[data-max-length-value]");
+  const suffix = panel.querySelector<HTMLElement>("[data-max-length-suffix]");
+  panel.querySelectorAll<HTMLButtonElement>("[data-length-mode-group] button[data-length-mode]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.lengthMode === mode));
+  });
+  if (input) input.disabled = mode === "auto";
+  if (display) display.textContent = mode === "auto" ? "Auto" : (input?.value ?? "220");
+  if (suffix) suffix.textContent = mode === "auto" ? "" : " chars";
+}
+
+function readMaxLength(panel: HTMLElement): number | "auto" | undefined {
+  const activeMode = panel.querySelector<HTMLButtonElement>(
+    '[data-length-mode-group] button[aria-pressed="true"]',
+  );
+  if (activeMode?.dataset.lengthMode === "auto") return "auto";
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
   return input ? Number(input.value) : undefined;
 }
 
-function setMaxLength(panel: HTMLElement, value: number): void {
+function setMaxLength(panel: HTMLElement, value: number | "auto"): void {
+  if (value === "auto") {
+    setLengthMode(panel, "auto");
+    return;
+  }
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
-  const display = panel.querySelector<HTMLElement>("[data-max-length-value]");
   if (input) input.value = String(value);
-  if (display) display.textContent = String(value);
+  setLengthMode(panel, "manual");
 }
 
 function readExtraInstruction(panel: HTMLElement): string | undefined {
@@ -455,7 +486,7 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
       settings?: {
         toneDefault?: Tone;
         draftCount?: number;
-        maxReplyLength?: number;
+        maxReplyLength?: number | "auto";
         useEmoji?: boolean;
         readImages?: boolean;
       };
@@ -554,9 +585,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       <label class="eks-tone-label">
         <span class="eks-field-row">
           <span>Max length</span>
-          <span class="eks-field-row-value"><span data-max-length-value>220</span> chars</span>
+          <span class="eks-field-row-value"><span data-max-length-value>220</span><span data-max-length-suffix> chars</span></span>
         </span>
         <input type="range" data-max-length-input min="50" max="280" step="10" value="220" />
+        <div class="eks-count-group" data-length-mode-group role="group" aria-label="Reply length mode">
+          <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
+          <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
+        </div>
       </label>
       <div class="eks-panel-config">
         <div class="eks-count-label">
@@ -618,6 +653,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   maxLengthInput?.addEventListener("input", () => {
     panel.dataset.controlsTouched = "true";
     if (maxLengthValue) maxLengthValue.textContent = maxLengthInput.value;
+  });
+
+  panel.querySelector("[data-length-mode-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-length-mode]");
+    if (!button) return;
+    panel.dataset.controlsTouched = "true";
+    setLengthMode(panel, button.dataset.lengthMode === "auto" ? "auto" : "manual");
   });
 
   panel.querySelector("[data-count-group]")?.addEventListener("click", (event) => {

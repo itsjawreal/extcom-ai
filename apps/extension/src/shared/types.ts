@@ -44,7 +44,9 @@ export type GenerateReplyRequest = ExtractedPostContext & {
   tone: Tone;
   extraInstruction?: string;
   count: number;
-  maxLength: number;
+  // "auto" means no fixed character target — the AI picks whatever length
+  // reads most natural for the tone/post, capped only by a safety ceiling.
+  maxLength: number | "auto";
   useEmoji: boolean;
 };
 
@@ -61,7 +63,7 @@ export type ExtensionSettings = {
   authToken: string;
   toneDefault: Tone;
   defaultInstruction: string;
-  maxReplyLength: number;
+  maxReplyLength: number | "auto";
   draftCount: number;
   useEmoji: boolean;
   readImages: boolean;

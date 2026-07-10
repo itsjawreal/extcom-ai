@@ -40,10 +40,15 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   return Math.min(max, Math.max(min, Math.round(num)));
 }
 
+function normalizeMaxLength(value: unknown, fallback: number | "auto"): number | "auto" {
+  if (value === "auto") return "auto";
+  return clampInt(value, fallback === "auto" ? MAX_REPLY_LENGTH : fallback, MIN_REPLY_LENGTH, MAX_REPLY_LENGTH);
+}
+
 type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji"> & {
   tone?: Tone;
   count?: number;
-  maxLength?: number;
+  maxLength?: number | "auto";
   useEmoji?: boolean;
   readImages?: boolean;
 };
@@ -75,12 +80,7 @@ async function getSettings(): Promise<ExtensionSettings> {
     authToken: String(stored.authToken || DEFAULT_SETTINGS.authToken),
     toneDefault: stored.toneDefault || DEFAULT_SETTINGS.toneDefault,
     defaultInstruction: String(stored.defaultInstruction ?? ""),
-    maxReplyLength: clampInt(
-      stored.maxReplyLength,
-      DEFAULT_SETTINGS.maxReplyLength,
-      MIN_REPLY_LENGTH,
-      MAX_REPLY_LENGTH,
-    ),
+    maxReplyLength: normalizeMaxLength(stored.maxReplyLength, DEFAULT_SETTINGS.maxReplyLength),
     draftCount: clampInt(stored.draftCount, DEFAULT_SETTINGS.draftCount, MIN_DRAFT_COUNT, MAX_DRAFT_COUNT),
     useEmoji: typeof stored.useEmoji === "boolean" ? stored.useEmoji : DEFAULT_SETTINGS.useEmoji,
     readImages: typeof stored.readImages === "boolean" ? stored.readImages : DEFAULT_SETTINGS.readImages,
@@ -202,16 +202,19 @@ function lastSentenceEnd(window: string): number | null {
   return lastEnd >= 0 ? lastEnd : null;
 }
 
-function truncateReply(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
+function truncateReply(text: string, maxLength: number | "auto"): string {
+  // "auto" has no user-picked target — MAX_REPLY_LENGTH is still enforced as
+  // an absolute safety ceiling in case a provider returns something absurd.
+  const limit = maxLength === "auto" ? MAX_REPLY_LENGTH : maxLength;
+  if (text.length <= limit) return text;
 
-  const sentenceEnd = lastSentenceEnd(text.slice(0, maxLength));
+  const sentenceEnd = lastSentenceEnd(text.slice(0, limit));
   if (sentenceEnd !== null) return text.slice(0, sentenceEnd + 1).trimEnd();
 
-  // Reserve 1 char for the ellipsis so the marked result still fits maxLength.
-  const cut = text.slice(0, maxLength - 1);
+  // Reserve 1 char for the ellipsis so the marked result still fits limit.
+  const cut = text.slice(0, limit - 1);
   const lastSpace = cut.lastIndexOf(" ");
-  const trimmed = lastSpace > maxLength * 0.5 ? cut.slice(0, lastSpace) : cut;
+  const trimmed = lastSpace > limit * 0.5 ? cut.slice(0, lastSpace) : cut;
   return `${trimmed.trimEnd()}…`;
 }
 

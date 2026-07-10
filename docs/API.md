@@ -31,9 +31,12 @@ Valid tones: `degen`, `bullish`, `smart`, `funny`, `respectful`, `short_alpha`,
 `hot_take`, `roast`, `formal_corporate`, `philosophical`, and
 `coach_motivational`.
 
-`count` must be between 1 and 3 (default `3`). `maxLength` must be between 50
-and 280 characters (default `220`) — replies are also hard-truncated
-client-side if a provider ignores it. `useEmoji` is a boolean (default
+`count` must be between 1 and 3 (default `3`). `maxLength` must be either an
+integer between 50 and 280 characters (default `220`), or the string `"auto"`
+— which drops the fixed character target and lets the AI pick whatever
+length reads most natural for the tone/post, capped at 280. Replies are also
+hard-truncated client-side if a provider ignores the limit (or exceeds the
+280 ceiling in `"auto"` mode). `useEmoji` is a boolean (default
 `true`); when `false` it's a hard override that beats any emoji habit implied
 by the selected tone. `imageUrl` is optional (must be `http(s)://`, max 2000
 chars) — when present, it's sent to the AI provider as a low-detail image

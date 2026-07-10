@@ -44,8 +44,11 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
   }
 
   const maxLength = body.maxLength === undefined ? 220 : body.maxLength;
-  if (!Number.isInteger(maxLength) || Number(maxLength) < 50 || Number(maxLength) > 280) {
-    throw new Error("maxLength must be an integer between 50 and 280.");
+  if (
+    maxLength !== "auto" &&
+    (!Number.isInteger(maxLength) || Number(maxLength) < 50 || Number(maxLength) > 280)
+  ) {
+    throw new Error('maxLength must be "auto" or an integer between 50 and 280.');
   }
 
   const useEmoji = body.useEmoji === undefined ? true : body.useEmoji;
@@ -69,7 +72,7 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     postText,
     tone: body.tone as GenerateReplyRequest["tone"],
     count: Number(count),
-    maxLength: Number(maxLength),
+    maxLength: maxLength === "auto" ? "auto" : Number(maxLength),
     useEmoji,
     authorHandle: optionalString(body.authorHandle, 100),
     authorName: optionalString(body.authorName, 200),

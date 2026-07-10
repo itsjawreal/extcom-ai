@@ -37,7 +37,9 @@ export type GenerateReplyRequest = {
   tone: Tone;
   extraInstruction?: string;
   count: number;
-  maxLength: number;
+  // "auto" means no fixed character target — the AI picks whatever length
+  // reads most natural for the tone/post, capped only by a safety ceiling.
+  maxLength: number | "auto";
   useEmoji: boolean;
 };
 

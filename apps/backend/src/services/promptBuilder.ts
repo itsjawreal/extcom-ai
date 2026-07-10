@@ -44,6 +44,13 @@ Rules:
 - Match the selected tone and stay relevant to the post.
 - Return only JSON matching this shape: {"replies":[{"text":"..."}]}.`;
 
+function lengthGuidance(maxLength: GenerateReplyRequest["maxLength"]): string {
+  if (maxLength === "auto") {
+    return "No fixed character target — pick whatever length reads most natural for the selected tone and this specific post (a short punchy reaction and a longer thought are both fine), capped at 280 characters. Prioritize a complete, natural-sounding reply over hitting any particular length.";
+  }
+  return `${maxLength} characters, hard limit. The reply as written must already be complete and fit within this — do not write a longer reply that relies on being cut off.`;
+}
+
 export function buildUserPrompt(input: GenerateReplyRequest): string {
   const thread = input.visibleThreadText?.length
     ? input.visibleThreadText.map((text, index) => `${index + 1}. ${text}`).join("\n")
@@ -65,7 +72,7 @@ Extra user instruction:
 ${input.extraInstruction || "None"}
 
 Character limit per reply:
-${input.maxLength} characters, hard limit. The reply as written must already be complete and fit within this — do not write a longer reply that relies on being cut off.
+${lengthGuidance(input.maxLength)}
 
 Emoji preference:
 ${input.useEmoji ? "Emojis are OK if they fit the tone naturally, but don't overuse them." : "Do not use any emojis in this reply, even if the tone would normally suggest them."}
