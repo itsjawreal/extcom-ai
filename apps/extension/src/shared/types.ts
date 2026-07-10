@@ -35,6 +35,7 @@ export type ExtractedPostContext = {
   authorHandle?: string;
   authorName?: string;
   postUrl?: string;
+  imageUrl?: string;
   visibleThreadText?: string[];
   timestampText?: string;
 };
@@ -63,6 +64,7 @@ export type ExtensionSettings = {
   maxReplyLength: number;
   draftCount: number;
   useEmoji: boolean;
+  readImages: boolean;
 };
 
 export type ConnectionStatus = {

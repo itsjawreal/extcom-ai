@@ -32,11 +32,31 @@ const draftCountGroup = document.getElementById("draft-count") as HTMLElement;
 const draftCountButtons = Array.from(draftCountGroup.querySelectorAll<HTMLButtonElement>("button"));
 const useEmojiGroup = document.getElementById("use-emoji") as HTMLElement;
 const useEmojiButtons = Array.from(useEmojiGroup.querySelectorAll<HTMLButtonElement>("button"));
+const readImagesGroup = document.getElementById("read-images") as HTMLElement;
+const readImagesButtons = Array.from(readImagesGroup.querySelectorAll<HTMLButtonElement>("button"));
 const saveButton = document.getElementById("save") as HTMLButtonElement;
 const statusNode = document.getElementById("status") as HTMLParagraphElement;
+const settingsTabs = document.getElementById("settings-tabs") as HTMLElement;
+const tabPanelDefault = document.getElementById("tab-panel-default") as HTMLElement;
+const tabPanelAdvanced = document.getElementById("tab-panel-advanced") as HTMLElement;
 let connectionCheckId = 0;
 let draftCount = 3;
 let useEmoji = true;
+let readImages = false;
+
+function switchSettingsTab(tab: "default" | "advanced"): void {
+  tabPanelDefault.hidden = tab !== "default";
+  tabPanelAdvanced.hidden = tab !== "advanced";
+  settingsTabs.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
+    button.setAttribute("aria-selected", String(button.dataset.tab === tab));
+  });
+}
+
+settingsTabs.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".tab");
+  if (!button) return;
+  switchSettingsTab(button.dataset.tab === "advanced" ? "advanced" : "default");
+});
 
 function setDraftCount(count: number): void {
   draftCount = count;
@@ -52,6 +72,13 @@ function setUseEmoji(value: boolean): void {
   }
 }
 
+function setReadImages(value: boolean): void {
+  readImages = value;
+  for (const button of readImagesButtons) {
+    button.setAttribute("aria-pressed", String((button.dataset.images === "on") === value));
+  }
+}
+
 draftCountGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-count]");
   if (!button) return;
@@ -62,6 +89,12 @@ useEmojiGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-emoji]");
   if (!button) return;
   setUseEmoji(button.dataset.emoji === "on");
+});
+
+readImagesGroup.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-images]");
+  if (!button) return;
+  setReadImages(button.dataset.images === "on");
 });
 
 maxLengthInput.addEventListener("input", () => {
@@ -129,6 +162,7 @@ async function loadSettings(): Promise<void> {
   maxLengthValue.textContent = String(response.settings.maxReplyLength);
   setDraftCount(response.settings.draftCount);
   setUseEmoji(response.settings.useEmoji);
+  setReadImages(response.settings.readImages);
 }
 
 async function requestBackendPermission(backendBaseUrl: string): Promise<void> {
@@ -154,6 +188,7 @@ async function saveSettings(): Promise<void> {
       maxReplyLength: Number(maxLengthInput.value),
       draftCount,
       useEmoji,
+      readImages,
     };
     // Persist first: chrome.permissions.request() below can pop a native
     // "allow access" prompt that backgrounds/closes this popup, killing its
@@ -227,7 +262,7 @@ function renderUsageStats(stats: UsageStats): void {
       right = link;
     } else {
       right = document.createElement("span");
-      right.textContent = entry.inserted ? "✓ Inserted" : "";
+      right.textContent = entry.inserted ? "✓ Inserted" : "Not inserted";
     }
     right.className = "inserted-tag";
     meta.append(left, right);
@@ -258,6 +293,7 @@ function switchView(view: "stats" | "settings"): void {
   viewStats.hidden = view !== "stats";
   viewSettings.hidden = view !== "settings";
   if (view === "settings") {
+    switchSettingsTab("default");
     void loadSettings();
   } else {
     void checkConnection();

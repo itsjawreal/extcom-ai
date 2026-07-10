@@ -26,6 +26,11 @@ function extractAuthor(post: HTMLElement): Pick<
   return { authorHandle, authorName };
 }
 
+function extractImageUrl(post: HTMLElement): string | undefined {
+  const img = post.querySelector<HTMLImageElement>('[data-testid="tweetPhoto"] img');
+  return img?.src || undefined;
+}
+
 function extractPostUrl(post: HTMLElement): string | undefined {
   const timestamp = post.querySelector<HTMLTimeElement>("time");
   const timestampLink = timestamp?.closest<HTMLAnchorElement>('a[href*="/status/"]');
@@ -56,6 +61,7 @@ export function extractPost(post: HTMLElement): ExtractedPostContext {
     postText,
     ...extractAuthor(post),
     postUrl: extractPostUrl(post),
+    imageUrl: extractImageUrl(post),
     timestampText,
   };
 }

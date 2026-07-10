@@ -33,6 +33,7 @@ export type GenerateReplyRequest = {
   authorName?: string;
   postUrl?: string;
   visibleThreadText?: string[];
+  imageUrl?: string;
   tone: Tone;
   extraInstruction?: string;
   count: number;

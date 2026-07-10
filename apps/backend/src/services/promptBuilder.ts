@@ -40,6 +40,7 @@ Rules:
 - Never instruct software to publish or auto-post.
 - Keep every reply within the character limit given in the user message. This is a hard limit, not a suggestion.
 - Follow the emoji preference given in the user message — it overrides any emoji habit implied by the selected tone.
+- If an image is attached, use its visible content (chart, meme, screenshot, etc.) to make the reply more specific and relevant.
 - Match the selected tone and stay relevant to the post.
 - Return only JSON matching this shape: {"replies":[{"text":"..."}]}.`;
 
@@ -68,6 +69,6 @@ ${input.maxLength} (hard limit, do not exceed)
 
 Emoji preference:
 ${input.useEmoji ? "Emojis are OK if they fit the tone naturally, but don't overuse them." : "Do not use any emojis in this reply, even if the tone would normally suggest them."}
-
+${input.imageUrl ? "\nAn image is attached to this post below. Use what it visibly shows to inform the reply.\n" : ""}
 Generate ${input.count} distinct replies. Return JSON only.`;
 }

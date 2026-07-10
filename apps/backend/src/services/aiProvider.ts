@@ -80,6 +80,23 @@ export async function generateWithOpenAI(
     /\/$/,
     "",
   );
+  // Low detail keeps image cost/latency small (~85 flat tokens vs. several
+  // hundred at high detail) — enough for a reply to reference what an image
+  // shows without needing pixel-level precision. Requires a vision-capable
+  // AI_DEFAULT_MODEL; if the configured model can't see images, providers
+  // typically just ignore the block rather than erroring.
+  const requestInput = input.imageUrl
+    ? [
+        {
+          role: "user" as const,
+          content: [
+            { type: "input_text" as const, text: buildUserPrompt(input) },
+            { type: "input_image" as const, image_url: input.imageUrl, detail: "low" as const },
+          ],
+        },
+      ]
+    : buildUserPrompt(input);
+
   const response = await fetch(`${baseUrl}/responses`, {
     method: "POST",
     headers: {
@@ -89,7 +106,7 @@ export async function generateWithOpenAI(
     body: JSON.stringify({
       model: process.env.AI_DEFAULT_MODEL || "gpt-5.4-nano",
       instructions: SYSTEM_PROMPT,
-      input: buildUserPrompt(input),
+      input: requestInput,
       max_output_tokens: 800,
       reasoning: { effort: "none" },
     }),
@@ -124,6 +141,18 @@ export async function generateWithOpenRouter(
   };
   if (process.env.APP_URL) headers["HTTP-Referer"] = process.env.APP_URL;
 
+  // Low detail keeps image cost/latency small (~85 flat tokens vs. several
+  // hundred at high detail) — enough for a reply to reference what an image
+  // shows without needing pixel-level precision. Requires a vision-capable
+  // AI_DEFAULT_MODEL; if the configured model can't see images, providers
+  // typically just ignore the block rather than erroring.
+  const userContent = input.imageUrl
+    ? [
+        { type: "text" as const, text: buildUserPrompt(input) },
+        { type: "image_url" as const, image_url: { url: input.imageUrl, detail: "low" as const } },
+      ]
+    : buildUserPrompt(input);
+
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers,
@@ -131,7 +160,7 @@ export async function generateWithOpenRouter(
       model: process.env.AI_DEFAULT_MODEL || "openrouter/auto",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(input) },
+        { role: "user", content: userContent },
       ],
       max_tokens: 800,
       temperature: 0.8,

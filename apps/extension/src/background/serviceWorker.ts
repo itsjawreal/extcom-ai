@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   maxReplyLength: 220,
   draftCount: 3,
   useEmoji: true,
+  readImages: false,
 };
 
 const MIN_REPLY_LENGTH = 50;
@@ -44,6 +45,7 @@ type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" |
   count?: number;
   maxLength?: number;
   useEmoji?: boolean;
+  readImages?: boolean;
 };
 
 type RuntimeMessage =
@@ -81,6 +83,7 @@ async function getSettings(): Promise<ExtensionSettings> {
     ),
     draftCount: clampInt(stored.draftCount, DEFAULT_SETTINGS.draftCount, MIN_DRAFT_COUNT, MAX_DRAFT_COUNT),
     useEmoji: typeof stored.useEmoji === "boolean" ? stored.useEmoji : DEFAULT_SETTINGS.useEmoji,
+    readImages: typeof stored.readImages === "boolean" ? stored.readImages : DEFAULT_SETTINGS.readImages,
   };
 }
 
@@ -215,6 +218,11 @@ async function generateReply(
     .join(" ")
     .slice(0, MAX_INSTRUCTION_LENGTH);
 
+  // readImages gates whether the already-extracted imageUrl (if any) is ever
+  // sent to the backend at all — off by default, since sending an image adds
+  // real token cost/latency the user should opt into, not discover later.
+  const readImages = rawInput.readImages ?? settings.readImages;
+
   const input: GenerateReplyRequest = {
     ...rawInput,
     tone: rawInput.tone ?? settings.toneDefault,
@@ -222,6 +230,7 @@ async function generateReply(
     count: rawInput.count ?? settings.draftCount,
     maxLength: rawInput.maxLength ?? settings.maxReplyLength,
     useEmoji: rawInput.useEmoji ?? settings.useEmoji,
+    imageUrl: readImages ? rawInput.imageUrl : undefined,
   };
 
   const response = await fetchBackend(`${baseUrl}/v1/generate-reply`, {

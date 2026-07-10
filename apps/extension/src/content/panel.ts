@@ -121,7 +121,7 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
   if (!list) return;
   list.replaceChildren();
 
-  const maxLength = Number(panel.dataset.maxLength) || 220;
+  const maxLength = readMaxLength(panel) ?? 220;
 
   items.forEach(({ reply, historyId }, index) => {
     const item = document.createElement("article");
@@ -221,10 +221,12 @@ async function regenerateSlot(
     const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
     const tone = (toneSelect?.value || undefined) as Tone | undefined;
     const useEmoji = readUseEmoji(panel);
+    const maxLength = readMaxLength(panel);
+    const readImages = readReadImages(panel);
     const extraInstruction = readExtraInstruction(panel);
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse; historyId?: string }>({
       type: "GENERATE_REPLY",
-      input: { ...context, tone, count: 1, useEmoji, extraInstruction },
+      input: { ...context, tone, count: 1, useEmoji, maxLength, readImages, extraInstruction },
     });
     const newReply = response.data.replies[0];
     if (!newReply) throw new Error("No draft returned.");
@@ -347,6 +349,29 @@ function readUseEmoji(panel: HTMLElement): boolean | undefined {
   return active ? active.dataset.emoji === "on" : undefined;
 }
 
+function setReadImagesGroup(panel: HTMLElement, value: boolean): void {
+  panel.querySelectorAll<HTMLButtonElement>("[data-images-group] button").forEach((button) => {
+    button.setAttribute("aria-pressed", String((button.dataset.images === "on") === value));
+  });
+}
+
+function readReadImages(panel: HTMLElement): boolean | undefined {
+  const active = panel.querySelector<HTMLButtonElement>('[data-images-group] button[aria-pressed="true"]');
+  return active ? active.dataset.images === "on" : undefined;
+}
+
+function readMaxLength(panel: HTMLElement): number | undefined {
+  const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
+  return input ? Number(input.value) : undefined;
+}
+
+function setMaxLength(panel: HTMLElement, value: number): void {
+  const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
+  const display = panel.querySelector<HTMLElement>("[data-max-length-value]");
+  if (input) input.value = String(value);
+  if (display) display.textContent = String(value);
+}
+
 function readExtraInstruction(panel: HTMLElement): string | undefined {
   const textarea = panel.querySelector<HTMLTextAreaElement>("[data-extra-instruction]");
   return textarea?.value.trim() || undefined;
@@ -359,13 +384,20 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
   try {
     const response = await chrome.runtime.sendMessage({ type: "GET_SETTINGS" }) as {
       ok: boolean;
-      settings?: { toneDefault?: Tone; draftCount?: number; maxReplyLength?: number; useEmoji?: boolean };
+      settings?: {
+        toneDefault?: Tone;
+        draftCount?: number;
+        maxReplyLength?: number;
+        useEmoji?: boolean;
+        readImages?: boolean;
+      };
     };
     if (!response.ok || !response.settings) return;
 
-    // A fast user can click tone/draft-count/emoji before this fetch resolves
-    // (e.g. right after opening the panel while the service worker is still
-    // waking up). Don't silently revert a choice they already made.
+    // A fast user can click tone/draft-count/emoji/length/images before this
+    // fetch resolves (e.g. right after opening the panel while the service
+    // worker is still waking up). Don't silently revert a choice they already
+    // made.
     if (panel.dataset.controlsTouched !== "true") {
       const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
       if (toneSelect && response.settings.toneDefault) {
@@ -377,9 +409,12 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
       if (typeof response.settings.useEmoji === "boolean") {
         setUseEmojiGroup(panel, response.settings.useEmoji);
       }
-    }
-    if (response.settings.maxReplyLength) {
-      panel.dataset.maxLength = String(response.settings.maxReplyLength);
+      if (response.settings.maxReplyLength) {
+        setMaxLength(panel, response.settings.maxReplyLength);
+      }
+      if (typeof response.settings.readImages === "boolean") {
+        setReadImagesGroup(panel, response.settings.readImages);
+      }
     }
   } catch {
     // Extension context gone or message failed — controls just keep their
@@ -394,8 +429,8 @@ async function generateRepliesForPanel(
   setPanelLoading(panel, true);
   renderSkeleton(panel, readDraftCount(panel) ?? 3);
   try {
-    // Max length comes from the popup settings; tone, draft count, emoji
-    // preference, and a one-off extra instruction can be overridden
+    // Tone, draft count, emoji preference, reply length, whether to read an
+    // attached image, and a one-off extra instruction can all be overridden
     // per-generation via the panel's own controls (fall back to the settings
     // defaults when untouched — the extra instruction is added on top of the
     // standing instruction, not a replacement for it, see serviceWorker.ts).
@@ -403,10 +438,12 @@ async function generateRepliesForPanel(
     const tone = (toneSelect?.value || undefined) as Tone | undefined;
     const count = readDraftCount(panel);
     const useEmoji = readUseEmoji(panel);
+    const maxLength = readMaxLength(panel);
+    const readImages = readReadImages(panel);
     const extraInstruction = readExtraInstruction(panel);
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse; historyId?: string }>({
       type: "GENERATE_REPLY",
-      input: { ...context, tone, count, useEmoji, extraInstruction },
+      input: { ...context, tone, count, useEmoji, maxLength, readImages, extraInstruction },
     });
     renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context);
     renderUsage(panel, response.data.usage);
@@ -430,7 +467,6 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   panel.className = "eks-reply-panel";
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", "AI reply drafts");
-  panel.dataset.maxLength = "220";
   panel.innerHTML = `
     <header>
       <strong>AI Reply</strong>
@@ -441,6 +477,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       <label class="eks-tone-label">
         Tone
         <select data-tone-select></select>
+      </label>
+      <label class="eks-tone-label">
+        <span class="eks-field-row">
+          <span>Max length</span>
+          <span class="eks-field-row-value"><span data-max-length-value>220</span> chars</span>
+        </span>
+        <input type="range" data-max-length-input min="50" max="280" step="10" value="220" />
       </label>
       <div class="eks-panel-config">
         <div class="eks-count-label">
@@ -456,6 +499,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
           <div class="eks-count-group" data-emoji-group role="group" aria-label="Use emoji">
             <button type="button" data-emoji="off" aria-pressed="false">Off</button>
             <button type="button" data-emoji="on" aria-pressed="true">On</button>
+          </div>
+        </div>
+        <div class="eks-count-label" data-images-label hidden>
+          Image
+          <div class="eks-count-group" data-images-group role="group" aria-label="Read image in this post">
+            <button type="button" data-images="off" aria-pressed="true">Off</button>
+            <button type="button" data-images="on" aria-pressed="false">On</button>
           </div>
         </div>
       </div>
@@ -484,6 +534,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     });
   }
 
+  const maxLengthInput = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
+  const maxLengthValue = panel.querySelector<HTMLElement>("[data-max-length-value]");
+  maxLengthInput?.addEventListener("input", () => {
+    panel.dataset.controlsTouched = "true";
+    if (maxLengthValue) maxLengthValue.textContent = maxLengthInput.value;
+  });
+
   panel.querySelector("[data-count-group]")?.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-count]");
     if (!button) return;
@@ -496,6 +553,19 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     if (!button) return;
     panel.dataset.controlsTouched = "true";
     setUseEmojiGroup(panel, button.dataset.emoji === "on");
+  });
+
+  // Only show the image toggle when this specific post actually has an
+  // image — nothing to switch on/off otherwise.
+  if (!("error" in input) && input.context.imageUrl) {
+    panel.querySelector<HTMLElement>("[data-images-label]")?.removeAttribute("hidden");
+  }
+
+  panel.querySelector("[data-images-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-images]");
+    if (!button) return;
+    panel.dataset.controlsTouched = "true";
+    setReadImagesGroup(panel, button.dataset.images === "on");
   });
 
   void initPanelSettings(panel);

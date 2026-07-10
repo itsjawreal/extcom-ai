@@ -18,6 +18,17 @@ function optionalString(value: unknown, maxLength: number): string | undefined {
   return value.trim() || undefined;
 }
 
+function optionalHttpUrl(value: unknown, maxLength: number): string | undefined {
+  const candidate = optionalString(value, maxLength);
+  if (!candidate) return undefined;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "http:" || url.protocol === "https:" ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
   if (!value || typeof value !== "object") throw new Error("Request body must be an object.");
   const body = value as Record<string, unknown>;
@@ -63,6 +74,7 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     authorHandle: optionalString(body.authorHandle, 100),
     authorName: optionalString(body.authorName, 200),
     postUrl: optionalString(body.postUrl, 2_000),
+    imageUrl: optionalHttpUrl(body.imageUrl, 2_000),
     visibleThreadText,
     extraInstruction: optionalString(body.extraInstruction, 500),
   };

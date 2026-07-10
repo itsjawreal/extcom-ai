@@ -19,7 +19,8 @@ Request body:
   "extraInstruction": "Keep it concise",
   "count": 3,
   "maxLength": 220,
-  "useEmoji": true
+  "useEmoji": true,
+  "imageUrl": "https://pbs.twimg.com/media/example.jpg"
 }
 ```
 
@@ -34,7 +35,12 @@ Valid tones: `degen`, `bullish`, `smart`, `funny`, `respectful`, `short_alpha`,
 and 280 characters (default `220`) — replies are also hard-truncated
 client-side if a provider ignores it. `useEmoji` is a boolean (default
 `true`); when `false` it's a hard override that beats any emoji habit implied
-by the selected tone.
+by the selected tone. `imageUrl` is optional (must be `http(s)://`, max 2000
+chars) — when present, it's sent to the AI provider as a low-detail image
+input alongside the text. This **requires `AI_DEFAULT_MODEL` to be a
+vision-capable model** (e.g. an OpenRouter multimodal model, or `gpt-4o`/
+`gpt-4.1`-class models on OpenAI); non-vision models typically just ignore
+the image rather than erroring.
 
 Authentication and rate-limit behavior:
 

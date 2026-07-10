@@ -162,6 +162,65 @@
   resize: vertical;
 }
 
+.eks-field-row {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.eks-field-row-value {
+  color: rgb(83, 100, 113);
+  font-weight: 400;
+}
+
+/* Custom range slider — override the generic .eks-tone-label input box
+   styling above and reset the native track/thumb, which otherwise renders
+   as a plain default OS slider. */
+.eks-tone-label input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgb(207, 217, 222);
+  border: none;
+  border-radius: 999px;
+  height: 5px;
+  padding: 0;
+}
+
+.eks-tone-label input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+  border-radius: 999px;
+  height: 5px;
+}
+
+.eks-tone-label input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgb(29, 155, 240);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  height: 16px;
+  margin-top: -5.5px;
+  width: 16px;
+}
+
+.eks-tone-label input[type="range"]::-moz-range-track {
+  background: rgb(207, 217, 222);
+  border: none;
+  border-radius: 999px;
+  height: 5px;
+}
+
+.eks-tone-label input[type="range"]::-moz-range-thumb {
+  background: rgb(29, 155, 240);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  height: 16px;
+  width: 16px;
+}
+
 .eks-extra-details {
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin-bottom: 12px;
@@ -313,6 +372,15 @@
   .eks-reply-option,
   .eks-context-details dl {
     border-color: rgb(47, 51, 54);
+  }
+
+  .eks-field-row-value {
+    color: rgb(136, 153, 166);
+  }
+
+  .eks-tone-label input[type="range"],
+  .eks-tone-label input[type="range"]::-moz-range-track {
+    background: rgb(47, 51, 54);
   }
 
   /* Belt-and-suspenders: some Chrome versions render a <select>'s native
