@@ -33,7 +33,8 @@ export type GenerateReplyRequest = {
   authorName?: string;
   postUrl?: string;
   visibleThreadText?: string[];
-  imageUrl?: string;
+  // Up to 4 images (X's own per-post max).
+  imageUrls?: string[];
   // "auto" means the AI picks whichever single tone best fits this post,
   // applied consistently across every reply in the batch — the resolved
   // tone (never "auto") is echoed back per-reply in GeneratedReply.tone.

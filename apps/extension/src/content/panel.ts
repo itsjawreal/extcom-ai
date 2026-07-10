@@ -832,8 +832,8 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
             </div>
           </div>
           <div class="eks-count-label" data-images-label hidden>
-            Image
-            <div class="eks-count-group" data-images-group role="group" aria-label="Read image in this post">
+            <span data-images-label-text>Image</span>
+            <div class="eks-count-group" data-images-group role="group" aria-label="Read images in this post">
               <button type="button" data-images="off" aria-pressed="true">Off</button>
               <button type="button" data-images="on" aria-pressed="false">On</button>
             </div>
@@ -907,10 +907,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     setUseEmojiGroup(panel, button.dataset.emoji === "on");
   });
 
-  // Only show the image toggle when this specific post actually has an
-  // image — nothing to switch on/off otherwise.
-  if (!("error" in input) && input.context.imageUrl) {
+  // Only show the image toggle when this specific post actually has at
+  // least one image — nothing to switch on/off otherwise.
+  const imageCount = !("error" in input) ? input.context.imageUrls?.length ?? 0 : 0;
+  if (imageCount > 0) {
     panel.querySelector<HTMLElement>("[data-images-label]")?.removeAttribute("hidden");
+    const labelText = panel.querySelector<HTMLElement>("[data-images-label-text]");
+    if (labelText) labelText.textContent = imageCount > 1 ? `Images (${imageCount})` : "Image";
   }
 
   panel.querySelector("[data-images-group]")?.addEventListener("click", (event) => {

@@ -98,18 +98,23 @@ export async function generateWithOpenAI(
     /\/$/,
     "",
   );
-  // Low detail keeps image cost/latency small (~85 flat tokens vs. several
-  // hundred at high detail) — enough for a reply to reference what an image
-  // shows without needing pixel-level precision. Requires a vision-capable
-  // AI_DEFAULT_MODEL; if the configured model can't see images, providers
-  // typically just ignore the block rather than erroring.
-  const requestInput = input.imageUrl
+  // Low detail keeps image cost/latency small (~85 flat tokens per image vs.
+  // several hundred at high detail) — enough for a reply to reference what
+  // an image shows without needing pixel-level precision. Cost scales
+  // linearly with image count (up to 4, X's own per-post max). Requires a
+  // vision-capable AI_DEFAULT_MODEL; if the configured model can't see
+  // images, providers typically just ignore the block rather than erroring.
+  const requestInput = input.imageUrls?.length
     ? [
         {
           role: "user" as const,
           content: [
             { type: "input_text" as const, text: buildUserPrompt(input) },
-            { type: "input_image" as const, image_url: input.imageUrl, detail: "low" as const },
+            ...input.imageUrls.map((url) => ({
+              type: "input_image" as const,
+              image_url: url,
+              detail: "low" as const,
+            })),
           ],
         },
       ]
@@ -159,15 +164,19 @@ export async function generateWithOpenRouter(
   };
   if (process.env.APP_URL) headers["HTTP-Referer"] = process.env.APP_URL;
 
-  // Low detail keeps image cost/latency small (~85 flat tokens vs. several
-  // hundred at high detail) — enough for a reply to reference what an image
-  // shows without needing pixel-level precision. Requires a vision-capable
-  // AI_DEFAULT_MODEL; if the configured model can't see images, providers
-  // typically just ignore the block rather than erroring.
-  const userContent = input.imageUrl
+  // Low detail keeps image cost/latency small (~85 flat tokens per image vs.
+  // several hundred at high detail) — enough for a reply to reference what
+  // an image shows without needing pixel-level precision. Cost scales
+  // linearly with image count (up to 4, X's own per-post max). Requires a
+  // vision-capable AI_DEFAULT_MODEL; if the configured model can't see
+  // images, providers typically just ignore the block rather than erroring.
+  const userContent = input.imageUrls?.length
     ? [
         { type: "text" as const, text: buildUserPrompt(input) },
-        { type: "image_url" as const, image_url: { url: input.imageUrl, detail: "low" as const } },
+        ...input.imageUrls.map((url) => ({
+          type: "image_url" as const,
+          image_url: { url, detail: "low" as const },
+        })),
       ]
     : buildUserPrompt(input);
 

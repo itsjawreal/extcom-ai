@@ -72,6 +72,19 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     });
   }
 
+  let imageUrls: string[] | undefined;
+  if (body.imageUrls !== undefined) {
+    if (!Array.isArray(body.imageUrls) || body.imageUrls.length > 4) {
+      throw new Error("imageUrls must contain at most 4 items.");
+    }
+    imageUrls = body.imageUrls.map((item) => {
+      const url = optionalHttpUrl(item, 2_000);
+      if (!url) throw new Error("Each imageUrls item must be a valid http(s) URL.");
+      return url;
+    });
+    if (imageUrls.length === 0) imageUrls = undefined;
+  }
+
   return {
     postText,
     tone: body.tone as GenerateReplyRequest["tone"],
@@ -81,7 +94,7 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     authorHandle: optionalString(body.authorHandle, 100),
     authorName: optionalString(body.authorName, 200),
     postUrl: optionalString(body.postUrl, 2_000),
-    imageUrl: optionalHttpUrl(body.imageUrl, 2_000),
+    imageUrls,
     visibleThreadText,
     extraInstruction: optionalString(body.extraInstruction, 500),
   };

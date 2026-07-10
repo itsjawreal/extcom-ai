@@ -24,7 +24,7 @@ Request body:
   "count": 3,
   "maxLength": 220,
   "useEmoji": true,
-  "imageUrl": "https://pbs.twimg.com/media/example.jpg"
+  "imageUrls": ["https://pbs.twimg.com/media/example.jpg"]
 }
 ```
 
@@ -47,12 +47,13 @@ length reads most natural for the tone/post, capped at 280. Replies are also
 hard-truncated client-side if a provider ignores the limit (or exceeds the
 280 ceiling in `"auto"` mode). `useEmoji` is a boolean (default
 `true`); when `false` it's a hard override that beats any emoji habit implied
-by the selected tone. `imageUrl` is optional (must be `http(s)://`, max 2000
-chars) — when present, it's sent to the AI provider as a low-detail image
-input alongside the text. This **requires `AI_DEFAULT_MODEL` to be a
-vision-capable model** (e.g. an OpenRouter multimodal model, or `gpt-4o`/
-`gpt-4.1`-class models on OpenAI); non-vision models typically just ignore
-the image rather than erroring.
+by the selected tone. `imageUrls` is optional (array of `http(s)://` URLs,
+max 2000 chars each, at most 4 items — X's own per-post max) — when present,
+each is sent to the AI provider as a low-detail image input alongside the
+text. Cost/latency scale linearly with image count. This **requires
+`AI_DEFAULT_MODEL` to be a vision-capable model** (e.g. an OpenRouter
+multimodal model, or `gpt-4o`/`gpt-4.1`-class models on OpenAI); non-vision
+models typically just ignore the images rather than erroring.
 
 Authentication and rate-limit behavior:
 

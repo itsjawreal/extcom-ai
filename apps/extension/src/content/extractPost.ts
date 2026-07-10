@@ -26,9 +26,14 @@ function extractAuthor(post: HTMLElement): Pick<
   return { authorHandle, authorName };
 }
 
-function extractImageUrl(post: HTMLElement): string | undefined {
-  const img = post.querySelector<HTMLImageElement>('[data-testid="tweetPhoto"] img');
-  return img?.src || undefined;
+const MAX_IMAGES = 4; // X's own per-post cap.
+
+function extractImageUrls(post: HTMLElement): string[] | undefined {
+  const urls = Array.from(post.querySelectorAll<HTMLImageElement>('[data-testid="tweetPhoto"] img'))
+    .map((img) => img.src)
+    .filter(Boolean)
+    .slice(0, MAX_IMAGES);
+  return urls.length ? urls : undefined;
 }
 
 function extractPostUrl(post: HTMLElement): string | undefined {
@@ -61,7 +66,7 @@ export function extractPost(post: HTMLElement): ExtractedPostContext {
     postText,
     ...extractAuthor(post),
     postUrl: extractPostUrl(post),
-    imageUrl: extractImageUrl(post),
+    imageUrls: extractImageUrls(post),
     timestampText,
   };
 }

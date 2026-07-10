@@ -7,7 +7,7 @@ are fixed in the backend source (`apps/backend/src/services/promptBuilder.ts`)
 and cannot be changed from the popup, the panel, or the API request itself.
 
 The only per-request inputs a caller controls are: `tone`, `maxLength`,
-`useEmoji`, `extraInstruction`, and the post/thread/image content being
+`useEmoji`, `extraInstruction`, and the post/thread/images content being
 replied to (see [API.md](API.md) for the request shape). Everything else —
 the system rules and the 24 tone descriptions — is the same for every user
 and every request.
@@ -44,8 +44,8 @@ Sent once, unchanged, as the system message on every call:
 >   be cut off.
 > - Follow the emoji preference given in the user message — it overrides any
 >   emoji habit implied by the selected tone.
-> - If an image is attached, use its visible content (chart, meme,
->   screenshot, etc.) to make the reply more specific and relevant.
+> - If one or more images are attached, use their visible content (chart,
+>   meme, screenshot, etc.) to make the reply more specific and relevant.
 > - Match the selected tone and stay relevant to the post.
 > - Return only JSON matching this shape: `{"replies":[{"text":"..."}]}`. If
 >   the user message asks you to auto-pick the tone, also include a
@@ -86,15 +86,17 @@ Emoji preference:
  suggest them.">
 
 [An image is attached to this post below. Use what it visibly shows to
- inform the reply. — only present when imageUrl is set]
+ inform the reply. — only present when imageUrls has exactly 1 item
+ (pluralized to "N images are attached... what they visibly show" when
+ imageUrls has more than 1)]
 
 Generate <count> replies, each genuinely distinct in structure and angle
 (not reworded restatements of each other). Return JSON only.
 ```
 
-If `imageUrl` is set, the image itself is attached as a separate low-detail
-image input alongside this text (requires a vision-capable
-`AI_DEFAULT_MODEL`).
+If `imageUrls` is set, each image (up to 4, X's own per-post max) is
+attached as a separate low-detail image input alongside this text (requires
+a vision-capable `AI_DEFAULT_MODEL`).
 
 ## Tone guidance table
 

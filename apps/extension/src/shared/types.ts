@@ -35,7 +35,8 @@ export type ExtractedPostContext = {
   authorHandle?: string;
   authorName?: string;
   postUrl?: string;
-  imageUrl?: string;
+  // Up to 4 images (X's own per-post max), in on-page display order.
+  imageUrls?: string[];
   visibleThreadText?: string[];
   timestampText?: string;
 };

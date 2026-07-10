@@ -42,7 +42,7 @@ Rules:
 - Never instruct software to publish or auto-post.
 - Keep every reply within the character limit given in the user message. This is a hard limit, not a suggestion — write a complete, self-contained thought that already fits; never write a longer reply and expect it to be cut off.
 - Follow the emoji preference given in the user message — it overrides any emoji habit implied by the selected tone.
-- If an image is attached, use its visible content (chart, meme, screenshot, etc.) to make the reply more specific and relevant.
+- If one or more images are attached, use their visible content (chart, meme, screenshot, etc.) to make the reply more specific and relevant.
 - Match the selected tone and stay relevant to the post.
 - Return only JSON matching this shape: {"replies":[{"text":"..."}]}. If the user message asks you to auto-pick the tone, also include a top-level "tone" field naming the exact tone id you chose (e.g. {"tone":"smart","replies":[{"text":"..."}]}), and apply that same tone to every reply in the batch.`;
 
@@ -86,6 +86,6 @@ ${lengthGuidance(input.maxLength)}
 
 Emoji preference:
 ${input.useEmoji ? "Emojis are OK if they fit the tone naturally, but don't overuse them." : "Do not use any emojis in this reply, even if the tone would normally suggest them."}
-${input.imageUrl ? "\nAn image is attached to this post below. Use what it visibly shows to inform the reply.\n" : ""}
+${input.imageUrls?.length ? `\n${input.imageUrls.length > 1 ? `${input.imageUrls.length} images are` : "An image is"} attached to this post below. Use what ${input.imageUrls.length > 1 ? "they visibly show" : "it visibly shows"} to inform the reply.\n` : ""}
 Generate ${input.count} replies, each genuinely distinct in structure and angle (not reworded restatements of each other). Return JSON only.`;
 }

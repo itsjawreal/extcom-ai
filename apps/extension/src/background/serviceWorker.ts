@@ -252,9 +252,10 @@ async function generateReply(
     .join(" ")
     .slice(0, MAX_INSTRUCTION_LENGTH);
 
-  // readImages gates whether the already-extracted imageUrl (if any) is ever
-  // sent to the backend at all — off by default, since sending an image adds
-  // real token cost/latency the user should opt into, not discover later.
+  // readImages gates whether the already-extracted imageUrls (if any) are
+  // ever sent to the backend at all — off by default, since sending images
+  // adds real token cost/latency (linear per image) the user should opt
+  // into, not discover later.
   const readImages = rawInput.readImages ?? settings.readImages;
 
   const input: GenerateReplyRequest = {
@@ -264,7 +265,7 @@ async function generateReply(
     count: rawInput.count ?? settings.draftCount,
     maxLength: rawInput.maxLength ?? settings.maxReplyLength,
     useEmoji: rawInput.useEmoji ?? settings.useEmoji,
-    imageUrl: readImages ? rawInput.imageUrl : undefined,
+    imageUrls: readImages ? rawInput.imageUrls : undefined,
   };
 
   const response = await fetchBackend(`${baseUrl}/v1/generate-reply`, {
