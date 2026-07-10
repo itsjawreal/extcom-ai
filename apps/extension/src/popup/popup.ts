@@ -155,13 +155,18 @@ async function saveSettings(): Promise<void> {
       draftCount,
       useEmoji,
     };
-    if (settings.backendBaseUrl) {
-      await requestBackendPermission(settings.backendBaseUrl);
-    }
+    // Persist first: chrome.permissions.request() below can pop a native
+    // "allow access" prompt that backgrounds/closes this popup, killing its
+    // JS execution before anything after it runs. Saving before that request
+    // means a first-time permission prompt can no longer wipe out what the
+    // user just typed.
     const response = await chrome.runtime.sendMessage({
       type: "SAVE_SETTINGS",
       settings,
     }) as RuntimeResponse;
+    if (settings.backendBaseUrl) {
+      await requestBackendPermission(settings.backendBaseUrl);
+    }
     showStatus(response.ok ? "Settings saved." : response.error || "Save failed.");
     if (response.ok) void checkConnection();
   } catch (error) {
@@ -218,7 +223,7 @@ function renderUsageStats(stats: UsageStats): void {
       link.href = entry.postUrl;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-      link.textContent = "✓ Inserted";
+      link.textContent = "✓ Inserted ↗";
       right = link;
     } else {
       right = document.createElement("span");

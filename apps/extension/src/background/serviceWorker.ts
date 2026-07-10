@@ -92,9 +92,23 @@ function requireBackend(settings: ExtensionSettings): { baseUrl: string; token: 
   return { baseUrl, token };
 }
 
+// A bare `fetch()` failure (DNS error, connection refused, no host
+// permission granted, mixed content, etc.) surfaces as a generic
+// "TypeError: Failed to fetch" with zero context. Wrap it so the user sees
+// which URL we tried and the likely causes, instead of that dead end.
+async function fetchBackend(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new Error(
+      `Could not reach ${url}. Check that the Backend URL in Settings is correct, the server is running, and — if you just changed the Backend URL — that you accepted the "allow access" permission prompt after Save.`,
+    );
+  }
+}
+
 async function checkConnection(settings: ExtensionSettings): Promise<ConnectionStatus> {
   const { baseUrl, token } = requireBackend(settings);
-  const response = await fetch(`${baseUrl}/v1/me`, {
+  const response = await fetchBackend(`${baseUrl}/v1/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const body = await response.json().catch(() => ({})) as
@@ -210,7 +224,7 @@ async function generateReply(
     useEmoji: rawInput.useEmoji ?? settings.useEmoji,
   };
 
-  const response = await fetch(`${baseUrl}/v1/generate-reply`, {
+  const response = await fetchBackend(`${baseUrl}/v1/generate-reply`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

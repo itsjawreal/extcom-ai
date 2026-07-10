@@ -7,102 +7,181 @@
     :root {
       color-scheme: dark;
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+      --bg: #070b14;
+      --panel: #0d1424;
+      --panel-soft: #111a2d;
+      --border: #1f2a44;
+
+      --text: #f4f7fb;
+      --muted: #8a98b3;
+      --muted-2: #5f6f8e;
+
+      --accent: #2b8fe6;
+      --accent-hover: #2579c4;
+      --accent-soft: #183a5f;
+      --success: #22c55e;
+      --danger: #f87171;
+
+      --radius-sm: 8px;
+      --radius-md: 10px;
+      --radius-lg: 12px;
     }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      width: 340px;
-      padding: 16px;
+      width: 320px;
+      padding: 14px;
       font-size: 13px;
-      background: #0b1220;
-      color: #e7ecf5;
+      background: var(--bg);
+      color: var(--text);
     }
     h1 {
       margin: 0;
-      font-size: 15px;
-      letter-spacing: 0.2px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.1px;
     }
+
+    /* Header */
     .popup-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
-    .icon-button {
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: var(--radius-sm);
+      background: var(--accent-soft);
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .brand-icon svg {
+      width: 13px;
+      height: 13px;
+      fill: currentColor;
+    }
+    .brand-name {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+    .ghost-button {
       width: auto;
       padding: 5px 10px;
-      font-size: 14px;
-      font-weight: 400;
-      background: #111c33;
-      border: 1px solid #1e2c4a;
-      border-radius: 8px;
-      color: #e7ecf5;
+      font-size: 12px;
+      font-weight: 600;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--muted);
     }
-    .icon-button:hover { background: #16223f; }
+    .ghost-button:hover {
+      background: var(--panel-soft);
+      color: var(--text);
+    }
     .settings-header {
       display: flex;
       align-items: center;
       gap: 8px;
       margin-bottom: 14px;
     }
-    .settings-header h1 { font-size: 14px; }
-    .stats-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 16px;
+
+    /* Status row */
+    .status-row {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
     }
-    .stat-tile {
-      border-radius: 12px;
-      padding: 12px;
-      background: #111c33;
-      border: 1px solid #1e2c4a;
-      text-align: center;
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted-2);
+      flex-shrink: 0;
+      align-self: center;
     }
-    .stat-tile .stat-value {
-      display: block;
-      font-size: 20px;
-      font-weight: 700;
+    .status-row[data-state="connected"] .status-dot { background: var(--success); }
+    .status-row[data-state="error"] .status-dot { background: var(--danger); }
+    #connection-title {
+      font-weight: 600;
     }
-    .stat-tile .stat-label {
-      display: block;
-      margin-top: 2px;
-      color: #93a1b8;
+    .status-detail {
+      margin-left: auto;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    /* Stats row */
+    .stats-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .stats-label {
+      color: var(--muted);
       font-size: 11px;
-    }
-    .history-heading {
-      margin: 0 0 8px;
-      font-size: 12px;
       font-weight: 700;
-      color: #93a1b8;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .stats-values strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+    .stats-values {
+      color: var(--muted);
+    }
+
+    .history-heading {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.4px;
     }
     .history-list {
       max-height: 260px;
       overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
     }
     .history-item {
-      border-radius: 10px;
-      padding: 10px;
-      background: #111c33;
-      border: 1px solid #1e2c4a;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
     }
+    .history-item:last-child { border-bottom: none; }
     .history-item p {
-      margin: 0 0 6px;
+      margin: 0 0 4px;
       line-height: 1.4;
       word-break: break-word;
     }
     .history-item .history-meta {
       display: flex;
       justify-content: space-between;
-      color: #64748b;
+      gap: 8px;
+      color: var(--muted-2);
       font-size: 11px;
     }
     .history-item .history-meta .inserted-tag {
-      color: #22c55e;
+      color: var(--success);
+      flex-shrink: 0;
     }
     .history-item .history-meta a.inserted-tag {
       text-decoration: none;
@@ -112,50 +191,40 @@
       text-decoration: underline;
     }
     .history-empty {
-      color: #64748b;
+      color: var(--muted);
       text-align: center;
-      padding: 18px 0;
+      padding: 16px 0;
     }
+
     .button-secondary {
       margin-top: 10px;
       background: transparent;
-      border: 1px solid #3a2a2a;
-      color: #f87171;
+      border: 1px solid #3a2436;
+      color: var(--danger);
+      border-radius: var(--radius-md);
+      height: 34px;
     }
     .button-secondary:hover { background: #1a1013; }
-    .status-card {
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 16px;
-      text-align: center;
-      background: #111c33;
-      border: 1px solid #1e2c4a;
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 14px;
     }
-    .status-dot {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      margin-right: 7px;
-      background: #6b7280;
-      vertical-align: baseline;
+    .footer-links a {
+      display: inline-flex;
+      color: var(--muted-2);
     }
-    .status-card[data-state="connected"] .status-dot { background: #22c55e; }
-    .status-card[data-state="error"] .status-dot { background: #ef4444; }
-    .status-title {
-      font-size: 14px;
-      font-weight: 700;
-      margin: 0 0 4px;
+    .footer-links a:hover {
+      color: var(--text);
     }
-    .status-detail {
-      margin: 0 0 12px;
-      color: #93a1b8;
-      min-height: 16px;
+    .footer-links svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
     }
-    .status-card button {
-      width: auto;
-      padding: 7px 22px;
-    }
+
     label {
       display: block;
       margin-bottom: 10px;
@@ -164,46 +233,49 @@
     input, select, textarea {
       display: block;
       width: 100%;
-      box-sizing: border-box;
       margin-top: 4px;
       padding: 7px 9px;
       font: inherit;
       font-weight: 400;
-      border: 1px solid #24334f;
-      border-radius: 8px;
-      background: #0e1729;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--panel);
       color: inherit;
       resize: vertical;
     }
     input:focus, select:focus, textarea:focus {
       outline: none;
-      border-color: #1d9bf0;
+      border-color: var(--accent);
     }
     button {
       width: 100%;
-      padding: 9px;
+      height: 36px;
+      padding: 0 9px;
       font: inherit;
       font-weight: 700;
       border: none;
-      border-radius: 999px;
-      background: #1d9bf0;
+      border-radius: var(--radius-md);
+      background: var(--accent);
       color: #fff;
       cursor: pointer;
     }
-    button:hover { background: #1a8cd8; }
+    button:hover { background: var(--accent-hover); }
     button:disabled {
       opacity: 0.6;
       cursor: default;
+    }
+    #save {
+      height: 40px;
     }
     .status {
       min-height: 18px;
       margin: 8px 0 0;
       text-align: center;
-      color: #93a1b8;
+      color: var(--muted);
     }
     .hint {
       margin: 12px 0 0;
-      color: #64748b;
+      color: var(--muted-2);
       font-size: 12px;
       line-height: 1.5;
     }
@@ -215,76 +287,106 @@
     }
     .field-row-value {
       font-weight: 400;
-      color: #93a1b8;
+      color: var(--muted);
     }
     input[type="range"] {
       padding: 0;
-      accent-color: #1d9bf0;
+      accent-color: var(--accent);
       background: transparent;
       border: none;
     }
     .segmented {
       display: flex;
-      gap: 6px;
+      gap: 4px;
       margin-top: 4px;
     }
     .segmented button {
       flex: 1;
-      padding: 7px 0;
+      height: 30px;
+      padding: 0;
+      font-size: 12px;
       font-weight: 600;
-      background: #0e1729;
-      border: 1px solid #24334f;
-      color: #93a1b8;
+      border-radius: var(--radius-sm);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--muted);
     }
     .segmented button[aria-pressed="true"] {
-      background: #1d9bf0;
-      border-color: #1d9bf0;
-      color: #fff;
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .advanced {
+      margin-top: 4px;
+      margin-bottom: 14px;
+      padding: 10px 10px 2px;
+      background: var(--panel-soft);
+      border-radius: var(--radius-md);
+    }
+    .advanced summary {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: var(--muted);
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+    .advanced .ghost-button {
+      width: 100%;
+      height: 34px;
+      margin-bottom: 10px;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #2a344a;
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3a465f;
     }
   </style>
 </head>
 <body>
   <header class="popup-header">
-    <h1>✦ Extcom AI Reply</h1>
-    <button id="open-settings" class="icon-button" type="button" aria-label="Settings">⚙</button>
+    <div class="brand">
+      <span class="brand-icon">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
+      </span>
+      <span class="brand-name">Extcom</span>
+    </div>
+    <button id="open-settings" class="ghost-button" type="button" aria-label="Settings">⚙</button>
   </header>
 
   <section id="view-stats">
-    <section class="status-card" id="status-card" data-state="unknown">
-      <p class="status-title"><span class="status-dot"></span><span id="connection-title">Checking…</span></p>
-      <p class="status-detail" id="connection-detail"></p>
-      <button id="test-connection" type="button">Test connection</button>
-    </section>
-
-    <div class="stats-grid">
-      <div class="stat-tile">
-        <span class="stat-value" id="stat-generations">0</span>
-        <span class="stat-label">Total generations</span>
-      </div>
-      <div class="stat-tile">
-        <span class="stat-value" id="stat-inserted">0</span>
-        <span class="stat-label">Drafts inserted</span>
-      </div>
+    <div class="status-row" id="status-card" data-state="unknown">
+      <span class="status-dot"></span>
+      <span id="connection-title">Checking…</span>
+      <span class="status-detail" id="connection-detail"></span>
     </div>
 
-    <p class="history-heading">Recent history</p>
+    <div class="stats-row">
+      <span class="stats-label">Today</span>
+      <span class="stats-values"><strong id="stat-generations">0</strong> generated · <strong id="stat-inserted">0</strong> inserted</span>
+    </div>
+
+    <p class="history-heading">Recent</p>
     <div class="history-list" id="history-list"></div>
   </section>
 
   <section id="view-settings" hidden>
     <div class="settings-header">
-      <button id="back-to-stats" class="icon-button" type="button" aria-label="Back">←</button>
+      <button id="back-to-stats" class="ghost-button" type="button" aria-label="Back">←</button>
       <h1>Settings</h1>
     </div>
 
-    <label>
-      Backend URL
-      <input id="backend-url" type="url" placeholder="https://your-backend.example.com" />
-    </label>
-    <label>
-      Access token
-      <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" />
-    </label>
     <label>
       Default tone
       <select id="tone-default"></select>
@@ -315,10 +417,32 @@
         <button type="button" data-emoji="on" aria-pressed="true">On</button>
       </div>
     </label>
+
+    <details class="advanced" open>
+      <summary>Advanced</summary>
+      <label>
+        Backend URL
+        <input id="backend-url" type="url" placeholder="https://your-backend.example.com" />
+      </label>
+      <label>
+        Access token
+        <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" />
+      </label>
+      <button id="test-connection" class="ghost-button" type="button">Test connection</button>
+    </details>
+
     <button id="save" type="button">Save</button>
     <p class="status" id="status" aria-live="polite"></p>
     <p class="hint">On X, the ✦ AI Reply button only generates drafts using these settings. Posting always stays manual.</p>
     <button id="clear-history" class="button-secondary" type="button">Clear history</button>
+    <div class="footer-links">
+      <a href="https://github.com/itsjawreal/extcom-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository" title="GitHub repository">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+      </a>
+      <a href="https://x.com/itsjaw_real" target="_blank" rel="noopener noreferrer" aria-label="X profile" title="X profile">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      </a>
+    </div>
   </section>
 
   <script type="module" src="/src/popup/popup.ts"></script>

@@ -299,6 +299,10 @@
     background: rgb(0, 0, 0);
     border-color: rgb(47, 51, 54);
     color: rgb(231, 233, 234);
+    /* Without this, the native <select> dropdown list (e.g. Tone) renders
+       with the browser's default light popup background while still
+       inheriting our light text color — white-on-white and unreadable. */
+    color-scheme: dark;
   }
 
   .eks-tone-label select,
@@ -309,5 +313,12 @@
   .eks-reply-option,
   .eks-context-details dl {
     border-color: rgb(47, 51, 54);
+  }
+
+  /* Belt-and-suspenders: some Chrome versions render a <select>'s native
+     dropdown popup based on color-scheme set on the element itself, not
+     just inherited from an ancestor. */
+  .eks-tone-label select {
+    color-scheme: dark;
   }
 }

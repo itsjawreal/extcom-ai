@@ -6,9 +6,11 @@
   "scripts": {
     "build": "vite build && vite build --mode popup",
     "dev": "vite build --watch",
+    "icons": "node scripts/generate-icons.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/chrome": "^0.0.327",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
