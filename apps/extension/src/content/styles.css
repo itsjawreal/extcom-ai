@@ -6,6 +6,40 @@
   font: 14px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+/* Custom tooltip (replaces the native title="" tooltip everywhere so icon
+   buttons still explain themselves on hover/focus, styled to match the
+   panel instead of the browser's plain OS tooltip). Usage:
+   <button data-tooltip="Label text">. */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  background: rgb(30, 33, 38);
+  border: 1px solid rgb(56, 61, 67);
+  border-radius: 6px;
+  bottom: calc(100% + 6px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  color: rgb(231, 233, 234);
+  content: attr(data-tooltip);
+  font: 500 11px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  left: 50%;
+  opacity: 0;
+  padding: 4px 8px;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%) translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .eks-ai-reply-button {
   align-items: center;
   background: transparent;
@@ -210,26 +244,36 @@
 }
 
 .eks-context-actions {
-  align-items: flex-start;
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: 4px 10px;
 }
 
 .eks-context-jump {
+  align-items: center;
   background: transparent;
   border: 0;
+  border-radius: 6px;
   color: rgb(29, 155, 240);
   cursor: pointer;
+  display: inline-flex;
   flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 0;
-  white-space: nowrap;
+  padding: 4px;
+}
+
+.eks-context-jump svg {
+  fill: none;
+  height: 14px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 14px;
 }
 
 .eks-context-jump:hover {
-  text-decoration: underline;
+  background: rgba(29, 155, 240, 0.12);
 }
 
 /* When collapsed this sits on the same line as the jump button (both fit
@@ -514,6 +558,29 @@
 .eks-reply-actions button:last-child {
   background: rgb(29, 155, 240);
   color: white;
+}
+
+/* Copy/Regenerate are icon-only (a symbol is unambiguous here and a
+   custom tooltip backs it up) so they get a compact square shape instead
+   of the Quote/Insert pill sizing meant for text labels. */
+.eks-reply-actions .eks-icon-action {
+  align-items: center;
+  display: inline-flex;
+  font-size: 15px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+}
+
+.eks-reply-actions .eks-icon-action svg {
+  fill: none;
+  height: 14px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 14px;
 }
 
 .eks-reply-option-loading {

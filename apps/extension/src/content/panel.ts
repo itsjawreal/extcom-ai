@@ -232,7 +232,10 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
 
     const copyButton = document.createElement("button");
     copyButton.type = "button";
-    copyButton.textContent = "Copy";
+    copyButton.className = "eks-icon-action";
+    copyButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>';
+    copyButton.setAttribute("aria-label", "Copy this draft");
+    copyButton.setAttribute("data-tooltip", "Copy");
     copyButton.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(reply.text);
@@ -244,9 +247,10 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
 
     const regenerateButton = document.createElement("button");
     regenerateButton.type = "button";
+    regenerateButton.className = "eks-icon-action";
     regenerateButton.textContent = "↻";
     regenerateButton.setAttribute("aria-label", "Regenerate this draft");
-    regenerateButton.title = "Regenerate this draft";
+    regenerateButton.setAttribute("data-tooltip", "Regenerate");
     regenerateButton.addEventListener("click", () => {
       if (context) void regenerateSlot(panel, index, items, context);
     });
@@ -255,7 +259,7 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
     quoteButton.type = "button";
     quoteButton.textContent = "Quote";
     quoteButton.setAttribute("aria-label", "Insert this draft into a Quote Tweet");
-    quoteButton.title = "Insert into Quote Tweet";
+    quoteButton.setAttribute("data-tooltip", "Insert into Quote Tweet");
     quoteButton.addEventListener("click", () => void performInsert(panel, "quote", reply, historyId));
 
     const insertButton = document.createElement("button");
@@ -396,7 +400,9 @@ function renderContext(panel: HTMLElement, input: PanelInput): void {
   const jumpButton = document.createElement("button");
   jumpButton.type = "button";
   jumpButton.className = "eks-context-jump";
-  jumpButton.textContent = "↗ Jump to post";
+  jumpButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg>';
+  jumpButton.setAttribute("aria-label", "Jump to post");
+  jumpButton.setAttribute("data-tooltip", "Jump to post");
   jumpButton.addEventListener("click", jumpToActivePost);
 
   const details = document.createElement("details");
@@ -728,7 +734,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   panel.innerHTML = `
     <header>
       <strong>AI Reply</strong>
-      <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close">×</button>
+      <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close" data-tooltip="Close">×</button>
     </header>
     <div class="eks-panel-body">
     <div data-context></div>
