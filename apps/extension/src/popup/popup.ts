@@ -28,7 +28,7 @@ const toneSelect = document.getElementById("tone-default") as HTMLSelectElement;
 const instructionInput = document.getElementById("default-instruction") as HTMLTextAreaElement;
 const maxLengthInput = document.getElementById("max-length") as HTMLInputElement;
 const maxLengthValue = document.getElementById("max-length-value") as HTMLElement;
-const maxLengthSuffix = document.getElementById("max-length-suffix") as HTMLElement;
+const maxLengthManualRow = document.getElementById("max-length-manual-row") as HTMLElement;
 const maxLengthModeGroup = document.getElementById("max-length-mode") as HTMLElement;
 const maxLengthModeButtons = Array.from(maxLengthModeGroup.querySelectorAll<HTMLButtonElement>("button"));
 const draftCountGroup = document.getElementById("draft-count") as HTMLElement;
@@ -89,8 +89,9 @@ function setMaxLengthMode(mode: "auto" | "manual"): void {
     button.setAttribute("aria-pressed", String(button.dataset.lengthMode === mode));
   }
   maxLengthInput.disabled = mode === "auto";
-  maxLengthValue.textContent = mode === "auto" ? "Auto" : maxLengthInput.value;
-  maxLengthSuffix.textContent = mode === "auto" ? "" : " characters";
+  // Auto has no numeric target to show — hide the slider/value row entirely
+  // instead of leaving a disabled, dead control taking up space.
+  maxLengthManualRow.hidden = mode === "auto";
 }
 
 draftCountGroup.addEventListener("click", (event) => {

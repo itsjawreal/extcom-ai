@@ -235,6 +235,10 @@
   font-weight: 400;
 }
 
+.eks-max-length-value-row {
+  margin: 0 0 4px;
+}
+
 /* Custom range slider — override the generic .eks-tone-label input box
    styling above and reset the native track/thumb, which otherwise renders
    as a plain default OS slider. */

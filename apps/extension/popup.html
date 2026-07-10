@@ -329,6 +329,14 @@
       font-weight: 400;
       color: var(--muted);
     }
+    .field-block {
+      display: block;
+      margin-bottom: 11px;
+      font-weight: 650;
+    }
+    #max-length-caption {
+      margin: 0 0 4px;
+    }
 
     /* Custom range slider — the native control looks cheap/default otherwise */
     input[type="range"] {
@@ -397,6 +405,16 @@
       background: var(--accent-soft);
       border-color: var(--accent);
       color: var(--text);
+    }
+    .segmented-inline {
+      flex: none;
+      margin-top: 0;
+    }
+    .segmented-inline button {
+      flex: none;
+      height: 26px;
+      padding: 0 10px;
+      font-size: 11.5px;
     }
 
     .button-ghost {
@@ -507,17 +525,19 @@
         Standing instruction (optional)
         <textarea id="default-instruction" rows="3" placeholder="e.g. never use hashtags"></textarea>
       </label>
-      <label>
+      <div class="field-block">
         <span class="field-row">
           <span>Default reply length</span>
-          <span class="field-row-value"><span id="max-length-value">220</span><span id="max-length-suffix"> characters</span></span>
+          <div class="segmented segmented-inline" id="max-length-mode" role="group" aria-label="Reply length mode">
+            <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
+            <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
+          </div>
         </span>
-        <input id="max-length" type="range" min="50" max="280" step="10" value="220" />
-        <div class="segmented" id="max-length-mode" role="group" aria-label="Reply length mode">
-          <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
-          <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
+        <div id="max-length-manual-row">
+          <p class="field-row-value" id="max-length-caption"><span id="max-length-value">220</span> characters</p>
+          <input id="max-length" type="range" min="50" max="280" step="10" value="220" />
         </div>
-      </label>
+      </div>
       <label>
         Draft options per generation
         <div class="segmented" id="draft-count" role="group" aria-label="Draft options per generation">

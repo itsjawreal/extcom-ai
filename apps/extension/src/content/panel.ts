@@ -442,14 +442,14 @@ function readReadImages(panel: HTMLElement): boolean | undefined {
 
 function setLengthMode(panel: HTMLElement, mode: "auto" | "manual"): void {
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
-  const display = panel.querySelector<HTMLElement>("[data-max-length-value]");
-  const suffix = panel.querySelector<HTMLElement>("[data-max-length-suffix]");
+  const manualRow = panel.querySelector<HTMLElement>("[data-max-length-manual-row]");
   panel.querySelectorAll<HTMLButtonElement>("[data-length-mode-group] button[data-length-mode]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.lengthMode === mode));
   });
   if (input) input.disabled = mode === "auto";
-  if (display) display.textContent = mode === "auto" ? "Auto" : (input?.value ?? "220");
-  if (suffix) suffix.textContent = mode === "auto" ? "" : " chars";
+  // Auto has no numeric target to show — hide the slider/value row entirely
+  // instead of leaving a disabled, dead control taking up space.
+  if (manualRow) manualRow.hidden = mode === "auto";
 }
 
 function readMaxLength(panel: HTMLElement): number | "auto" | undefined {
@@ -582,17 +582,19 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
           <span class="eks-select-caret" aria-hidden="true">▾</span>
         </button>
       </div>
-      <label class="eks-tone-label">
+      <div class="eks-tone-label">
         <span class="eks-field-row">
           <span>Max length</span>
-          <span class="eks-field-row-value"><span data-max-length-value>220</span><span data-max-length-suffix> chars</span></span>
+          <div class="eks-count-group" data-length-mode-group role="group" aria-label="Reply length mode">
+            <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
+            <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
+          </div>
         </span>
-        <input type="range" data-max-length-input min="50" max="280" step="10" value="220" />
-        <div class="eks-count-group" data-length-mode-group role="group" aria-label="Reply length mode">
-          <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
-          <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
+        <div data-max-length-manual-row>
+          <p class="eks-field-row-value eks-max-length-value-row"><span data-max-length-value>220</span> chars</p>
+          <input type="range" data-max-length-input min="50" max="280" step="10" value="220" />
         </div>
-      </label>
+      </div>
       <div class="eks-panel-config">
         <div class="eks-count-label">
           Drafts
