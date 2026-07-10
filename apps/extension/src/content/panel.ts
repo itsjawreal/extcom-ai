@@ -163,11 +163,31 @@ function toPanelReplies(replies: GeneratedReply[], historyId?: string): PanelRep
   return replies.map((reply) => ({ reply, historyId }));
 }
 
+// Marks a draft card as used instead of disabling it — the same draft can
+// still be inserted as a reply AND quoted elsewhere, so the badge just
+// tracks which actions have been taken, it never blocks further ones.
+function markDraftUsed(card: HTMLElement, kind: "reply" | "quote"): void {
+  const used = new Set((card.dataset.usedKinds || "").split(",").filter(Boolean));
+  used.add(kind);
+  card.dataset.usedKinds = [...used].join(",");
+  card.classList.add("eks-reply-option-used");
+
+  let badge = card.querySelector<HTMLElement>(".eks-reply-used-badge");
+  if (!badge) {
+    badge = document.createElement("span");
+    badge.className = "eks-reply-used-badge";
+    card.querySelector(".eks-reply-char-count")?.insertAdjacentElement("afterend", badge);
+  }
+  const labels = [...used].map((usedKind) => (usedKind === "reply" ? "Inserted" : "Quoted"));
+  badge.textContent = `✓ ${labels.join(" · ")}`;
+}
+
 async function performInsert(
   panel: HTMLElement,
   kind: "reply" | "quote",
   reply: GeneratedReply,
-  historyId?: string,
+  historyId: string | undefined,
+  card: HTMLElement,
 ): Promise<void> {
   if (!activePost) return;
 
@@ -185,7 +205,12 @@ async function performInsert(
       // Fire-and-forget: don't make Insert feel slow waiting on this.
       void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId, kind });
     }
-    closePanel();
+    // Deliberately doesn't close the panel — the other drafts are still
+    // useful (e.g. insert this one as a reply, then quote a different one)
+    // and the panel is already guarded against accidental outside-click/
+    // Escape close while drafts are showing, so nothing gets lost.
+    markDraftUsed(card, kind);
+    showStatus(panel, kind === "reply" ? "Inserted into the reply box." : "Inserted into the Quote Tweet.");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Composer insertion failed.";
 
@@ -266,12 +291,12 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
     quoteButton.textContent = "Quote";
     quoteButton.setAttribute("aria-label", "Insert this draft into a Quote Tweet");
     quoteButton.setAttribute("data-tooltip", "Insert into Quote Tweet");
-    quoteButton.addEventListener("click", () => void performInsert(panel, "quote", reply, historyId));
+    quoteButton.addEventListener("click", () => void performInsert(panel, "quote", reply, historyId, item));
 
     const insertButton = document.createElement("button");
     insertButton.type = "button";
     insertButton.textContent = "Insert";
-    insertButton.addEventListener("click", () => void performInsert(panel, "reply", reply, historyId));
+    insertButton.addEventListener("click", () => void performInsert(panel, "reply", reply, historyId, item));
 
     actions.append(copyButton, regenerateButton, quoteButton, insertButton);
     item.append(text, charCount, actions);
