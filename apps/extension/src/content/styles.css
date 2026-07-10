@@ -29,6 +29,8 @@
 /* Docked to a fixed corner instead of following the post you clicked —
    stays in place while you scroll the timeline, like X's own Grok panel.
    Raised above X's bottom-right Grok bubble rather than sitting on top of it. */
+/* height auto-fits content up to max-height (animated by JS via
+   animatePanelHeight — see panel.ts), then the body scrolls internally. */
 .eks-reply-panel {
   background: rgb(0, 0, 0);
   border: 1px solid rgb(47, 51, 54);
@@ -38,21 +40,35 @@
   box-sizing: border-box;
   color: rgb(231, 233, 234);
   color-scheme: dark;
+  display: flex;
+  flex-direction: column;
   max-height: min(729px, calc(100vh - 112px));
-  overflow-y: auto;
-  padding: 16px;
+  overflow: hidden;
   position: fixed;
   right: 16px;
+  transition: max-height 0.28s ease;
   width: min(401px, calc(100vw - 24px));
   z-index: 2147483647;
 }
 
+/* Fixed at the top of the panel — stays put while .eks-panel-body scrolls
+   underneath it, instead of scrolling away with the rest of the content. */
 .eks-reply-panel header {
   align-items: center;
+  background: rgb(0, 0, 0);
+  border-bottom: 1px solid rgb(47, 51, 54);
   display: flex;
+  flex: none;
   font: 700 18px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   justify-content: space-between;
-  margin-bottom: 14px;
+  padding: 16px 16px 14px;
+}
+
+.eks-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 16px;
 }
 
 .eks-reply-panel .eks-panel-close {

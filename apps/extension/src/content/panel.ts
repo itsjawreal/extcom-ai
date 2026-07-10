@@ -46,6 +46,53 @@ async function sendRuntimeMessage<T>(message: unknown): Promise<T> {
   return response as T;
 }
 
+// Same cap as .eks-reply-panel's CSS max-height (min(729px, 100vh - 112px))
+// — kept in sync manually since the CSS value isn't readable from here in a
+// way worth the complexity of parsing it back out.
+function panelMaxHeightCapPx(): number {
+  return Math.min(729, window.innerHeight - 112);
+}
+
+// Animates the panel growing/shrinking to fit its new content instead of
+// snapping instantly, by pinning max-height to the measured before/after
+// pixel values around the mutation (CSS can't transition to/from "auto").
+// Operates on .eks-panel-body's own scrollHeight (not the outer panel's)
+// since the body is the actual scroll container — measuring the outer
+// panel would be affected by its own overflow:hidden clipping the body's
+// current (pre-mutation) rendered height instead of its full content size.
+function animatePanelHeight(panel: HTMLElement, mutate: () => void): void {
+  const header = panel.querySelector<HTMLElement>("header");
+  const body = panel.querySelector<HTMLElement>(".eks-panel-body");
+  if (!header || !body) {
+    mutate();
+    return;
+  }
+
+  const startHeight = panel.getBoundingClientRect().height;
+  panel.style.maxHeight = `${startHeight}px`;
+
+  mutate();
+
+  const targetHeight = Math.min(
+    header.getBoundingClientRect().height + body.scrollHeight,
+    panelMaxHeightCapPx(),
+  );
+
+  // Force a reflow so the browser registers startHeight as the current
+  // value before we set the new one — otherwise both writes land in the
+  // same frame and there's nothing for the CSS transition to animate from.
+  void panel.offsetHeight;
+  panel.style.maxHeight = `${targetHeight}px`;
+
+  panel.addEventListener("transitionend", function onEnd(event) {
+    if (event.propertyName !== "max-height" || event.target !== panel) return;
+    panel.removeEventListener("transitionend", onEnd);
+    // Hand control back to the CSS rule so it keeps responding to viewport
+    // resizes instead of staying pinned to this one stale pixel value.
+    panel.style.maxHeight = "";
+  });
+}
+
 function showStatus(panel: HTMLElement, message: string): void {
   const status = panel.querySelector<HTMLElement>("[data-panel-status]");
   if (!status) return;
@@ -254,7 +301,7 @@ async function regenerateSlot(
     // each card tracks its own historyId rather than sharing one for the list.
     const updated = items.slice();
     updated[index] = { reply: newReply, historyId: response.historyId };
-    renderReplies(panel, updated, context);
+    animatePanelHeight(panel, () => renderReplies(panel, updated, context));
     renderUsage(panel, response.data.usage, tone === "auto" ? newReply.tone : undefined);
     showStatus(panel, "Draft regenerated.");
   } catch (error) {
@@ -356,6 +403,15 @@ function renderContext(panel: HTMLElement, input: PanelInput): void {
   details.className = "eks-context-details";
   const detailsSummary = document.createElement("summary");
   detailsSummary.textContent = "More details";
+  // Manual toggle (see the extra-instruction details in openPanel for why)
+  // so the height animation measures a clean before/after instead of
+  // racing the browser's own default <details> toggle timing.
+  detailsSummary.addEventListener("click", (event) => {
+    event.preventDefault();
+    animatePanelHeight(panel, () => {
+      details.open = !details.open;
+    });
+  });
 
   const fields: Array<[string, string | undefined]> = [
     ["Post", context.postText],
@@ -629,7 +685,7 @@ async function generateRepliesForPanel(
   context: ExtractedPostContext,
 ): Promise<void> {
   setPanelLoading(panel, true);
-  renderSkeleton(panel, readDraftCount(panel) ?? 3);
+  animatePanelHeight(panel, () => renderSkeleton(panel, readDraftCount(panel) ?? 3));
   try {
     // Tone, draft count, emoji preference, reply length, whether to read an
     // attached image, and a one-off extra instruction can all be overridden
@@ -647,11 +703,11 @@ async function generateRepliesForPanel(
       type: "GENERATE_REPLY",
       input: { ...context, tone, count, useEmoji, maxLength, readImages, extraInstruction },
     });
-    renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context);
+    animatePanelHeight(panel, () => renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context));
     renderUsage(panel, response.data.usage, tone === "auto" ? response.data.replies[0]?.tone : undefined);
     showStatus(panel, "Replies generated.");
   } catch (error) {
-    renderReplies(panel, [], context);
+    animatePanelHeight(panel, () => renderReplies(panel, [], context));
     showStatus(panel, error instanceof Error ? error.message : "Reply generation failed.");
   } finally {
     setPanelLoading(panel, false);
@@ -674,6 +730,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       <strong>AI Reply</strong>
       <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close">×</button>
     </header>
+    <div class="eks-panel-body">
     <div data-context></div>
     <div data-reply-controls>
       <div class="eks-settings-card">
@@ -736,6 +793,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       <p class="eks-panel-note">Reply posting stays manual. Extension never clicks X/Twitter's final publish button.</p>
     </div>
     <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
+    </div>
   `;
 
   renderContext(panel, input);
@@ -773,7 +831,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-length-mode]");
     if (!button) return;
     panel.dataset.controlsTouched = "true";
-    setLengthMode(panel, button.dataset.lengthMode === "auto" ? "auto" : "manual");
+    animatePanelHeight(panel, () => setLengthMode(panel, button.dataset.lengthMode === "auto" ? "auto" : "manual"));
   });
 
   panel.querySelector("[data-count-group]")?.addEventListener("click", (event) => {
@@ -801,6 +859,18 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     if (!button) return;
     panel.dataset.controlsTouched = "true";
     setReadImagesGroup(panel, button.dataset.images === "on");
+  });
+
+  // Take manual control of the disclosure toggle instead of letting the
+  // browser's default <details> behavior race the height measurement —
+  // preventDefault, then flip .open ourselves inside the same mutation the
+  // animation measures around.
+  const extraDetails = panel.querySelector<HTMLDetailsElement>(".eks-extra-details");
+  extraDetails?.querySelector("summary")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    animatePanelHeight(panel, () => {
+      extraDetails.open = !extraDetails.open;
+    });
   });
 
   void initPanelSettings(panel);
