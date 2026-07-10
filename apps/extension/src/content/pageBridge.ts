@@ -1,6 +1,6 @@
-const BRIDGE_SCRIPT_ID = "ekskomen-page-insert-bridge";
-const REQUEST_EVENT = "ekskomen:page-insert-request";
-const RESPONSE_EVENT = "ekskomen:page-insert-response";
+const BRIDGE_SCRIPT_ID = "extcom-ai-page-insert-bridge";
+const REQUEST_EVENT = "extcom-ai:page-insert-request";
+const RESPONSE_EVENT = "extcom-ai:page-insert-response";
 const TARGET_ATTRIBUTE = "data-eks-page-target";
 
 type InsertResponse = {

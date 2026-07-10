@@ -5,11 +5,11 @@
 // "Identifier has already been declared" on the second execution before any
 // check runs. Keep every declaration inside this guarded block so a repeat
 // execution only re-evaluates the `if` (always legal) and does nothing else.
-if (!(window as typeof window & { __ekskomenPageInsertInstalled__?: boolean }).__ekskomenPageInsertInstalled__) {
-  (window as typeof window & { __ekskomenPageInsertInstalled__?: boolean }).__ekskomenPageInsertInstalled__ = true;
+if (!(window as typeof window & { __extcomAiPageInsertInstalled__?: boolean }).__extcomAiPageInsertInstalled__) {
+  (window as typeof window & { __extcomAiPageInsertInstalled__?: boolean }).__extcomAiPageInsertInstalled__ = true;
 
-  const REQUEST_EVENT = "ekskomen:page-insert-request";
-  const RESPONSE_EVENT = "ekskomen:page-insert-response";
+  const REQUEST_EVENT = "extcom-ai:page-insert-request";
+  const RESPONSE_EVENT = "extcom-ai:page-insert-response";
 
   type InsertRequest = {
     id: string;
