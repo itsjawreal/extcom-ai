@@ -99,8 +99,10 @@ tokens, usage counters) is lost on every redeploy or restart.
 | `APP_URL` | no | Sent to OpenRouter as `HTTP-Referer`. |
 | `PORT` | no | Default `3000`. |
 
-The backend exposes `GET /health`, `POST /v1/generate-reply` (bearer token),
-and `POST|GET /v1/admin/tokens` (admin secret, optional).
+The backend exposes `GET /health`, `GET /v1/me` (bearer token, checks
+connection/plan/remaining quota without consuming it), `POST
+/v1/generate-reply` (bearer token), and `POST|GET /v1/admin/tokens` (admin
+secret, optional).
 
 ## 2. Build & install the extension
 
@@ -117,24 +119,31 @@ Then in Chrome (or any Chromium browser):
 ## 3. Connect them
 
 1. Click the **Extcom AI Reply** icon in the toolbar. The popup opens to a
-   Stats view (connection status, total generations, recent history) — click
-   the gear (⚙) for Settings.
+   Stats view — connection status, total generations, and recent history
+   with a ↗ link back to each inserted post. Click the gear (⚙) for
+   Settings, which also has a **Clear history** button.
 2. In Settings → **Default** tab: enter your default tone (24 available,
-   from `degen` to `roast` to `philosophical` — see `docs/API.md` for the
-   full list), standing instruction, default reply length, draft count, and
-   whether to use emoji by default. See `docs/PROMPT.md` for exactly what's
-   sent to the AI on every generation — none of it is configurable from the
-   extension.
+   from `degen` to `roast` to `philosophical`, plus **Auto** which lets the
+   AI pick whichever tone best fits each post — see `docs/API.md` for the
+   full list), standing instruction, default reply length (a fixed
+   character count, or **Auto** to let the AI pick a natural length capped
+   at 280 chars), draft count, and whether to use emoji by default. See
+   `docs/PROMPT.md` for exactly what's sent to the AI on every generation —
+   none of it is configurable from the extension.
 3. In Settings → **Advanced** tab: enter your backend URL (e.g.
    `https://extcom.example.com`) and the access token you put in
    `AUTH_TOKENS`, then **Save**. Chrome will ask to allow access to your
    backend's domain — accept it.
 4. Open [x.com](https://x.com), find a post, click **✦ AI Reply**. Tone,
-   draft count, reply length, and emoji can all be overridden per-generation
-   right in the on-page panel — it just falls back to your popup defaults
-   when left untouched. Generate, then either **Insert** (fills the reply
-   composer) or **Quote** (opens Repost → Quote and fills that comment box
-   instead). Edit the draft if you like, then press Post yourself.
+   draft count, reply length, emoji, and a one-off instruction just for this
+   reply (added on top of your standing instruction, not a replacement) can
+   all be overridden per-generation right in the on-page panel — it just
+   falls back to your popup defaults when left untouched. If tone is Auto,
+   the panel shows which tone the AI actually picked next to the usage line.
+   Each draft has **Copy**, **↻** (regenerate just that draft), **Quote**
+   (opens Repost → Quote and fills that comment box), and **Insert** (fills
+   the reply composer). Edit the draft if you like, then press Post
+   yourself.
 
 ### Optional: let it read images in posts
 
