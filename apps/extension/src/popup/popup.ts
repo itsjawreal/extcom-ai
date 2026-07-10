@@ -46,7 +46,6 @@ const useEmojiGroup = document.getElementById("use-emoji") as HTMLElement;
 const useEmojiButtons = Array.from(useEmojiGroup.querySelectorAll<HTMLButtonElement>("button"));
 const readImagesGroup = document.getElementById("read-images") as HTMLElement;
 const readImagesButtons = Array.from(readImagesGroup.querySelectorAll<HTMLButtonElement>("button"));
-const saveToneButton = document.getElementById("save-tone") as HTMLButtonElement;
 const saveAdvancedButton = document.getElementById("save-advanced") as HTMLButtonElement;
 const statusToneNode = document.getElementById("status-tone") as HTMLParagraphElement;
 const statusAdvancedNode = document.getElementById("status-advanced") as HTMLParagraphElement;
@@ -127,29 +126,40 @@ draftCountGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-count]");
   if (!button) return;
   setDraftCount(Number(button.dataset.count));
+  saveToneSettings();
 });
 
 useEmojiGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-emoji]");
   if (!button) return;
   setUseEmoji(button.dataset.emoji === "on");
+  saveToneSettings();
 });
 
 readImagesGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-images]");
   if (!button) return;
   setReadImages(button.dataset.images === "on");
+  saveToneSettings();
 });
 
 maxLengthModeGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-length-mode]");
   if (!button) return;
   setMaxLengthMode(button.dataset.lengthMode === "auto" ? "auto" : "manual");
+  saveToneSettings();
 });
 
 maxLengthInput.addEventListener("input", () => {
   maxLengthValue.textContent = maxLengthInput.value;
 });
+
+// "change" (fires once on release), not "input" (fires continuously while
+// dragging) — avoids saving on every tick of the drag.
+maxLengthInput.addEventListener("change", saveToneSettings);
+
+toneSelect.addEventListener("change", saveToneSettings);
+instructionInput.addEventListener("input", saveToneSettingsDebounced);
 
 historyTabs.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-history-filter]");
@@ -248,9 +258,15 @@ async function requestBackendPermission(backendBaseUrl: string): Promise<void> {
   }
 }
 
-async function saveSettings(statusNode: HTMLElement): Promise<void> {
-  saveToneButton.disabled = true;
-  saveAdvancedButton.disabled = true;
+async function saveSettings(
+  statusNode: HTMLElement,
+  triggerButton?: HTMLButtonElement,
+  // Tone/Default fields never touch backendBaseUrl/authToken, so
+  // auto-save from that view skips the permission request and connection
+  // re-check — they're only meaningful after an Advanced save.
+  { checkConnectionAfter = true }: { checkConnectionAfter?: boolean } = {},
+): Promise<void> {
+  if (triggerButton) triggerButton.disabled = true;
   try {
     const settings: ExtensionSettings = {
       backendBaseUrl: backendUrlInput.value.trim(),
@@ -271,17 +287,26 @@ async function saveSettings(statusNode: HTMLElement): Promise<void> {
       type: "SAVE_SETTINGS",
       settings,
     }) as RuntimeResponse;
-    if (settings.backendBaseUrl) {
+    if (checkConnectionAfter && settings.backendBaseUrl) {
       await requestBackendPermission(settings.backendBaseUrl);
     }
     showStatus(statusNode, response.ok ? "Settings saved." : response.error || "Save failed.");
-    if (response.ok) void checkConnection();
+    if (response.ok && checkConnectionAfter) void checkConnection();
   } catch (error) {
     showStatus(statusNode, error instanceof Error ? error.message : "Save failed.");
   } finally {
-    saveToneButton.disabled = false;
-    saveAdvancedButton.disabled = false;
+    if (triggerButton) triggerButton.disabled = false;
   }
+}
+
+function saveToneSettings(): void {
+  void saveSettings(statusToneNode, undefined, { checkConnectionAfter: false });
+}
+
+let instructionSaveTimer: number | undefined;
+function saveToneSettingsDebounced(): void {
+  window.clearTimeout(instructionSaveTimer);
+  instructionSaveTimer = window.setTimeout(saveToneSettings, 600);
 }
 
 function truncate(text: string, max: number): string {
@@ -387,8 +412,7 @@ async function clearHistory(): Promise<void> {
 }
 
 clearHistoryButton.addEventListener("click", () => void clearHistory());
-saveToneButton.addEventListener("click", () => void saveSettings(statusToneNode));
-saveAdvancedButton.addEventListener("click", () => void saveSettings(statusAdvancedNode));
+saveAdvancedButton.addEventListener("click", () => void saveSettings(statusAdvancedNode, saveAdvancedButton));
 testButton.addEventListener("click", () => void checkConnection());
 
 async function initializePopup(): Promise<void> {

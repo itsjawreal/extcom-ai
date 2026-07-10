@@ -451,18 +451,13 @@
       padding: 0 2px;
     }
 
+    /* Scrollable regions stay scrollable (wheel/trackpad/keyboard) but never
+       show a visible track/thumb. */
+    * {
+      scrollbar-width: none;
+    }
     ::-webkit-scrollbar {
-      width: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #2d2738;
-      border-radius: 999px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #3d3549;
+      display: none;
     }
 
     /* Bottom nav — fixed pill bar, Phantom-style */
@@ -615,7 +610,6 @@
       </div>
     </label>
     <p class="hint field-hint">When on, an attached image is sent along with the post text — uses more tokens and takes a bit longer per generate.</p>
-    <button id="save-tone" class="save-button" type="button">Save</button>
     <p class="status" id="status-tone" aria-live="polite"></p>
   </section>
 
