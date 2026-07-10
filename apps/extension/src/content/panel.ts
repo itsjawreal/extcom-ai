@@ -377,6 +377,11 @@ function renderContext(panel: HTMLElement, input: PanelInput): void {
     container.className = "eks-context eks-context-error";
     container.textContent = input.error;
     panel.querySelector<HTMLElement>("[data-reply-controls]")?.setAttribute("hidden", "");
+    // The Generate button now floats outside [data-reply-controls] (see
+    // .eks-generate-fab), so it needs to be hidden here too — otherwise
+    // it's still visible (though inert, since openPanel only wires its
+    // click handler when there's no error) when context extraction failed.
+    panel.querySelector<HTMLElement>(".eks-generate-fab")?.setAttribute("hidden", "");
     return;
   }
 
@@ -734,7 +739,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   panel.innerHTML = `
     <header>
       <strong>AI Reply</strong>
-      <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close" data-tooltip="Close">×</button>
+      <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close">×</button>
     </header>
     <div class="eks-panel-body">
     <div data-context></div>
@@ -792,7 +797,6 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
         </details>
       </div>
       <div class="eks-panel-toolbar">
-        <button type="button" data-generate-button>Generate</button>
         <span class="eks-panel-usage" data-usage></span>
       </div>
       <div data-reply-list></div>
@@ -800,6 +804,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     </div>
     <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
     </div>
+    <button type="button" class="eks-generate-fab" data-generate-button>Generate</button>
   `;
 
   renderContext(panel, input);
