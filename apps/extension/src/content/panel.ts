@@ -153,7 +153,7 @@ async function performInsert(
     }
     if (historyId) {
       // Fire-and-forget: don't make Insert feel slow waiting on this.
-      void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId });
+      void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId, kind });
     }
     closePanel();
   } catch (error) {

@@ -7,21 +7,21 @@
     :root {
       color-scheme: dark;
 
-      --bg: #070a11;
-      --panel: #0f1726;
-      --panel-2: #111c2e;
-      --panel-3: #142033;
-      --border: #243149;
-      --border-soft: #1b263a;
+      --bg: #0a0a0f;
+      --panel: #121018;
+      --panel-2: #17141f;
+      --panel-3: #1c1826;
+      --border: #2a2435;
+      --border-soft: #201c2a;
 
       --text: #f8fafc;
       --text-soft: #cbd5e1;
-      --muted: #8ea0ba;
-      --muted-2: #60708a;
+      --muted: #948fa3;
+      --muted-2: #6b6578;
 
-      --accent: #1e5fcc;
-      --accent-hover: #1b55b8;
-      --accent-soft: #102b55;
+      --accent: #ab9ff2;
+      --accent-hover: #9a8ae0;
+      --accent-soft: #2a2340;
 
       --success: #22c55e;
       --danger: #ef4444;
@@ -35,7 +35,7 @@
       width: 380px;
       min-height: 580px;
       margin: 0;
-      padding: 16px 18px;
+      padding: 16px 18px 84px;
       background: var(--bg);
       color: var(--text);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -54,7 +54,6 @@
       height: 34px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
       margin-bottom: 14px;
     }
     .brand {
@@ -81,30 +80,11 @@
       height: 13px;
       fill: currentColor;
     }
-    .icon-button {
-      width: 34px;
-      height: 34px;
-      padding: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      font-size: 14px;
-      font-weight: 400;
-      background: var(--panel);
-      border: 1px solid var(--border-soft);
-      border-radius: var(--radius-sm);
-      color: var(--muted);
-    }
-    .icon-button:hover {
-      background: var(--panel-2);
-      color: var(--text);
-    }
-    .settings-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 14px;
+    .view-title {
+      margin: 0 0 14px;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
     }
 
     /* Cards */
@@ -184,7 +164,7 @@
       letter-spacing: 0.4px;
     }
     .history-list {
-      max-height: 280px;
+      max-height: 400px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -291,7 +271,7 @@
       border: none;
       border-radius: var(--radius-md);
       background: var(--accent);
-      color: #fff;
+      color: #16121f;
       cursor: pointer;
     }
     button:hover { background: var(--accent-hover); }
@@ -299,7 +279,7 @@
       opacity: 0.6;
       cursor: default;
     }
-    #save {
+    .save-button {
       height: 44px;
       margin-top: 4px;
     }
@@ -348,7 +328,7 @@
       margin-top: 10px;
       border: none;
       border-radius: 999px;
-      background: #263247;
+      background: #241f30;
     }
     input[type="range"]::-webkit-slider-runnable-track {
       height: 5px;
@@ -369,7 +349,7 @@
     input[type="range"]::-moz-range-track {
       height: 5px;
       border-radius: 999px;
-      background: #263247;
+      background: #241f30;
       border: none;
     }
     input[type="range"]::-moz-range-thumb {
@@ -436,7 +416,7 @@
     .tab {
       flex: 1;
       height: 36px;
-      padding: 0;
+      padding: 0 4px;
       font-size: 13px;
       font-weight: 600;
       border-radius: var(--radius-sm);
@@ -452,8 +432,9 @@
       border-color: var(--accent);
       color: var(--text);
     }
-    #tab-panel-advanced .button-ghost {
-      margin-top: 4px;
+    .tabs-compact .tab {
+      font-size: 11px;
+      padding: 0 2px;
     }
 
     ::-webkit-scrollbar {
@@ -463,11 +444,58 @@
       background: transparent;
     }
     ::-webkit-scrollbar-thumb {
-      background: #2a344a;
+      background: #2d2738;
       border-radius: 999px;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: #3a465f;
+      background: #3d3549;
+    }
+
+    /* Bottom nav — fixed pill bar, Phantom-style */
+    .bottom-nav {
+      position: fixed;
+      left: 18px;
+      right: 18px;
+      bottom: 16px;
+      display: flex;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+      padding: 6px;
+      gap: 4px;
+    }
+    .nav-button {
+      flex: 1;
+      width: auto;
+      height: 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .nav-button:hover {
+      background: var(--panel-3);
+      color: var(--text-soft);
+    }
+    .nav-button svg {
+      width: 19px;
+      height: 19px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .nav-button[aria-current="page"] {
+      background: var(--accent-soft);
+      color: var(--accent);
     }
   </style>
 </head>
@@ -482,10 +510,9 @@
       </span>
       <span>Extcom</span>
     </div>
-    <button id="open-settings" class="icon-button" type="button" aria-label="Settings">⚙</button>
   </header>
 
-  <section id="view-stats">
+  <section id="view-home" data-view-panel="home">
     <div class="status-card card" id="status-card" data-state="unknown">
       <p class="status-title"><span class="status-dot"></span><span id="connection-title">Checking…</span></p>
       <p class="status-detail" id="connection-detail"></p>
@@ -502,83 +529,83 @@
       </div>
     </div>
 
-    <p class="history-heading">Recent history</p>
+    <p class="hint">On X, the ✦ AI Reply button only generates drafts using your Tone/Default settings. Posting always stays manual.</p>
+  </section>
+
+  <section id="view-history" data-view-panel="history" hidden>
+    <h1 class="view-title">History</h1>
+    <div class="tabs tabs-compact" id="history-tabs" role="tablist">
+      <button type="button" class="tab" data-history-filter="all" role="tab" aria-selected="true">All</button>
+      <button type="button" class="tab" data-history-filter="reply" role="tab" aria-selected="false">Reply</button>
+      <button type="button" class="tab" data-history-filter="quote" role="tab" aria-selected="false">Quote</button>
+      <button type="button" class="tab" data-history-filter="not-inserted" role="tab" aria-selected="false">Not inserted</button>
+    </div>
     <div class="history-list" id="history-list"></div>
   </section>
 
-  <section id="view-settings" hidden>
-    <div class="settings-header">
-      <button id="back-to-stats" class="icon-button" type="button" aria-label="Back">←</button>
-      <h1>Settings</h1>
-    </div>
-
-    <div class="tabs" id="settings-tabs" role="tablist">
-      <button type="button" class="tab" data-tab="default" role="tab" aria-selected="true">Default</button>
-      <button type="button" class="tab" data-tab="advanced" role="tab" aria-selected="false">Advanced</button>
-    </div>
-
-    <div id="tab-panel-default" role="tabpanel">
-      <label>
-        Default tone
-        <select id="tone-default"></select>
-      </label>
-      <label>
-        Standing instruction (optional)
-        <textarea id="default-instruction" rows="3" placeholder="e.g. never use hashtags"></textarea>
-      </label>
-      <div class="field-block">
-        <span class="field-row">
-          <span>Default reply length</span>
-          <div class="segmented segmented-inline" id="max-length-mode" role="group" aria-label="Reply length mode">
-            <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
-            <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
-          </div>
-        </span>
-        <div id="max-length-manual-row">
-          <p class="field-row-value" id="max-length-caption"><span id="max-length-value">220</span> characters</p>
-          <input id="max-length" type="range" min="50" max="280" step="10" value="220" />
+  <section id="view-tone" data-view-panel="tone" hidden>
+    <h1 class="view-title">Tone / Default</h1>
+    <label>
+      Default tone
+      <select id="tone-default"></select>
+    </label>
+    <label>
+      Standing instruction (optional)
+      <textarea id="default-instruction" rows="3" placeholder="e.g. never use hashtags"></textarea>
+    </label>
+    <div class="field-block">
+      <span class="field-row">
+        <span>Default reply length</span>
+        <div class="segmented segmented-inline" id="max-length-mode" role="group" aria-label="Reply length mode">
+          <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
+          <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
         </div>
+      </span>
+      <div id="max-length-manual-row">
+        <p class="field-row-value" id="max-length-caption"><span id="max-length-value">220</span> characters</p>
+        <input id="max-length" type="range" min="50" max="280" step="10" value="220" />
       </div>
-      <label>
-        Draft options per generation
-        <div class="segmented" id="draft-count" role="group" aria-label="Draft options per generation">
-          <button type="button" data-count="1" aria-pressed="false">1</button>
-          <button type="button" data-count="2" aria-pressed="false">2</button>
-          <button type="button" data-count="3" aria-pressed="true">3</button>
-        </div>
-      </label>
-      <label>
-        Use emoji
-        <div class="segmented" id="use-emoji" role="group" aria-label="Use emoji">
-          <button type="button" data-emoji="off" aria-pressed="false">Off</button>
-          <button type="button" data-emoji="on" aria-pressed="true">On</button>
-        </div>
-      </label>
-      <label>
-        Read images in posts
-        <div class="segmented" id="read-images" role="group" aria-label="Read images in posts">
-          <button type="button" data-images="off" aria-pressed="true">Off</button>
-          <button type="button" data-images="on" aria-pressed="false">On</button>
-        </div>
-      </label>
-      <p class="hint field-hint">When on, an attached image is sent along with the post text — uses more tokens and takes a bit longer per generate.</p>
     </div>
+    <label>
+      Draft options per generation
+      <div class="segmented" id="draft-count" role="group" aria-label="Draft options per generation">
+        <button type="button" data-count="1" aria-pressed="false">1</button>
+        <button type="button" data-count="2" aria-pressed="false">2</button>
+        <button type="button" data-count="3" aria-pressed="true">3</button>
+      </div>
+    </label>
+    <label>
+      Use emoji
+      <div class="segmented" id="use-emoji" role="group" aria-label="Use emoji">
+        <button type="button" data-emoji="off" aria-pressed="false">Off</button>
+        <button type="button" data-emoji="on" aria-pressed="true">On</button>
+      </div>
+    </label>
+    <label>
+      Read images in posts
+      <div class="segmented" id="read-images" role="group" aria-label="Read images in posts">
+        <button type="button" data-images="off" aria-pressed="true">Off</button>
+        <button type="button" data-images="on" aria-pressed="false">On</button>
+      </div>
+    </label>
+    <p class="hint field-hint">When on, an attached image is sent along with the post text — uses more tokens and takes a bit longer per generate.</p>
+    <button id="save-tone" class="save-button" type="button">Save</button>
+    <p class="status" id="status-tone" aria-live="polite"></p>
+  </section>
 
-    <div id="tab-panel-advanced" role="tabpanel" hidden>
-      <label>
-        Backend URL
-        <input id="backend-url" type="url" placeholder="https://your-backend.example.com" />
-      </label>
-      <label>
-        Access token
-        <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" />
-      </label>
-      <button id="test-connection" class="button-ghost" type="button">Test connection</button>
-    </div>
-
-    <button id="save" type="button">Save</button>
-    <p class="status" id="status" aria-live="polite"></p>
-    <p class="hint">On X, the ✦ AI Reply button only generates drafts using these settings. Posting always stays manual.</p>
+  <section id="view-advanced" data-view-panel="advanced" hidden>
+    <h1 class="view-title">Advanced</h1>
+    <label>
+      Backend URL
+      <input id="backend-url" type="url" placeholder="https://your-backend.example.com" />
+    </label>
+    <label>
+      Access token
+      <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" />
+    </label>
+    <button id="test-connection" class="button-ghost" type="button">Test connection</button>
+    <button id="save-advanced" class="save-button" type="button">Save</button>
+    <p class="status" id="status-advanced" aria-live="polite"></p>
     <button id="clear-history" class="button-secondary" type="button">Clear history</button>
     <div class="footer-links">
       <a href="https://github.com/itsjawreal/extcom-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository" title="GitHub repository">
@@ -589,6 +616,41 @@
       </a>
     </div>
   </section>
+
+  <nav class="bottom-nav" id="bottom-nav">
+    <button type="button" class="nav-button" data-view="home" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 11.5 12 4l8 7.5" />
+        <path d="M6 10v9a1 1 0 0 0 1 1h4v-6h2v6h4a1 1 0 0 0 1-1v-9" />
+      </svg>
+      Home
+    </button>
+    <button type="button" class="nav-button" data-view="history" aria-current="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7.5V12l3 2" />
+      </svg>
+      History
+    </button>
+    <button type="button" class="nav-button" data-view="tone" aria-current="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <line x1="4" y1="6" x2="20" y2="6" />
+        <circle cx="9" cy="6" r="2" fill="currentColor" stroke="none" />
+        <line x1="4" y1="12" x2="20" y2="12" />
+        <circle cx="15" cy="12" r="2" fill="currentColor" stroke="none" />
+        <line x1="4" y1="18" x2="20" y2="18" />
+        <circle cx="11" cy="18" r="2" fill="currentColor" stroke="none" />
+      </svg>
+      Tone
+    </button>
+    <button type="button" class="nav-button" data-view="advanced" aria-current="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 13.5a7.97 7.97 0 0 0 0-3l2-1.5-2-3.5-2.4 1a8 8 0 0 0-2.6-1.5L14 2h-4l-.4 2.5a8 8 0 0 0-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.97 7.97 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 2.6 1.5L10 22h4l.4-2.5a8 8 0 0 0 2.6-1.5l2.4 1 2-3.5-2-1.5Z" />
+      </svg>
+      Advanced
+    </button>
+  </nav>
 
   <script type="module" src="/src/popup/popup.ts"></script>
 </body>

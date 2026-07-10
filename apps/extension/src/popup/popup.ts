@@ -1,5 +1,5 @@
 import { TONE_AUTO_LABEL, TONE_LABELS } from "../shared/constants";
-import type { ConnectionStatus, ExtensionSettings, Tone, UsageStats } from "../shared/types";
+import type { ConnectionStatus, ExtensionSettings, HistoryEntry, Tone, UsageStats } from "../shared/types";
 
 type RuntimeResponse = {
   ok: boolean;
@@ -9,14 +9,23 @@ type RuntimeResponse = {
   error?: string;
 };
 
-const viewStats = document.getElementById("view-stats") as HTMLElement;
-const viewSettings = document.getElementById("view-settings") as HTMLElement;
-const openSettingsButton = document.getElementById("open-settings") as HTMLButtonElement;
-const backButton = document.getElementById("back-to-stats") as HTMLButtonElement;
+type View = "home" | "history" | "tone" | "advanced";
+type HistoryFilter = "all" | "reply" | "quote" | "not-inserted";
+
+const viewPanels = {
+  home: document.getElementById("view-home") as HTMLElement,
+  history: document.getElementById("view-history") as HTMLElement,
+  tone: document.getElementById("view-tone") as HTMLElement,
+  advanced: document.getElementById("view-advanced") as HTMLElement,
+} satisfies Record<View, HTMLElement>;
+const bottomNav = document.getElementById("bottom-nav") as HTMLElement;
+const navButtons = Array.from(bottomNav.querySelectorAll<HTMLButtonElement>(".nav-button"));
+
 const clearHistoryButton = document.getElementById("clear-history") as HTMLButtonElement;
 const statGenerations = document.getElementById("stat-generations") as HTMLElement;
 const statInserted = document.getElementById("stat-inserted") as HTMLElement;
 const historyList = document.getElementById("history-list") as HTMLElement;
+const historyTabs = document.getElementById("history-tabs") as HTMLElement;
 
 const statusCard = document.getElementById("status-card") as HTMLElement;
 const connectionTitle = document.getElementById("connection-title") as HTMLElement;
@@ -37,29 +46,40 @@ const useEmojiGroup = document.getElementById("use-emoji") as HTMLElement;
 const useEmojiButtons = Array.from(useEmojiGroup.querySelectorAll<HTMLButtonElement>("button"));
 const readImagesGroup = document.getElementById("read-images") as HTMLElement;
 const readImagesButtons = Array.from(readImagesGroup.querySelectorAll<HTMLButtonElement>("button"));
-const saveButton = document.getElementById("save") as HTMLButtonElement;
-const statusNode = document.getElementById("status") as HTMLParagraphElement;
-const settingsTabs = document.getElementById("settings-tabs") as HTMLElement;
-const tabPanelDefault = document.getElementById("tab-panel-default") as HTMLElement;
-const tabPanelAdvanced = document.getElementById("tab-panel-advanced") as HTMLElement;
+const saveToneButton = document.getElementById("save-tone") as HTMLButtonElement;
+const saveAdvancedButton = document.getElementById("save-advanced") as HTMLButtonElement;
+const statusToneNode = document.getElementById("status-tone") as HTMLParagraphElement;
+const statusAdvancedNode = document.getElementById("status-advanced") as HTMLParagraphElement;
+
 let connectionCheckId = 0;
 let draftCount = 3;
 let useEmoji = true;
 let readImages = false;
 let maxLengthMode: "auto" | "manual" = "manual";
+let latestUsageStats: UsageStats = { totalGenerations: 0, totalInserted: 0, history: [] };
+let historyFilter: HistoryFilter = "all";
 
-function switchSettingsTab(tab: "default" | "advanced"): void {
-  tabPanelDefault.hidden = tab !== "default";
-  tabPanelAdvanced.hidden = tab !== "advanced";
-  settingsTabs.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
-    button.setAttribute("aria-selected", String(button.dataset.tab === tab));
-  });
+function switchView(view: View): void {
+  for (const [name, panel] of Object.entries(viewPanels) as [View, HTMLElement][]) {
+    panel.hidden = name !== view;
+  }
+  for (const button of navButtons) {
+    button.setAttribute("aria-current", button.dataset.view === view ? "page" : "false");
+  }
+  if (view === "home") {
+    void checkConnection();
+    void loadUsageStats();
+  } else if (view === "history") {
+    void loadUsageStats();
+  } else if (view === "tone" || view === "advanced") {
+    void loadSettings();
+  }
 }
 
-settingsTabs.addEventListener("click", (event) => {
-  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".tab");
+bottomNav.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".nav-button");
   if (!button) return;
-  switchSettingsTab(button.dataset.tab === "advanced" ? "advanced" : "default");
+  switchView((button.dataset.view as View) || "home");
 });
 
 function setDraftCount(count: number): void {
@@ -122,10 +142,20 @@ maxLengthInput.addEventListener("input", () => {
   maxLengthValue.textContent = maxLengthInput.value;
 });
 
-function showStatus(message: string): void {
-  statusNode.textContent = message;
+historyTabs.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-history-filter]");
+  if (!button) return;
+  historyFilter = (button.dataset.historyFilter as HistoryFilter) || "all";
+  historyTabs.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) => {
+    tab.setAttribute("aria-selected", String(tab === button));
+  });
+  renderHistoryList(latestUsageStats.history);
+});
+
+function showStatus(node: HTMLElement, message: string): void {
+  node.textContent = message;
   window.setTimeout(() => {
-    if (statusNode.textContent === message) statusNode.textContent = "";
+    if (node.textContent === message) node.textContent = "";
   }, 2400);
 }
 
@@ -177,7 +207,7 @@ async function checkConnection(): Promise<void> {
 async function loadSettings(): Promise<void> {
   const response = await chrome.runtime.sendMessage({ type: "GET_SETTINGS" }) as RuntimeResponse;
   if (!response.ok || !response.settings) {
-    showStatus(response.error || "Could not load settings.");
+    showStatus(statusAdvancedNode, response.error || "Could not load settings.");
     return;
   }
   backendUrlInput.value = response.settings.backendBaseUrl;
@@ -209,8 +239,9 @@ async function requestBackendPermission(backendBaseUrl: string): Promise<void> {
   }
 }
 
-async function saveSettings(): Promise<void> {
-  saveButton.disabled = true;
+async function saveSettings(statusNode: HTMLElement): Promise<void> {
+  saveToneButton.disabled = true;
+  saveAdvancedButton.disabled = true;
   try {
     const settings: ExtensionSettings = {
       backendBaseUrl: backendUrlInput.value.trim(),
@@ -234,12 +265,13 @@ async function saveSettings(): Promise<void> {
     if (settings.backendBaseUrl) {
       await requestBackendPermission(settings.backendBaseUrl);
     }
-    showStatus(response.ok ? "Settings saved." : response.error || "Save failed.");
+    showStatus(statusNode, response.ok ? "Settings saved." : response.error || "Save failed.");
     if (response.ok) void checkConnection();
   } catch (error) {
-    showStatus(error instanceof Error ? error.message : "Save failed.");
+    showStatus(statusNode, error instanceof Error ? error.message : "Save failed.");
   } finally {
-    saveButton.disabled = false;
+    saveToneButton.disabled = false;
+    saveAdvancedButton.disabled = false;
   }
 }
 
@@ -257,20 +289,37 @@ function relativeTime(iso: string): string {
   return `${Math.floor(diffHour / 24)}d ago`;
 }
 
-function renderUsageStats(stats: UsageStats): void {
-  statGenerations.textContent = String(stats.totalGenerations);
-  statInserted.textContent = String(stats.totalInserted);
+function filterHistory(history: HistoryEntry[], filter: HistoryFilter): HistoryEntry[] {
+  switch (filter) {
+    case "reply":
+      return history.filter((entry) => entry.inserted && entry.insertKind === "reply");
+    case "quote":
+      return history.filter((entry) => entry.inserted && entry.insertKind === "quote");
+    case "not-inserted":
+      return history.filter((entry) => !entry.inserted);
+    default:
+      return history;
+  }
+}
 
+function insertedLabel(entry: HistoryEntry): string {
+  if (entry.insertKind === "quote") return "✓ Inserted as Quote";
+  if (entry.insertKind === "reply") return "✓ Inserted as Reply";
+  return "✓ Inserted";
+}
+
+function renderHistoryList(history: HistoryEntry[]): void {
+  const filtered = filterHistory(history, historyFilter);
   historyList.replaceChildren();
-  if (stats.history.length === 0) {
+  if (filtered.length === 0) {
     const empty = document.createElement("p");
     empty.className = "history-empty";
-    empty.textContent = "No generations yet.";
+    empty.textContent = history.length === 0 ? "No generations yet." : "Nothing here yet.";
     historyList.append(empty);
     return;
   }
 
-  for (const entry of stats.history) {
+  for (const entry of filtered) {
     const item = document.createElement("div");
     item.className = "history-item";
 
@@ -290,11 +339,11 @@ function renderUsageStats(stats: UsageStats): void {
       link.href = entry.postUrl;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-      link.textContent = "✓ Inserted ↗";
+      link.textContent = `${insertedLabel(entry)} ↗`;
       right = link;
     } else {
       right = document.createElement("span");
-      right.textContent = entry.inserted ? "✓ Inserted" : "Not inserted";
+      right.textContent = entry.inserted ? insertedLabel(entry) : "Not inserted";
     }
     right.className = "inserted-tag";
     meta.append(left, right);
@@ -302,6 +351,13 @@ function renderUsageStats(stats: UsageStats): void {
     item.append(text, meta);
     historyList.append(item);
   }
+}
+
+function renderUsageStats(stats: UsageStats): void {
+  latestUsageStats = stats;
+  statGenerations.textContent = String(stats.totalGenerations);
+  statInserted.textContent = String(stats.totalInserted);
+  renderHistoryList(stats.history);
 }
 
 async function loadUsageStats(): Promise<void> {
@@ -315,28 +371,15 @@ async function clearHistory(): Promise<void> {
   try {
     const response = await chrome.runtime.sendMessage({ type: "CLEAR_USAGE_STATS" }) as RuntimeResponse;
     if (response.ok && response.usageStats) renderUsageStats(response.usageStats);
-    showStatus(response.ok ? "History cleared." : response.error || "Clear failed.");
+    showStatus(statusAdvancedNode, response.ok ? "History cleared." : response.error || "Clear failed.");
   } finally {
     clearHistoryButton.disabled = false;
   }
 }
 
-function switchView(view: "stats" | "settings"): void {
-  viewStats.hidden = view !== "stats";
-  viewSettings.hidden = view !== "settings";
-  if (view === "settings") {
-    switchSettingsTab("default");
-    void loadSettings();
-  } else {
-    void checkConnection();
-    void loadUsageStats();
-  }
-}
-
-openSettingsButton.addEventListener("click", () => switchView("settings"));
-backButton.addEventListener("click", () => switchView("stats"));
 clearHistoryButton.addEventListener("click", () => void clearHistory());
-saveButton.addEventListener("click", () => void saveSettings());
+saveToneButton.addEventListener("click", () => void saveSettings(statusToneNode));
+saveAdvancedButton.addEventListener("click", () => void saveSettings(statusAdvancedNode));
 testButton.addEventListener("click", () => void checkConnection());
 
 async function initializePopup(): Promise<void> {

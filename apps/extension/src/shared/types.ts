@@ -85,6 +85,8 @@ export type HistoryEntry = {
   tone: Tone;
   drafts: string[];
   inserted: boolean;
+  // Only set once inserted — which composer the draft was inserted into.
+  insertKind?: "reply" | "quote";
 };
 
 export type UsageStats = {

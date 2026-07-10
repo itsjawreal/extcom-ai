@@ -60,7 +60,7 @@ type RuntimeMessage =
   | { type: "GENERATE_REPLY"; input: GenerateInput }
   | { type: "GET_USAGE_STATS" }
   | { type: "CLEAR_USAGE_STATS" }
-  | { type: "RECORD_INSERT"; historyId: string };
+  | { type: "RECORD_INSERT"; historyId: string; kind: "reply" | "quote" };
 
 type RuntimeResponse =
   | {
@@ -178,7 +178,7 @@ async function recordGeneration(
   return historyId;
 }
 
-async function recordInsert(historyId: string): Promise<void> {
+async function recordInsert(historyId: string, kind: "reply" | "quote"): Promise<void> {
   const stats = await getUsageStats();
   const entry = stats.history.find((item) => item.id === historyId);
   // Entry may already be gone (cap eviction) or already marked — either way,
@@ -186,6 +186,7 @@ async function recordInsert(historyId: string): Promise<void> {
   // surfacing an error for.
   if (!entry || entry.inserted) return;
   entry.inserted = true;
+  entry.insertKind = kind;
   stats.totalInserted += 1;
   await saveUsageStats(stats);
 }
@@ -334,7 +335,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
       if (message?.type === "RECORD_INSERT") {
-        await recordInsert(message.historyId);
+        await recordInsert(message.historyId, message.kind);
         sendResponse({ ok: true } satisfies RuntimeResponse);
         return;
       }
