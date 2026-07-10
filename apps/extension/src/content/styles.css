@@ -66,11 +66,28 @@
   width: 32px;
 }
 
+/* Groups Tone, Max length, Drafts/Emoji/Image, and the extra-instruction
+   toggle into one visual block instead of four fields floating separately
+   on the panel background — the border already signals "these belong
+   together", so the fields inside can sit closer than the 12px rhythm
+   used between top-level panel sections. */
+.eks-settings-card {
+  background: rgb(21, 24, 28);
+  border: 1px solid rgb(47, 51, 54);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  padding: 14px;
+}
+
+.eks-settings-card > *:last-child {
+  margin-bottom: 0;
+}
+
 .eks-tone-label {
   display: grid;
   font: 600 13px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   gap: 4px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 /* Compact on purpose — these are shortcuts for the dropdown right below,
@@ -104,7 +121,7 @@
   align-items: start;
   display: flex;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .eks-count-label {
@@ -137,6 +154,15 @@
 .eks-context {
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin-bottom: 12px;
+}
+
+/* A distinct card so "which post this is for" reads as its own block
+   instead of floating text directly under the header. */
+.eks-context-card {
+  background: rgb(21, 24, 28);
+  border: 1px solid rgb(47, 51, 54);
+  border-radius: 12px;
+  padding: 10px 12px;
 }
 
 .eks-context-error {

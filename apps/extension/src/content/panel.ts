@@ -329,6 +329,7 @@ function renderContext(panel: HTMLElement, input: PanelInput): void {
     return;
   }
 
+  container.className = "eks-context eks-context-card";
   const context = input.context;
 
   // Always visible, unlike the collapsed details below — the panel is
@@ -675,56 +676,58 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     </header>
     <div data-context></div>
     <div data-reply-controls>
-      <div class="eks-tone-label">
-        Tone
-        <div class="eks-quick-tones" data-quick-tones hidden></div>
-        <select data-tone-select hidden aria-hidden="true" tabindex="-1"></select>
-        <button type="button" class="eks-select-trigger" data-tone-trigger aria-haspopup="listbox" aria-expanded="false">
-          <span data-tone-trigger-label></span>
-          <span class="eks-select-caret" aria-hidden="true">▾</span>
-        </button>
+      <div class="eks-settings-card">
+        <div class="eks-tone-label">
+          Tone
+          <div class="eks-quick-tones" data-quick-tones hidden></div>
+          <select data-tone-select hidden aria-hidden="true" tabindex="-1"></select>
+          <button type="button" class="eks-select-trigger" data-tone-trigger aria-haspopup="listbox" aria-expanded="false">
+            <span data-tone-trigger-label></span>
+            <span class="eks-select-caret" aria-hidden="true">▾</span>
+          </button>
+        </div>
+        <div class="eks-tone-label">
+          <span class="eks-field-row">
+            <span>Max length</span>
+            <div class="eks-count-group" data-length-mode-group role="group" aria-label="Reply length mode">
+              <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
+              <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
+            </div>
+          </span>
+          <div data-max-length-manual-row>
+            <p class="eks-field-row-value eks-max-length-value-row"><span data-max-length-value>220</span> chars</p>
+            <input type="range" data-max-length-input min="50" max="280" step="10" value="220" />
+          </div>
+        </div>
+        <div class="eks-panel-config">
+          <div class="eks-count-label">
+            Drafts
+            <div class="eks-count-group" data-count-group role="group" aria-label="Number of drafts">
+              <button type="button" data-count="1" aria-pressed="false">1</button>
+              <button type="button" data-count="2" aria-pressed="false">2</button>
+              <button type="button" data-count="3" aria-pressed="true">3</button>
+            </div>
+          </div>
+          <div class="eks-count-label">
+            Emoji
+            <div class="eks-count-group" data-emoji-group role="group" aria-label="Use emoji">
+              <button type="button" data-emoji="off" aria-pressed="false">Off</button>
+              <button type="button" data-emoji="on" aria-pressed="true">On</button>
+            </div>
+          </div>
+          <div class="eks-count-label" data-images-label hidden>
+            Image
+            <div class="eks-count-group" data-images-group role="group" aria-label="Read image in this post">
+              <button type="button" data-images="off" aria-pressed="true">Off</button>
+              <button type="button" data-images="on" aria-pressed="false">On</button>
+            </div>
+          </div>
+        </div>
+        <details class="eks-extra-details">
+          <summary>Add instruction for this reply</summary>
+          <textarea data-extra-instruction rows="2" placeholder="e.g. mention the airdrop"></textarea>
+        </details>
       </div>
-      <div class="eks-tone-label">
-        <span class="eks-field-row">
-          <span>Max length</span>
-          <div class="eks-count-group" data-length-mode-group role="group" aria-label="Reply length mode">
-            <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
-            <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
-          </div>
-        </span>
-        <div data-max-length-manual-row>
-          <p class="eks-field-row-value eks-max-length-value-row"><span data-max-length-value>220</span> chars</p>
-          <input type="range" data-max-length-input min="50" max="280" step="10" value="220" />
-        </div>
-      </div>
-      <div class="eks-panel-config">
-        <div class="eks-count-label">
-          Drafts
-          <div class="eks-count-group" data-count-group role="group" aria-label="Number of drafts">
-            <button type="button" data-count="1" aria-pressed="false">1</button>
-            <button type="button" data-count="2" aria-pressed="false">2</button>
-            <button type="button" data-count="3" aria-pressed="true">3</button>
-          </div>
-        </div>
-        <div class="eks-count-label">
-          Emoji
-          <div class="eks-count-group" data-emoji-group role="group" aria-label="Use emoji">
-            <button type="button" data-emoji="off" aria-pressed="false">Off</button>
-            <button type="button" data-emoji="on" aria-pressed="true">On</button>
-          </div>
-        </div>
-        <div class="eks-count-label" data-images-label hidden>
-          Image
-          <div class="eks-count-group" data-images-group role="group" aria-label="Read image in this post">
-            <button type="button" data-images="off" aria-pressed="true">Off</button>
-            <button type="button" data-images="on" aria-pressed="false">On</button>
-          </div>
-        </div>
-      </div>
-      <details class="eks-extra-details">
-        <summary>Add instruction for this reply</summary>
-        <textarea data-extra-instruction rows="2" placeholder="e.g. mention the airdrop"></textarea>
-      </details>
       <div class="eks-panel-toolbar">
         <button type="button" data-generate-button>Generate</button>
         <span class="eks-panel-usage" data-usage></span>
