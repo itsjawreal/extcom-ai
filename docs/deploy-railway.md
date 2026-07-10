@@ -21,7 +21,7 @@ Set the same variables documented in `.env.example`, at minimum:
 AI_DEFAULT_PROVIDER=openrouter
 OPENROUTER_API_KEY=your-openrouter-key
 AUTH_TOKENS=your-long-random-token:power
-DATABASE_PATH=/data/ekskomen.db
+DATABASE_PATH=/data/extcom-ai.db
 ```
 
 Railway injects `PORT` automatically; the Dockerfile already defaults it to

@@ -15,7 +15,7 @@ FROM node:24-alpine
 ENV NODE_ENV=production
 ENV PORT=3000
 # SQLite lives on a volume so issued tokens and usage counters survive restarts.
-ENV DATABASE_PATH=/data/ekskomen.db
+ENV DATABASE_PATH=/data/extcom-ai.db
 WORKDIR /app
 COPY --from=build /app/apps/backend/dist ./dist
 # No VOLUME instruction here: Railway's Dockerfile builder rejects it. Mount

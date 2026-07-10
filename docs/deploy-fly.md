@@ -17,14 +17,14 @@ offers unless you need them.
 ## Create and mount a volume
 
 ```bash
-fly volumes create ekskomen_data --size 1
+fly volumes create extcom_ai_data --size 1
 ```
 
 In `fly.toml`:
 
 ```toml
 [mounts]
-source = "ekskomen_data"
+source = "extcom_ai_data"
 destination = "/data"
 ```
 
@@ -34,7 +34,7 @@ destination = "/data"
 fly secrets set AI_DEFAULT_PROVIDER=openrouter
 fly secrets set OPENROUTER_API_KEY=your-openrouter-key
 fly secrets set AUTH_TOKENS=your-long-random-token:power
-fly secrets set DATABASE_PATH=/data/ekskomen.db
+fly secrets set DATABASE_PATH=/data/extcom-ai.db
 ```
 
 ## Deploy

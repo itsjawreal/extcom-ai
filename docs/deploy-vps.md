@@ -21,7 +21,7 @@ nano .env   # fill in OPENROUTER_API_KEY and AUTH_TOKENS at minimum
 docker compose up -d --build
 ```
 
-`docker-compose.yml` already mounts a named volume (`ekskomen-data`) at
+`docker-compose.yml` already mounts a named volume (`extcom-ai-data`) at
 `/data`, so the SQLite database survives container restarts and rebuilds.
 
 ## Check health

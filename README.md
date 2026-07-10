@@ -94,7 +94,7 @@ tokens, usage counters) is lost on every redeploy or restart.
 | `AI_DEFAULT_MODEL` | no | e.g. `openrouter/auto`, `anthropic/claude-haiku-4.5`. |
 | `AUTH_TOKENS` | yes | Comma-separated `token:plan` pairs. Invent a long random token and paste the same value into the extension popup. Plans `free`/`pro`/`power` only differ in rate limits — it's your own API key/bill either way, not a paid tier. Running this solo? Use `power` and forget about it; the tiers matter if you share your server/key with others and want to cap how much any one of them can spend. |
 | `ADMIN_SECRET` | no | Enables `/v1/admin/tokens` for issuing extra tokens stored in SQLite (for sharing your server). Off when empty. |
-| `DATABASE_PATH` | no | SQLite file (default `data/ekskomen.db`; the Docker image uses `/data/ekskomen.db` on a volume). |
+| `DATABASE_PATH` | no | SQLite file (default `data/extcom-ai.db`; the Docker image uses `/data/extcom-ai.db` on a volume). |
 | `EXTENSION_ORIGIN` | no | Extra allowed CORS origin. Extension origins (`chrome-extension://…`) are always allowed; authorization is the bearer token. |
 | `APP_URL` | no | Sent to OpenRouter as `HTTP-Referer`. |
 | `PORT` | no | Default `3000`. |

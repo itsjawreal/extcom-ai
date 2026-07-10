@@ -11,7 +11,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ekskomen-data:/data
+      - extcom-ai-data:/data
 
 volumes:
-  ekskomen-data:
+  extcom-ai-data:

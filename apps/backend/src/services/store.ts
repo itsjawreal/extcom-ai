@@ -22,7 +22,7 @@ let db: DatabaseSync | null = null;
 
 function resolveDatabasePath(): string {
   if (process.env.NODE_ENV === "test") return ":memory:";
-  return resolve(process.env.DATABASE_PATH || "data/ekskomen.db");
+  return resolve(process.env.DATABASE_PATH || "data/extcom-ai.db");
 }
 
 function getDb(): DatabaseSync {
