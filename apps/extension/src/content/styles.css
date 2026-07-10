@@ -646,3 +646,16 @@
   0% { background-color: rgba(29, 155, 240, 0.18); }
   100% { background-color: transparent; }
 }
+
+/* A blocked close attempt (outside click/Escape while there are
+   un-inserted drafts) shakes the panel instead of silently doing nothing,
+   so it's clear the click didn't just get missed. */
+.eks-panel-shake {
+  animation: eks-panel-shake 0.32s ease;
+}
+
+@keyframes eks-panel-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}

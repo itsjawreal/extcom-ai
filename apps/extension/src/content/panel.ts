@@ -215,6 +215,11 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
   if (!list) return;
   list.replaceChildren();
 
+  // Guards outside-click/Escape close (see the pointerdown/keydown
+  // listeners below) so a stray click on the page can't silently discard
+  // drafts the user hasn't inserted or explicitly dismissed yet.
+  panel.dataset.hasDrafts = String(items.length > 0);
+
   const maxLength = readMaxLength(panel) ?? 220;
 
   items.forEach(({ reply, historyId }, index) => {
@@ -324,6 +329,30 @@ export function closePanel(): void {
   activeAnchor = null;
   activePost = null;
   activePostKey = null;
+}
+
+// Outside clicks, Escape, and re-clicking the same post's AI Reply button
+// all route through here instead of calling closePanel() directly, so a
+// stray click elsewhere on the page can't silently discard drafts the user
+// hasn't inserted or explicitly dismissed — the × button is the only way
+// out while panel.dataset.hasDrafts is true (see renderReplies). Opening a
+// *different* post's panel still closes this one unconditionally — that's
+// a deliberate exception, not an oversight.
+function attemptClosePanel(): void {
+  if (activePanel?.dataset.hasDrafts === "true") {
+    shakePanel(activePanel);
+    showStatus(activePanel, "Insert or close a draft first.");
+    return;
+  }
+  closePanel();
+}
+
+function shakePanel(panel: HTMLElement): void {
+  panel.classList.remove("eks-panel-shake");
+  // Force a reflow so re-adding the class restarts the animation even on
+  // repeated blocked attempts in a row.
+  void panel.offsetWidth;
+  panel.classList.add("eks-panel-shake");
 }
 
 // The panel is docked to a fixed screen corner (see .eks-reply-panel), not
@@ -728,7 +757,7 @@ async function generateRepliesForPanel(
 
 export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: PanelInput): void {
   if (activeAnchor === anchor && activePanel) {
-    closePanel();
+    attemptClosePanel();
     return;
   }
 
@@ -928,7 +957,7 @@ document.addEventListener("keydown", (event) => {
     closeToneList();
     return;
   }
-  closePanel();
+  attemptClosePanel();
 });
 
 document.addEventListener("pointerdown", (event) => {
@@ -949,5 +978,5 @@ document.addEventListener("pointerdown", (event) => {
   if (insideToneList) return;
 
   if (!activePanel || !activeAnchor) return;
-  if (!activePanel.contains(target) && !activeAnchor.contains(target)) closePanel();
+  if (!activePanel.contains(target) && !activeAnchor.contains(target)) attemptClosePanel();
 });
