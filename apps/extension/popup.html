@@ -492,6 +492,17 @@
       stroke-width: 2;
       stroke-linecap: round;
       stroke-linejoin: round;
+      transition: transform 0.15s ease;
+    }
+    .nav-button:hover svg {
+      transform: scale(1.15);
+    }
+    .nav-button.spin svg {
+      animation: nav-icon-spin 0.4s ease;
+    }
+    @keyframes nav-icon-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
     .nav-button[aria-current="page"] {
       background: var(--accent-soft);

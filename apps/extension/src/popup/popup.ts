@@ -76,9 +76,18 @@ function switchView(view: View): void {
   }
 }
 
+function spinNavIcon(button: HTMLButtonElement): void {
+  button.classList.remove("spin");
+  // Force a reflow so re-adding the class restarts the animation even on
+  // rapid repeat clicks of the same tab.
+  void button.offsetWidth;
+  button.classList.add("spin");
+}
+
 bottomNav.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".nav-button");
   if (!button) return;
+  spinNavIcon(button);
   switchView((button.dataset.view as View) || "home");
 });
 
