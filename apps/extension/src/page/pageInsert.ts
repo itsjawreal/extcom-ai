@@ -46,20 +46,43 @@ if (!(window as typeof window & { __extcomAiPageInsertInstalled__?: boolean })._
     }
   };
 
+  // See replyComposer.ts's ensureComposerCleared for why this doesn't use
+  // execCommand("delete") — it turned out to be silently ignored, leaving
+  // old content for the next insert to land on top of instead of replacing.
+  const clearComposer = (editable: HTMLElement): boolean => {
+    if (getText(editable).length === 0) return true;
+
+    setSelection(editable, "all");
+    try {
+      document.execCommand("insertText", false, "");
+    } catch {
+      // checked below regardless
+    }
+    if (getText(editable).length === 0) return true;
+
+    editable.replaceChildren();
+    editable.dispatchEvent(new InputEvent("beforeinput", {
+      bubbles: true,
+      cancelable: true,
+      inputType: "deleteContentBackward",
+    }));
+    editable.dispatchEvent(new InputEvent("input", {
+      bubbles: true,
+      inputType: "deleteContentBackward",
+    }));
+    return getText(editable).length === 0;
+  };
+
   const insertIntoComposer = (composer: HTMLElement, text: string): boolean => {
     const editable = resolveEditableTarget(composer);
     editable.focus();
     editable.click();
 
-    const currentText = getText(editable);
-    setSelection(editable, currentText ? "all" : "end");
+    clearComposer(editable);
+    setSelection(editable, "end");
 
     let inserted = false;
     try {
-      if (currentText) {
-        document.execCommand("delete");
-        setSelection(editable, "end");
-      }
       inserted = document.execCommand("insertText", false, text);
     } catch {
       inserted = false;
