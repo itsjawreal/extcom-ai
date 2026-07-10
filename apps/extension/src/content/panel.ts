@@ -46,24 +46,6 @@ async function sendRuntimeMessage<T>(message: unknown): Promise<T> {
   return response as T;
 }
 
-function positionPanel(panel: HTMLElement, anchor: HTMLElement): void {
-  const rect = anchor.getBoundingClientRect();
-  const width = Math.min(380, window.innerWidth - 24);
-  const left = Math.min(
-    Math.max(12, rect.left),
-    Math.max(12, window.innerWidth - width - 12),
-  );
-  const preferredTop = rect.bottom + 8;
-  const top =
-    preferredTop + 520 < window.innerHeight
-      ? preferredTop
-      : Math.max(12, rect.top - 528);
-
-  panel.style.width = `${width}px`;
-  panel.style.left = `${left}px`;
-  panel.style.top = `${top}px`;
-}
-
 function showStatus(panel: HTMLElement, message: string): void {
   const status = panel.querySelector<HTMLElement>("[data-panel-status]");
   if (!status) return;
@@ -292,11 +274,15 @@ export function closePanel(): void {
   activePostKey = null;
 }
 
+// The panel is docked to a fixed screen corner (see .eks-reply-panel), not
+// anchored next to the post's button, so this no longer repositions
+// anything visually — it only keeps activeAnchor/activePost pointing at a
+// live DOM node. X rerenders replace post nodes while the user reads
+// drafts; Insert/Quote/Generate all operate on activePost, so a stale
+// detached reference would silently break them without this.
 export function syncPanelPosition(): void {
   if (!activePanel || !activeAnchor) return;
   if (!activeAnchor.isConnected) {
-    // X rerenders replace post nodes while the user reads drafts. Re-attach to
-    // the same post's freshly injected button; close only when the post is gone.
     const target = findReanchorTarget();
     if (!target) {
       closePanel();
@@ -305,7 +291,21 @@ export function syncPanelPosition(): void {
     activeAnchor = target.anchor;
     activePost = target.post;
   }
-  positionPanel(activePanel, activeAnchor);
+}
+
+function jumpToActivePost(): void {
+  if (!activePost || !activePost.isConnected) {
+    const target = findReanchorTarget();
+    if (!target) {
+      if (activePanel) showStatus(activePanel, "Could not find the original post — it may have scrolled out of the timeline.");
+      return;
+    }
+    activeAnchor = target.anchor;
+    activePost = target.post;
+  }
+  activePost.scrollIntoView({ behavior: "smooth", block: "center" });
+  activePost.classList.add("eks-jump-highlight");
+  window.setTimeout(() => activePost?.classList.remove("eks-jump-highlight"), 1200);
 }
 
 function queuePanelPosition(): void {
@@ -330,10 +330,31 @@ function renderContext(panel: HTMLElement, input: PanelInput): void {
   }
 
   const context = input.context;
+
+  // Always visible, unlike the collapsed details below — the panel is
+  // docked to a screen corner now instead of sitting next to the post, so
+  // this is the only thing reminding you which post you're drafting for
+  // once you've scrolled away from it.
+  const summaryRow = document.createElement("div");
+  summaryRow.className = "eks-context-summary";
+  const author = document.createElement("span");
+  author.className = "eks-context-author";
+  author.textContent = [context.authorName, context.authorHandle].filter(Boolean).join(" ") || "Post";
+  const text = document.createElement("span");
+  text.className = "eks-context-text";
+  text.textContent = context.postText ? `"${truncateText(context.postText, 90)}"` : "";
+  summaryRow.append(author, text);
+
+  const jumpButton = document.createElement("button");
+  jumpButton.type = "button";
+  jumpButton.className = "eks-context-jump";
+  jumpButton.textContent = "↗ Jump to post";
+  jumpButton.addEventListener("click", jumpToActivePost);
+
   const details = document.createElement("details");
   details.className = "eks-context-details";
-  const summary = document.createElement("summary");
-  summary.textContent = "Extracted context";
+  const detailsSummary = document.createElement("summary");
+  detailsSummary.textContent = "More details";
 
   const fields: Array<[string, string | undefined]> = [
     ["Post", context.postText],
@@ -351,8 +372,12 @@ function renderContext(panel: HTMLElement, input: PanelInput): void {
     list.append(term, description);
   }
 
-  details.append(summary, list);
-  container.append(details);
+  details.append(detailsSummary, list);
+  container.append(summaryRow, jumpButton, details);
+}
+
+function truncateText(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 function populateToneSelect(select: HTMLSelectElement): void {
@@ -774,7 +799,6 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   activeAnchor = anchor;
   activePost = post;
   activePostKey = getPostKey(post);
-  positionPanel(panel, anchor);
   renderUsage(panel);
 
   if (!("error" in input)) {
