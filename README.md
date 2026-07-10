@@ -147,14 +147,23 @@ Then in Chrome (or any Chromium browser):
 
 ### Optional: let it read images in posts
 
-The panel can attach an image from the post (first one found) to the AI
-request so replies can reference charts, memes, or screenshots — off by
-default. Toggle **Read images** in Settings → Default, or per-generation in
-the on-page panel (it only appears when the post has an image). This
-**requires `AI_DEFAULT_MODEL` to be a vision-capable model** (e.g. a
+The panel can attach every image in the post (up to 4, X's own per-post max)
+to the AI request so replies can reference charts, memes, or screenshots —
+off by default. Toggle **Read images** in Settings → Default, or
+per-generation in the on-page panel (it only appears when the post has at
+least one image). This **requires `AI_DEFAULT_MODEL` to be a vision-capable
+model** (e.g. a
 multimodal model on OpenRouter, or `gpt-4o`/`gpt-4.1`-class models on
 OpenAI) — non-vision models typically just ignore the image rather than
 erroring. See `docs/API.md` for the exact request shape.
+
+### Reply chain context
+
+If the post you're replying to is itself a nested reply, the extension
+automatically includes the visible tweets it's replying to (and, on a status
+permalink page, the original post at the top) as extra context for the AI —
+no setting to toggle, this is always on when detectable. It only picks up
+what's already rendered on the page.
 
 ## Sharing your server (optional)
 

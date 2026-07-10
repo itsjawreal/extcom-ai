@@ -113,6 +113,50 @@ test("sends an OpenRouter chat completion with structured output", async () => {
   }
 });
 
+test("sends one content block per image when imageUrls has multiple entries", async () => {
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  let requestBody: Record<string, unknown> | undefined;
+
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({ replies: [{ text: "one" }] }) } }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  try {
+    await generateWithOpenRouter({
+      postText: "Post",
+      tone: "smart",
+      count: 1,
+      maxLength: 220,
+      useEmoji: false,
+      imageUrls: ["https://pbs.twimg.com/media/a.jpg", "https://pbs.twimg.com/media/b.jpg"],
+    });
+
+    const messages = requestBody?.messages as Array<{ role: string; content: unknown }>;
+    const userContent = messages.find((message) => message.role === "user")?.content as Array<{
+      type: string;
+      image_url?: { url: string };
+    }>;
+    const imageBlocks = userContent.filter((block) => block.type === "image_url");
+    assert.equal(imageBlocks.length, 2);
+    assert.deepEqual(
+      imageBlocks.map((block) => block.image_url?.url),
+      ["https://pbs.twimg.com/media/a.jpg", "https://pbs.twimg.com/media/b.jpg"],
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
+  }
+});
+
 test("sends a tone schema and resolves the AI's pick when tone is auto", async () => {
   const previousKey = process.env.OPENROUTER_API_KEY;
   const previousFetch = globalThis.fetch;
