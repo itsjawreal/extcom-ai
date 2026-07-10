@@ -174,38 +174,16 @@ function renderUsage(panel: HTMLElement, usage?: GenerateReplyResponse["usage"],
   usageNode.textContent = `Plan ${usage.plan} • ${remaining} left today${toneSuffix}`;
 }
 
-type PanelReply = { reply: GeneratedReply; historyId?: string; usedKinds?: Set<"reply" | "quote"> };
+type PanelReply = { reply: GeneratedReply; historyId?: string };
 
 function toPanelReplies(replies: GeneratedReply[], historyId?: string): PanelReply[] {
   return replies.map((reply) => ({ reply, historyId }));
-}
-
-// Marks a draft card as used instead of disabling it — the same draft can
-// still be inserted as a reply AND quoted elsewhere, so the badge just
-// tracks which actions have been taken, it never blocks further ones.
-// State lives on the PanelReply object (not just the DOM node): regenerating
-// a *different* slot rebuilds the whole list from scratch via renderReplies,
-// and item.slice() in regenerateSlot keeps the same object reference for
-// every untouched slot — tracking only the DOM would silently lose the
-// badge for slots that weren't the one being regenerated.
-function applyUsedBadge(card: HTMLElement, used: Set<"reply" | "quote">): void {
-  card.classList.add("eks-reply-option-used");
-
-  let badge = card.querySelector<HTMLElement>(".eks-reply-used-badge");
-  if (!badge) {
-    badge = document.createElement("span");
-    badge.className = "eks-reply-used-badge";
-    card.querySelector(".eks-reply-char-count")?.insertAdjacentElement("afterend", badge);
-  }
-  const labels = [...used].map((usedKind) => (usedKind === "reply" ? "Inserted" : "Quoted"));
-  badge.textContent = `✓ ${labels.join(" · ")}`;
 }
 
 async function performInsert(
   panel: HTMLElement,
   kind: "reply" | "quote",
   item: PanelReply,
-  card: HTMLElement,
 ): Promise<void> {
   if (!activePost) return;
   const { reply, historyId } = item;
@@ -224,15 +202,7 @@ async function performInsert(
       // Fire-and-forget: don't make Insert feel slow waiting on this.
       void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId, kind });
     }
-    // Deliberately doesn't close the panel — the other drafts are still
-    // useful (e.g. insert this one as a reply, then quote a different one)
-    // and the panel is already guarded against accidental outside-click/
-    // Escape close while drafts are showing, so nothing gets lost.
-    const used = item.usedKinds ?? new Set<"reply" | "quote">();
-    used.add(kind);
-    item.usedKinds = used;
-    applyUsedBadge(card, used);
-    showStatus(panel, kind === "reply" ? "Inserted into the reply box." : "Inserted into the Quote Tweet.");
+    closePanel();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Composer insertion failed.";
 
@@ -314,16 +284,15 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
     quoteButton.textContent = "Quote";
     quoteButton.setAttribute("aria-label", "Insert this draft into a Quote Tweet");
     quoteButton.setAttribute("data-tooltip", "Insert into Quote Tweet");
-    quoteButton.addEventListener("click", () => void performInsert(panel, "quote", item, card));
+    quoteButton.addEventListener("click", () => void performInsert(panel, "quote", item));
 
     const insertButton = document.createElement("button");
     insertButton.type = "button";
     insertButton.textContent = "Insert";
-    insertButton.addEventListener("click", () => void performInsert(panel, "reply", item, card));
+    insertButton.addEventListener("click", () => void performInsert(panel, "reply", item));
 
     actions.append(copyButton, regenerateButton, quoteButton, insertButton);
     card.append(text, charCount, actions);
-    if (item.usedKinds?.size) applyUsedBadge(card, item.usedKinds);
     list.append(card);
   });
 }

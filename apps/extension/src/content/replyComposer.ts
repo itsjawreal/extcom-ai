@@ -196,41 +196,6 @@ async function tryPasteIntoComposer(editable: HTMLElement, text: string): Promis
   }
 }
 
-// Clearing existing content turned out to need the same verify-then-escalate
-// treatment as inserting it: execCommand("delete") was never actually
-// exercised before Insert/Quote could target a composer that already held
-// text (the panel used to close after the first Insert), and turns out X's
-// editor just ignores it — the old text silently stayed put for the next
-// insert to land on top of. insertText with an empty string uses the exact
-// primitive already proven to register reliably (every successful insert
-// this whole session went through it), so try that first; if the composer
-// still isn't empty afterward, force it via direct DOM manipulation and
-// fire the input events a controlled editor listens for, giving React a
-// frame to reconcile before anything else touches the composer.
-async function ensureComposerCleared(editable: HTMLElement): Promise<void> {
-  if (getComposerText(editable).length === 0) return;
-
-  setSelection(editable, "all");
-  try {
-    document.execCommand("insertText", false, "");
-  } catch {
-    // checked below regardless
-  }
-  if (getComposerText(editable).length === 0) return;
-
-  editable.replaceChildren();
-  editable.dispatchEvent(new InputEvent("beforeinput", {
-    bubbles: true,
-    cancelable: true,
-    inputType: "deleteContentBackward",
-  }));
-  editable.dispatchEvent(new InputEvent("input", {
-    bubbles: true,
-    inputType: "deleteContentBackward",
-  }));
-  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-}
-
 async function insertTextIntoComposer(composer: HTMLElement, text: string): Promise<boolean> {
   if (!composer.isConnected) return false;
 
@@ -245,15 +210,8 @@ async function insertTextIntoComposer(composer: HTMLElement, text: string): Prom
   const editable = resolveEditableTarget(composer);
   primeComposer(editable);
 
-  // A second Insert into a composer that already holds text from an
-  // earlier one (the panel no longer auto-closes after Insert/Quote) needs
-  // that old content actually gone first — otherwise the paste/insertText
-  // attempts below land on top of it instead of replacing it, and
-  // composerContainsText()'s loose .includes() check even reports the
-  // concatenated result as a false "success" (old+new still contains new
-  // as a substring), so nothing catches it.
-  await ensureComposerCleared(editable);
-  setSelection(editable, "end");
+  const currentText = getComposerText(editable);
+  setSelection(editable, currentText ? "all" : "end");
 
   if (await tryPasteIntoComposer(editable, text)) {
     editable.focus();
@@ -262,6 +220,10 @@ async function insertTextIntoComposer(composer: HTMLElement, text: string): Prom
 
   let inserted = false;
   try {
+    if (currentText) {
+      document.execCommand("delete");
+      setSelection(editable, "end");
+    }
     inserted = document.execCommand("insertText", false, text);
   } catch {
     inserted = false;

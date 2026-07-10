@@ -548,20 +548,6 @@
   text-align: right;
 }
 
-/* The panel stays open after Insert/Quote now (so other drafts are still
-   usable) — this is the "you already used this one" marker, not a
-   disabled state, so the card stays fully interactive underneath it. */
-.eks-reply-option-used {
-  opacity: 0.72;
-}
-
-.eks-reply-used-badge {
-  color: rgb(34, 197, 94);
-  display: block;
-  font: 600 11px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  margin: -6px 0 10px;
-}
-
 .eks-reply-actions {
   display: flex;
   gap: 8px;
