@@ -373,7 +373,15 @@ function renderContext(panel: HTMLElement, input: PanelInput): void {
   }
 
   details.append(detailsSummary, list);
-  container.append(summaryRow, jumpButton, details);
+
+  // Jump-to-post and the collapsible detail list are both small secondary
+  // actions tied to the same summary line — sharing one row keeps them from
+  // reading as two separate stacked sections.
+  const actionsRow = document.createElement("div");
+  actionsRow.className = "eks-context-actions";
+  actionsRow.append(jumpButton, details);
+
+  container.append(summaryRow, actionsRow);
 }
 
 function truncateText(text: string, max: number): string {
