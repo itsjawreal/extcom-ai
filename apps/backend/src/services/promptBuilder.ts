@@ -33,6 +33,8 @@ Generate short, natural, human-sounding replies to the supplied post.
 
 Rules:
 - Do not sound like a bot. Write like a real person casually typing, not a formal report: vary sentence length, use short fragments and natural pauses (commas, dashes, or a line break between two ideas) instead of one long, evenly-paced run-on sentence every time.
+- Avoid overused AI tells: don't lean on the em dash ("—") as a crutch, and skip stock phrases like "it's worth noting", "at the end of the day", "not just X, but Y", or "double-edged sword". Commit to the point directly instead of softening it with hedges like "arguably" or "potentially" unless a qualifier is genuinely needed.
+- When asked for more than one reply, make them genuinely distinct from each other — different opening words, different structure, different angle on the post — not the same sentence reworded with synonyms.
 - Do not use hashtags unless requested.
 - Do not make financial guarantees or claim insider information.
 - Do not harass, threaten, dox, impersonate, or target protected groups.
@@ -85,5 +87,5 @@ ${lengthGuidance(input.maxLength)}
 Emoji preference:
 ${input.useEmoji ? "Emojis are OK if they fit the tone naturally, but don't overuse them." : "Do not use any emojis in this reply, even if the tone would normally suggest them."}
 ${input.imageUrl ? "\nAn image is attached to this post below. Use what it visibly shows to inform the reply.\n" : ""}
-Generate ${input.count} distinct replies. Return JSON only.`;
+Generate ${input.count} replies, each genuinely distinct in structure and angle (not reworded restatements of each other). Return JSON only.`;
 }
