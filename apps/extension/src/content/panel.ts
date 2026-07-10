@@ -18,6 +18,14 @@ let activePostKey: string | null = null;
 let positionQueued = false;
 let activeToneList: HTMLElement | null = null;
 
+// Tracks the in-flight transitionend listener per panel so a new call to
+// animatePanelHeight() can remove the previous one — without this, rapidly
+// interrupting an in-progress transition (e.g. toggling a control twice in
+// quick succession) leaves the old listener attached forever, since a
+// transition that gets retargeted before completing never fires
+// transitionend for it.
+const pendingHeightListeners = new WeakMap<HTMLElement, (event: TransitionEvent) => void>();
+
 function getPostKey(post: HTMLElement): string | null {
   const timeLink = post.querySelector("time")?.closest("a");
   const match = timeLink?.getAttribute("href")?.match(/\/status\/(\d+)/);
@@ -85,13 +93,22 @@ function animatePanelHeight(panel: HTMLElement, mutate: () => void): void {
   void panel.offsetHeight;
   panel.style.maxHeight = `${targetHeight}px`;
 
-  panel.addEventListener("transitionend", function onEnd(event) {
+  // A transition interrupted by this call's own maxHeight write above never
+  // fires transitionend for the *previous* call — remove its listener
+  // explicitly instead of leaking it.
+  const previousListener = pendingHeightListeners.get(panel);
+  if (previousListener) panel.removeEventListener("transitionend", previousListener);
+
+  const onEnd = (event: TransitionEvent) => {
     if (event.propertyName !== "max-height" || event.target !== panel) return;
     panel.removeEventListener("transitionend", onEnd);
+    pendingHeightListeners.delete(panel);
     // Hand control back to the CSS rule so it keeps responding to viewport
     // resizes instead of staying pinned to this one stale pixel value.
     panel.style.maxHeight = "";
-  });
+  };
+  pendingHeightListeners.set(panel, onEnd);
+  panel.addEventListener("transitionend", onEnd);
 }
 
 function showStatus(panel: HTMLElement, message: string): void {
