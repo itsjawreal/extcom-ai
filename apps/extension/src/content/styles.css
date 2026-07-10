@@ -38,12 +38,12 @@
   box-sizing: border-box;
   color: rgb(231, 233, 234);
   color-scheme: dark;
-  max-height: calc(100vh - 112px);
+  max-height: min(729px, calc(100vh - 112px));
   overflow-y: auto;
   padding: 16px;
   position: fixed;
   right: 16px;
-  width: min(380px, calc(100vw - 24px));
+  width: min(401px, calc(100vw - 24px));
   z-index: 2147483647;
 }
 
