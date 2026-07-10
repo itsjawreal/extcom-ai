@@ -46,7 +46,7 @@ function normalizeMaxLength(value: unknown, fallback: number | "auto"): number |
 }
 
 type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji"> & {
-  tone?: Tone;
+  tone?: Tone | "auto";
   count?: number;
   maxLength?: number | "auto";
   useEmoji?: boolean;
@@ -162,7 +162,11 @@ async function recordGeneration(
     createdAt: new Date().toISOString(),
     postText: truncateForHistory(input.postText),
     postUrl: input.postUrl,
-    tone: data.replies[0]?.tone ?? input.tone ?? settings.toneDefault,
+    // data.replies[0].tone is always the backend's *resolved* tone (never
+    // "auto" — see GenerateReplyResponse), so it's always safe here. The
+    // "smart" fallback only matters if replies were somehow empty, since
+    // input.tone/settings.toneDefault could themselves literally be "auto".
+    tone: data.replies[0]?.tone ?? "smart",
     drafts: data.replies.map((reply) => reply.text),
     inserted: false,
   };

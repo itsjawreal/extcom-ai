@@ -41,7 +41,10 @@ export type ExtractedPostContext = {
 };
 
 export type GenerateReplyRequest = ExtractedPostContext & {
-  tone: Tone;
+  // "auto" means the AI picks whichever single tone best fits this post,
+  // applied consistently across every reply in the batch — the resolved
+  // tone (never "auto") is echoed back per-reply in GeneratedReply.tone.
+  tone: Tone | "auto";
   extraInstruction?: string;
   count: number;
   // "auto" means no fixed character target — the AI picks whatever length
@@ -61,7 +64,7 @@ export type GenerateReplyResponse = {
 export type ExtensionSettings = {
   backendBaseUrl: string;
   authToken: string;
-  toneDefault: Tone;
+  toneDefault: Tone | "auto";
   defaultInstruction: string;
   maxReplyLength: number | "auto";
   draftCount: number;

@@ -1,4 +1,4 @@
-import type { GenerateReplyRequest, Tone } from "../types/index.js";
+import { TONES, type GenerateReplyRequest, type Tone } from "../types/index.js";
 
 const TONE_GUIDANCE: Record<Tone, string> = {
   degen: "Casual and crypto-native. Short, light slang, no cringe overhype.",
@@ -42,13 +42,21 @@ Rules:
 - Follow the emoji preference given in the user message — it overrides any emoji habit implied by the selected tone.
 - If an image is attached, use its visible content (chart, meme, screenshot, etc.) to make the reply more specific and relevant.
 - Match the selected tone and stay relevant to the post.
-- Return only JSON matching this shape: {"replies":[{"text":"..."}]}.`;
+- Return only JSON matching this shape: {"replies":[{"text":"..."}]}. If the user message asks you to auto-pick the tone, also include a top-level "tone" field naming the exact tone id you chose (e.g. {"tone":"smart","replies":[{"text":"..."}]}), and apply that same tone to every reply in the batch.`;
 
 function lengthGuidance(maxLength: GenerateReplyRequest["maxLength"]): string {
   if (maxLength === "auto") {
     return "No fixed character target — pick whatever length reads most natural for the selected tone and this specific post (a short punchy reaction and a longer thought are both fine), capped at 280 characters. Prioritize a complete, natural-sounding reply over hitting any particular length.";
   }
   return `${maxLength} characters, hard limit. The reply as written must already be complete and fit within this — do not write a longer reply that relies on being cut off.`;
+}
+
+function toneSection(tone: GenerateReplyRequest["tone"]): string {
+  if (tone === "auto") {
+    const list = TONES.map((candidate) => `- ${candidate}: ${TONE_GUIDANCE[candidate]}`).join("\n");
+    return `Auto — pick whichever single tone below best fits this specific post, and use that same tone consistently for every requested reply. Report your choice as a top-level "tone" field in the JSON response, using the exact id (e.g. "smart").\n\n${list}`;
+  }
+  return `${tone} — ${TONE_GUIDANCE[tone]}`;
 }
 
 export function buildUserPrompt(input: GenerateReplyRequest): string {
@@ -66,7 +74,7 @@ Visible thread context:
 ${thread}
 
 Selected tone:
-${input.tone} — ${TONE_GUIDANCE[input.tone]}
+${toneSection(input.tone)}
 
 Extra user instruction:
 ${input.extraInstruction || "None"}

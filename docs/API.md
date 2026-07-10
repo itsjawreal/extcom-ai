@@ -29,7 +29,12 @@ Valid tones: `degen`, `bullish`, `smart`, `funny`, `respectful`, `short_alpha`,
 `hype_founder`, `bold_populist`, `unhinged_meme`, `supportive_hype`,
 `contrarian_take`, `engager_question`, `sarcastic_dry`, `wholesome`,
 `hot_take`, `roast`, `formal_corporate`, `philosophical`, and
-`coach_motivational`.
+`coach_motivational` — or `"auto"`, which lets the AI pick whichever single
+tone best fits the post and applies it consistently to every reply in the
+batch. Each reply in the response echoes the tone actually used
+(`GeneratedReply.tone`, always a concrete tone, never `"auto"`) — with a
+manually-picked tone this just mirrors the request; with `"auto"` it tells
+the caller which tone the AI chose.
 
 `count` must be between 1 and 3 (default `3`). `maxLength` must be either an
 integer between 50 and 280 characters (default `220`), or the string `"auto"`

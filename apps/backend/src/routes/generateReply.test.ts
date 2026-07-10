@@ -16,8 +16,13 @@ test("validates a generation request", () => {
 test("rejects unsupported tone", () => {
   assert.throws(
     () => validateGenerateRequest({ postText: "Post", tone: "spam", count: 3 }),
-    /tone must be one of/,
+    /tone must be "auto" or one of/,
   );
+});
+
+test("accepts tone: auto", () => {
+  const input = validateGenerateRequest({ postText: "Post", tone: "auto", count: 3 });
+  assert.equal(input.tone, "auto");
 });
 
 test("rejects more than three replies", () => {

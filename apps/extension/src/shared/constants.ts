@@ -27,6 +27,15 @@ export const TONE_LABELS: Record<Tone, string> = {
   coach_motivational: "Coach Motivational",
 };
 
+export const TONE_AUTO_LABEL = "Auto (AI picks)";
+
+// Tone/label lookup that also covers the "auto" sentinel — TONE_LABELS
+// itself stays keyed by the 24 real tones only, matching the backend.
+export function toneLabel(value: Tone | "auto" | string): string {
+  if (value === "auto") return TONE_AUTO_LABEL;
+  return TONE_LABELS[value as Tone] ?? value;
+}
+
 export const DEFAULT_SETTINGS = {
   backendBaseUrl: "http://localhost:3000",
   authToken: "dev-local-token",

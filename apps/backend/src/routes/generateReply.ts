@@ -8,9 +8,10 @@ import {
   TONES,
   type GenerateReplyRequest,
   type GenerateReplyResponse,
+  type Tone,
 } from "../types/index.js";
 
-type GenerateFn = (input: GenerateReplyRequest) => Promise<string[]>;
+type GenerateFn = (input: GenerateReplyRequest) => Promise<{ texts: string[]; tone: Tone }>;
 
 function optionalString(value: unknown, maxLength: number): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
@@ -34,8 +35,11 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
   const body = value as Record<string, unknown>;
   const postText = optionalString(body.postText, 10_000);
   if (!postText) throw new Error("postText is required and must be at most 10,000 characters.");
-  if (typeof body.tone !== "string" || !TONES.includes(body.tone as never)) {
-    throw new Error(`tone must be one of: ${TONES.join(", ")}.`);
+  if (
+    typeof body.tone !== "string" ||
+    (body.tone !== "auto" && !TONES.includes(body.tone as never))
+  ) {
+    throw new Error(`tone must be "auto" or one of: ${TONES.join(", ")}.`);
   }
 
   const count = body.count === undefined ? 3 : body.count;
@@ -131,12 +135,12 @@ export async function generateReplyRoute(
   }
 
   try {
-    const texts = await generate(input);
+    const { texts, tone } = await generate(input);
     const payload: GenerateReplyResponse = {
       replies: texts.map((text, index) => ({
         id: `reply_${index + 1}`,
         text,
-        tone: input.tone,
+        tone,
       })),
       usage: { remainingToday: usage.remainingToday, plan: user.plan },
     };

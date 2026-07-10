@@ -1,6 +1,8 @@
 import { buildUserPrompt, SYSTEM_PROMPT } from "./promptBuilder.js";
 import { sanitizeReply } from "./safety.js";
-import type { GenerateReplyRequest } from "../types/index.js";
+import { TONES, type GenerateReplyRequest, type Tone } from "../types/index.js";
+
+type ParsedReplies = { texts: string[]; tone: Tone };
 
 type ResponsesApiContent = { type?: string; text?: string };
 type ResponsesApiOutput = { type?: string; content?: ResponsesApiContent[] };
@@ -36,7 +38,11 @@ function extractOutputText(result: ResponsesApiResult): string {
   throw new ProviderError("AI provider returned no text output.");
 }
 
-function parseReplies(raw: string, expectedCount: number): string[] {
+function parseReplies(
+  raw: string,
+  expectedCount: number,
+  requestedTone: GenerateReplyRequest["tone"],
+): ParsedReplies {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -65,12 +71,24 @@ function parseReplies(raw: string, expectedCount: number): string[] {
   if (texts.length !== expectedCount || new Set(texts).size !== texts.length) {
     throw new ProviderError("AI provider returned incomplete or duplicate replies.");
   }
-  return texts;
+
+  // Manual tone: trust the request, no need for the model to echo it back.
+  // Auto: the model was asked to pick and report one — fall back to a safe
+  // default if it omitted the field or hallucinated something off-list.
+  let tone: Tone;
+  if (requestedTone === "auto") {
+    const rawTone = (parsed as { tone?: unknown }).tone;
+    tone = typeof rawTone === "string" && TONES.includes(rawTone as Tone) ? (rawTone as Tone) : "smart";
+  } else {
+    tone = requestedTone;
+  }
+
+  return { texts, tone };
 }
 
 export async function generateWithOpenAI(
   input: GenerateReplyRequest,
-): Promise<string[]> {
+): Promise<ParsedReplies> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new ProviderError("OPENAI_API_KEY is not configured.", 503);
@@ -120,12 +138,12 @@ export async function generateWithOpenAI(
     );
   }
 
-  return parseReplies(extractOutputText(result), input.count);
+  return parseReplies(extractOutputText(result), input.count, input.tone);
 }
 
 export async function generateWithOpenRouter(
   input: GenerateReplyRequest,
-): Promise<string[]> {
+): Promise<ParsedReplies> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new ProviderError("OPENROUTER_API_KEY is not configured.", 503);
@@ -172,6 +190,11 @@ export async function generateWithOpenRouter(
           schema: {
             type: "object",
             properties: {
+              // Only present (and required) when the caller asked for
+              // tone: "auto" — a manually-picked tone doesn't need the
+              // model to echo it back, so the schema for that path stays
+              // exactly as it was before this feature existed.
+              ...(input.tone === "auto" ? { tone: { type: "string", enum: TONES } } : {}),
               replies: {
                 type: "array",
                 minItems: input.count,
@@ -189,7 +212,7 @@ export async function generateWithOpenRouter(
                 },
               },
             },
-            required: ["replies"],
+            required: input.tone === "auto" ? ["tone", "replies"] : ["replies"],
             additionalProperties: false,
           },
         },
@@ -208,10 +231,10 @@ export async function generateWithOpenRouter(
 
   const content = result.choices?.[0]?.message?.content;
   if (!content) throw new ProviderError("OpenRouter returned no text output.");
-  return parseReplies(content, input.count);
+  return parseReplies(content, input.count, input.tone);
 }
 
-export async function generateReplies(input: GenerateReplyRequest): Promise<string[]> {
+export async function generateReplies(input: GenerateReplyRequest): Promise<ParsedReplies> {
   const provider = process.env.AI_DEFAULT_PROVIDER || "openrouter";
   if (provider === "openrouter") return generateWithOpenRouter(input);
   if (provider === "openai") return generateWithOpenAI(input);

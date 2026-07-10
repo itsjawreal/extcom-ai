@@ -34,7 +34,10 @@ export type GenerateReplyRequest = {
   postUrl?: string;
   visibleThreadText?: string[];
   imageUrl?: string;
-  tone: Tone;
+  // "auto" means the AI picks whichever single tone best fits this post,
+  // applied consistently across every reply in the batch — the resolved
+  // tone (never "auto") is echoed back per-reply in GeneratedReply.tone.
+  tone: Tone | "auto";
   extraInstruction?: string;
   count: number;
   // "auto" means no fixed character target — the AI picks whatever length

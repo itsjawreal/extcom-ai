@@ -1,4 +1,4 @@
-import { TONE_LABELS } from "../shared/constants";
+import { TONE_AUTO_LABEL, TONE_LABELS } from "../shared/constants";
 import type { ConnectionStatus, ExtensionSettings, Tone, UsageStats } from "../shared/types";
 
 type RuntimeResponse = {
@@ -135,6 +135,11 @@ function renderConnection(state: "unknown" | "connected" | "error", title: strin
   connectionDetail.textContent = detail;
 }
 
+const autoToneOption = document.createElement("option");
+autoToneOption.value = "auto";
+autoToneOption.textContent = TONE_AUTO_LABEL;
+toneSelect.append(autoToneOption);
+
 for (const [value, label] of Object.entries(TONE_LABELS)) {
   const option = document.createElement("option");
   option.value = value;
@@ -210,7 +215,7 @@ async function saveSettings(): Promise<void> {
     const settings: ExtensionSettings = {
       backendBaseUrl: backendUrlInput.value.trim(),
       authToken: authTokenInput.value.trim(),
-      toneDefault: toneSelect.value as Tone,
+      toneDefault: toneSelect.value as Tone | "auto",
       defaultInstruction: instructionInput.value.trim(),
       maxReplyLength: maxLengthMode === "auto" ? "auto" : Number(maxLengthInput.value),
       draftCount,

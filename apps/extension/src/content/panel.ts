@@ -1,5 +1,5 @@
 import { insertReplyIntoComposer } from "./replyComposer";
-import { TONE_LABELS } from "../shared/constants";
+import { TONE_AUTO_LABEL, TONE_LABELS, toneLabel } from "../shared/constants";
 import type {
   ExtractedPostContext,
   GenerateReplyResponse,
@@ -112,7 +112,10 @@ function renderSkeleton(panel: HTMLElement, count: number): void {
   }
 }
 
-function renderUsage(panel: HTMLElement, usage?: GenerateReplyResponse["usage"]): void {
+// resolvedTone is only passed when the request used tone: "auto" — showing
+// which tone the AI actually picked. A manually-picked tone is already
+// visible in the Tone dropdown itself, so it'd be redundant here.
+function renderUsage(panel: HTMLElement, usage?: GenerateReplyResponse["usage"], resolvedTone?: Tone): void {
   const usageNode = panel.querySelector<HTMLElement>("[data-usage]");
   if (!usageNode) return;
   if (!usage) {
@@ -120,7 +123,8 @@ function renderUsage(panel: HTMLElement, usage?: GenerateReplyResponse["usage"])
     return;
   }
   const remaining = usage.remainingToday === null ? "?" : String(usage.remainingToday);
-  usageNode.textContent = `Plan ${usage.plan} • ${remaining} left today`;
+  const toneSuffix = resolvedTone ? ` • AI picked: ${toneLabel(resolvedTone)}` : "";
+  usageNode.textContent = `Plan ${usage.plan} • ${remaining} left today${toneSuffix}`;
 }
 
 type PanelReply = { reply: GeneratedReply; historyId?: string };
@@ -232,7 +236,7 @@ async function regenerateSlot(
   setControlsDisabled(panel, true);
   try {
     const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
-    const tone = (toneSelect?.value || undefined) as Tone | undefined;
+    const tone = (toneSelect?.value || undefined) as Tone | "auto" | undefined;
     const useEmoji = readUseEmoji(panel);
     const maxLength = readMaxLength(panel);
     const readImages = readReadImages(panel);
@@ -250,7 +254,7 @@ async function regenerateSlot(
     const updated = items.slice();
     updated[index] = { reply: newReply, historyId: response.historyId };
     renderReplies(panel, updated, context);
-    renderUsage(panel, response.data.usage);
+    renderUsage(panel, response.data.usage, tone === "auto" ? newReply.tone : undefined);
     showStatus(panel, "Draft regenerated.");
   } catch (error) {
     card?.classList.remove("eks-reply-option-loading");
@@ -333,6 +337,11 @@ function renderContext(panel: HTMLElement, input: PanelInput): void {
 }
 
 function populateToneSelect(select: HTMLSelectElement): void {
+  const autoOption = document.createElement("option");
+  autoOption.value = "auto";
+  autoOption.textContent = TONE_AUTO_LABEL;
+  select.append(autoOption);
+
   for (const [value, label] of Object.entries(TONE_LABELS)) {
     const option = document.createElement("option");
     option.value = value;
@@ -349,7 +358,7 @@ function populateToneSelect(select: HTMLSelectElement): void {
 function syncToneTrigger(panel: HTMLElement): void {
   const select = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
   const label = panel.querySelector<HTMLElement>("[data-tone-trigger-label]");
-  if (select && label) label.textContent = TONE_LABELS[select.value as Tone] ?? select.value;
+  if (select && label) label.textContent = toneLabel(select.value);
 }
 
 function closeToneList(): void {
@@ -381,6 +390,13 @@ function openToneList(panel: HTMLElement, trigger: HTMLButtonElement, select: HT
   const list = document.createElement("ul");
   list.className = "eks-select-list";
   list.setAttribute("role", "listbox");
+
+  const autoItem = document.createElement("li");
+  autoItem.setAttribute("role", "option");
+  autoItem.dataset.value = "auto";
+  autoItem.textContent = TONE_AUTO_LABEL;
+  if (select.value === "auto") autoItem.setAttribute("aria-selected", "true");
+  list.append(autoItem);
 
   for (const [value, label] of Object.entries(TONE_LABELS)) {
     const item = document.createElement("li");
@@ -486,7 +502,7 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
     const response = await chrome.runtime.sendMessage({ type: "GET_SETTINGS" }) as {
       ok: boolean;
       settings?: {
-        toneDefault?: Tone;
+        toneDefault?: Tone | "auto";
         draftCount?: number;
         maxReplyLength?: number | "auto";
         useEmoji?: boolean;
@@ -537,7 +553,7 @@ async function generateRepliesForPanel(
     // defaults when untouched — the extra instruction is added on top of the
     // standing instruction, not a replacement for it, see serviceWorker.ts).
     const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
-    const tone = (toneSelect?.value || undefined) as Tone | undefined;
+    const tone = (toneSelect?.value || undefined) as Tone | "auto" | undefined;
     const count = readDraftCount(panel);
     const useEmoji = readUseEmoji(panel);
     const maxLength = readMaxLength(panel);
@@ -548,7 +564,7 @@ async function generateRepliesForPanel(
       input: { ...context, tone, count, useEmoji, maxLength, readImages, extraInstruction },
     });
     renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context);
-    renderUsage(panel, response.data.usage);
+    renderUsage(panel, response.data.usage, tone === "auto" ? response.data.replies[0]?.tone : undefined);
     showStatus(panel, "Replies generated.");
   } catch (error) {
     renderReplies(panel, [], context);
