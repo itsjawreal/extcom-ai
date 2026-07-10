@@ -26,3 +26,26 @@ test("rejects more than three replies", () => {
     /count must be an integer/,
   );
 });
+
+test("accepts maxLength: auto", () => {
+  const input = validateGenerateRequest({
+    postText: "Post",
+    tone: "smart",
+    maxLength: "auto",
+  });
+  assert.equal(input.maxLength, "auto");
+});
+
+test("rejects an invalid maxLength string", () => {
+  assert.throws(
+    () => validateGenerateRequest({ postText: "Post", tone: "smart", maxLength: "Auto" }),
+    /maxLength must be "auto" or an integer/,
+  );
+});
+
+test("rejects maxLength outside the 50-280 range", () => {
+  assert.throws(
+    () => validateGenerateRequest({ postText: "Post", tone: "smart", maxLength: 30 }),
+    /maxLength must be "auto" or an integer/,
+  );
+});
