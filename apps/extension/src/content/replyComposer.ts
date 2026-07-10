@@ -210,8 +210,26 @@ async function insertTextIntoComposer(composer: HTMLElement, text: string): Prom
   const editable = resolveEditableTarget(composer);
   primeComposer(editable);
 
-  const currentText = getComposerText(editable);
-  setSelection(editable, currentText ? "all" : "end");
+  // Clear any existing content as its own explicit step, before attempting
+  // any insertion method. This used to only happen inside the
+  // execCommand("insertText") fallback below — the paste path never
+  // cleared, relying on "select all, then paste" to replace in one move,
+  // which X's controlled editor doesn't reliably honor for a synthetic
+  // paste event. Since the panel no longer auto-closes after one Insert, a
+  // second Insert into a composer that already held text from an earlier
+  // one was appending instead of replacing — composerContainsText()'s
+  // loose .includes() check even reported that as a false "success",
+  // since "old text" + "new text" still contains "new text" as a substring.
+  if (getComposerText(editable).length > 0) {
+    setSelection(editable, "all");
+    try {
+      document.execCommand("delete");
+    } catch {
+      // Best-effort — insertion is still attempted below either way.
+    }
+  }
+
+  setSelection(editable, "end");
 
   if (await tryPasteIntoComposer(editable, text)) {
     editable.focus();
@@ -220,10 +238,6 @@ async function insertTextIntoComposer(composer: HTMLElement, text: string): Prom
 
   let inserted = false;
   try {
-    if (currentText) {
-      document.execCommand("delete");
-      setSelection(editable, "end");
-    }
     inserted = document.execCommand("insertText", false, text);
   } catch {
     inserted = false;
