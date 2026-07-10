@@ -1,5 +1,9 @@
 # Backend API
 
+See [PROMPT.md](PROMPT.md) for the exact system prompt, user prompt
+template, and tone guidance the backend sends to the AI provider on every
+`/v1/generate-reply` call.
+
 ## `GET /health`
 
 Returns `200` with `{ "ok": true }`.

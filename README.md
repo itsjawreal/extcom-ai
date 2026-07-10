@@ -121,7 +121,9 @@ Then in Chrome (or any Chromium browser):
 2. In Settings → **Default** tab: enter your default tone (24 available,
    from `degen` to `roast` to `philosophical` — see `docs/API.md` for the
    full list), standing instruction, default reply length, draft count, and
-   whether to use emoji by default.
+   whether to use emoji by default. See `docs/PROMPT.md` for exactly what's
+   sent to the AI on every generation — none of it is configurable from the
+   extension.
 3. In Settings → **Advanced** tab: enter your backend URL (e.g.
    `https://extcom.example.com`) and the access token you put in
    `AUTH_TOKENS`, then **Save**. Chrome will ask to allow access to your
