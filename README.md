@@ -3,7 +3,8 @@
 A self-hosted, human-in-the-loop AI reply copilot for X/Twitter. A Chrome
 extension adds an **✦ AI Reply** button to posts; your own backend generates
 reply drafts with the AI provider key **you** control; you pick a draft, it is
-inserted into the reply composer, and **you always press Post yourself**.
+inserted into the reply composer (or a Quote Tweet's comment box), and **you
+always press Post yourself**.
 
 - No SaaS, no signup, no telemetry: deploy the backend on your own VPS/PaaS.
 - Your AI API key (OpenRouter or OpenAI) never leaves your server.
@@ -131,8 +132,9 @@ Then in Chrome (or any Chromium browser):
 4. Open [x.com](https://x.com), find a post, click **✦ AI Reply**. Tone,
    draft count, reply length, and emoji can all be overridden per-generation
    right in the on-page panel — it just falls back to your popup defaults
-   when left untouched. Generate → Insert. Edit the draft if you like, then
-   press Post yourself.
+   when left untouched. Generate, then either **Insert** (fills the reply
+   composer) or **Quote** (opens Repost → Quote and fills that comment box
+   instead). Edit the draft if you like, then press Post yourself.
 
 ### Optional: let it read images in posts
 
