@@ -1,6 +1,8 @@
 import { insertViaPageBridge } from "./pageBridge";
 
 const REPLY_CONTROL_SELECTOR = '[data-testid="reply"]';
+const RETWEET_CONTROL_SELECTOR = '[data-testid="retweet"]';
+const QUOTE_MENU_ITEM_TEXT = /quote/i;
 const COMPOSER_SELECTOR = [
   '[data-testid="tweetTextarea_0"]',
   '[data-testid="tweetTextarea_1"]',
@@ -84,6 +86,28 @@ function findExistingInlineComposer(post: HTMLElement): HTMLElement | null {
 
   if (sorted[0]?.composer) return sorted[0].composer;
   return null;
+}
+
+function findExistingDialogComposer(): HTMLElement | null {
+  const composers = getVisibleComposers().filter((composer) => composer.closest('[role="dialog"]'));
+  return composers.at(-1) || null;
+}
+
+// X doesn't expose a stable testid for the "Quote" menu item, so this leans
+// on the label text first (works for the English UI we've verified against)
+// and falls back to position — the repost menu is Repost then Quote, in
+// that order — for other locales or markup changes.
+function findQuoteMenuItem(): HTMLElement | null {
+  const scoped = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="Dropdown"] [role="menuitem"]'))
+    .filter((item) => isVisible(item));
+  const candidates = scoped.length > 0
+    ? scoped
+    : Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).filter((item) => isVisible(item));
+
+  const byText = candidates.find((item) => QUOTE_MENU_ITEM_TEXT.test(item.textContent || ""));
+  if (byText) return byText;
+
+  return candidates.length >= 2 ? candidates[1] || null : null;
 }
 
 function resolveEditableTarget(composer: HTMLElement): HTMLElement {
@@ -267,6 +291,69 @@ export async function insertReplyIntoComposer(post: HTMLElement, text: string): 
   if (!composerContainsText(finalEditable, text)) {
     const reinserted = await insertTextIntoComposer(finalComposer, text);
     if (!reinserted) throw new Error("Reply composer could not be filled.");
+    resolveEditableTarget(finalComposer).focus();
+    return;
+  }
+
+  finalEditable.focus();
+}
+
+export async function insertQuoteIntoComposer(post: HTMLElement, text: string): Promise<void> {
+  // A Quote modal already open (e.g. the user opened it manually) reuses
+  // that dialog instead of opening a second one on top of it.
+  let composer = findExistingDialogComposer();
+  let openedFreshModal = false;
+
+  if (!composer) {
+    const retweetButton = post.querySelector<HTMLElement>(RETWEET_CONTROL_SELECTOR);
+    if (!retweetButton) throw new Error("Quote button is not available on this post.");
+
+    retweetButton.click();
+
+    let quoteMenuItem: HTMLElement | null = null;
+    for (let attempt = 0; !quoteMenuItem && attempt < 10; attempt += 1) {
+      await wait(100);
+      quoteMenuItem = findQuoteMenuItem();
+    }
+    if (!quoteMenuItem) {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      throw new Error("Quote option did not appear.");
+    }
+    quoteMenuItem.click();
+    openedFreshModal = true;
+
+    composer = null;
+    for (let attempt = 0; !composer && attempt < 16; attempt += 1) {
+      await wait(150);
+      composer = findExistingDialogComposer();
+    }
+  }
+
+  if (!composer) throw new Error("Quote composer did not open.");
+
+  // Same settling delay as the reply modal — entry animation and the quoted
+  // post card mounting can swap the composer node right after it opens.
+  await wait(openedFreshModal ? 400 : 200);
+  composer = findExistingDialogComposer() || composer;
+
+  let inserted = await insertTextIntoComposer(composer, text);
+  if (!inserted) {
+    await wait(250);
+    const retryComposer = findExistingDialogComposer() || composer;
+    inserted = await insertTextIntoComposer(retryComposer, text);
+    composer = retryComposer;
+  }
+
+  if (!inserted) {
+    throw new Error("Quote composer could not be filled.");
+  }
+
+  await wait(50);
+  const finalComposer = findExistingDialogComposer() || composer;
+  const finalEditable = resolveEditableTarget(finalComposer);
+  if (!composerContainsText(finalEditable, text)) {
+    const reinserted = await insertTextIntoComposer(finalComposer, text);
+    if (!reinserted) throw new Error("Quote composer could not be filled.");
     resolveEditableTarget(finalComposer).focus();
     return;
   }

@@ -1,4 +1,4 @@
-import { insertReplyIntoComposer } from "./replyComposer";
+import { insertQuoteIntoComposer, insertReplyIntoComposer } from "./replyComposer";
 import { TONE_AUTO_LABEL, TONE_LABELS, toneLabel } from "../shared/constants";
 import type {
   ExtractedPostContext,
@@ -133,6 +133,53 @@ function toPanelReplies(replies: GeneratedReply[], historyId?: string): PanelRep
   return replies.map((reply) => ({ reply, historyId }));
 }
 
+async function performInsert(
+  panel: HTMLElement,
+  kind: "reply" | "quote",
+  reply: GeneratedReply,
+  historyId?: string,
+): Promise<void> {
+  if (!activePost) return;
+
+  const filledFailureMessage = kind === "reply"
+    ? "Reply composer could not be filled."
+    : "Quote composer could not be filled.";
+
+  try {
+    if (kind === "reply") {
+      await insertReplyIntoComposer(activePost, reply.text);
+    } else {
+      await insertQuoteIntoComposer(activePost, reply.text);
+    }
+    if (historyId) {
+      // Fire-and-forget: don't make Insert feel slow waiting on this.
+      void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId });
+    }
+    closePanel();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Composer insertion failed.";
+
+    if (message === filledFailureMessage) {
+      try {
+        await navigator.clipboard.writeText(reply.text);
+        showStatus(
+          panel,
+          "Composer opened, but X blocked auto-insert. Reply copied. Paste with Ctrl+V.",
+        );
+        return;
+      } catch {
+        showStatus(
+          panel,
+          "Composer opened, but X blocked auto-insert and clipboard copy failed.",
+        );
+        return;
+      }
+    }
+
+    showStatus(panel, message);
+  }
+}
+
 function renderReplies(panel: HTMLElement, items: PanelReply[], context?: ExtractedPostContext): void {
   const list = panel.querySelector<HTMLElement>("[data-reply-list]");
   if (!list) return;
@@ -175,47 +222,19 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
       if (context) void regenerateSlot(panel, index, items, context);
     });
 
+    const quoteButton = document.createElement("button");
+    quoteButton.type = "button";
+    quoteButton.textContent = "Quote";
+    quoteButton.setAttribute("aria-label", "Insert this draft into a Quote Tweet");
+    quoteButton.title = "Insert into Quote Tweet";
+    quoteButton.addEventListener("click", () => void performInsert(panel, "quote", reply, historyId));
+
     const insertButton = document.createElement("button");
     insertButton.type = "button";
     insertButton.textContent = "Insert";
-    insertButton.addEventListener("click", async () => {
-      if (!activePost) return;
-      try {
-        await insertReplyIntoComposer(activePost, reply.text);
-        if (historyId) {
-          // Fire-and-forget: don't make Insert feel slow waiting on this.
-          void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId });
-        }
-        closePanel();
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Composer insertion failed.";
+    insertButton.addEventListener("click", () => void performInsert(panel, "reply", reply, historyId));
 
-        if (message === "Reply composer could not be filled.") {
-          try {
-            await navigator.clipboard.writeText(reply.text);
-            showStatus(
-              panel,
-              "Composer opened, but X blocked auto-insert. Reply copied. Paste with Ctrl+V.",
-            );
-            return;
-          } catch {
-            showStatus(
-              panel,
-              "Composer opened, but X blocked auto-insert and clipboard copy failed.",
-            );
-            return;
-          }
-        }
-
-        showStatus(
-          panel,
-          message,
-        );
-      }
-    });
-
-    actions.append(copyButton, regenerateButton, insertButton);
+    actions.append(copyButton, regenerateButton, quoteButton, insertButton);
     item.append(text, charCount, actions);
     list.append(item);
   });
