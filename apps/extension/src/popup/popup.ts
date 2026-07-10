@@ -184,6 +184,7 @@ async function loadSettings(): Promise<void> {
   // its own default) even while Auto is active and the slider is disabled.
   if (response.settings.maxReplyLength !== "auto") {
     maxLengthInput.value = String(response.settings.maxReplyLength);
+    maxLengthValue.textContent = maxLengthInput.value;
   }
   setMaxLengthMode(response.settings.maxReplyLength === "auto" ? "auto" : "manual");
   setDraftCount(response.settings.draftCount);

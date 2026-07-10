@@ -467,7 +467,9 @@ function setMaxLength(panel: HTMLElement, value: number | "auto"): void {
     return;
   }
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
+  const display = panel.querySelector<HTMLElement>("[data-max-length-value]");
   if (input) input.value = String(value);
+  if (display) display.textContent = String(value);
   setLengthMode(panel, "manual");
 }
 
