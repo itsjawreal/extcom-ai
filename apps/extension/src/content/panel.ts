@@ -63,6 +63,7 @@ function panelMaxHeightCapPx(): number {
 function animatePanelHeight(panel: HTMLElement, mutate: () => void): void {
   const header = panel.querySelector<HTMLElement>("header");
   const body = panel.querySelector<HTMLElement>(".eks-panel-body");
+  const footer = panel.querySelector<HTMLElement>(".eks-panel-footer");
   if (!header || !body) {
     mutate();
     return;
@@ -74,7 +75,7 @@ function animatePanelHeight(panel: HTMLElement, mutate: () => void): void {
   mutate();
 
   const targetHeight = Math.min(
-    header.getBoundingClientRect().height + body.scrollHeight,
+    header.getBoundingClientRect().height + body.scrollHeight + (footer?.getBoundingClientRect().height ?? 0),
     panelMaxHeightCapPx(),
   );
 
@@ -796,15 +797,15 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
           <textarea data-extra-instruction rows="2" placeholder="e.g. mention the airdrop"></textarea>
         </details>
       </div>
-      <div class="eks-panel-toolbar">
-        <span class="eks-panel-usage" data-usage></span>
-      </div>
       <div data-reply-list></div>
       <p class="eks-panel-note">Reply posting stays manual. Extension never clicks X/Twitter's final publish button.</p>
     </div>
     <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
     </div>
-    <button type="button" class="eks-generate-fab" data-generate-button>Generate</button>
+    <footer class="eks-panel-footer">
+      <span class="eks-panel-usage" data-usage></span>
+      <button type="button" class="eks-generate-fab" data-generate-button>Generate</button>
+    </footer>
   `;
 
   renderContext(panel, input);

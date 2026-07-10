@@ -102,25 +102,36 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  /* Extra bottom padding so scrolled content doesn't sit underneath the
-     floating Generate button (see .eks-generate-fab). */
-  padding: 14px 16px 62px;
+  padding: 14px 16px;
 }
 
-/* Floats fixed at the bottom-right of the panel, like the header is fixed
-   at the top — stays in place while .eks-panel-body scrolls underneath it. */
+/* A real footer bar — solid background + border-top, same treatment as
+   the header — instead of a bare floating button with nothing behind it
+   (which let .eks-panel-body's scrollbar track show through/behind it).
+   Fixed at the bottom the same way header is fixed at the top; left side
+   is free for something else later (e.g. usage text), Generate stays
+   docked right. */
+.eks-panel-footer {
+  align-items: center;
+  background: rgb(0, 0, 0);
+  border-top: 1px solid rgb(47, 51, 54);
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+}
+
 .eks-generate-fab {
   background: rgb(29, 155, 240);
   border: 1px solid rgb(29, 155, 240);
   border-radius: 9999px;
-  bottom: 14px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
   color: white;
   cursor: pointer;
+  flex-shrink: 0;
   font-weight: 600;
+  margin-left: auto;
   padding: 9px 18px;
-  position: absolute;
-  right: 16px;
   width: auto;
 }
 
