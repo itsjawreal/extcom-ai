@@ -145,6 +145,8 @@ Then in Chrome (or any Chromium browser):
    the reply composer). Edit the draft if you like, then press Post
    yourself.
 
+<img src="docs/assets/ai-reply-button-preview.svg" alt="Mockup showing the AI Reply button placed in a post's action row, next to Reply, Retweet, Like, and Bookmark" width="560">
+
 ### Optional: let it read images in posts
 
 The panel can attach every image in the post (up to 4, X's own per-post max)

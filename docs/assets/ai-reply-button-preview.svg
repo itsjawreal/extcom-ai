@@ -1,0 +1,60 @@
+<svg width="560" height="250" viewBox="0 0 560 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mockup of a post with the AI Reply button in the action row">
+  <title>Where the AI Reply button appears</title>
+
+  <!-- Card -->
+  <rect x="1" y="1" width="558" height="158" rx="16" fill="#000000" stroke="#2f3336" stroke-width="1"/>
+
+  <!-- Avatar (skeleton) -->
+  <circle cx="42" cy="42" r="20" fill="#2f3336"/>
+
+  <!-- Name / handle / badge / timestamp (all fake skeleton bars, no real text) -->
+  <rect x="76" y="30" width="88" height="10" rx="5" fill="#3a3d40"/>
+  <circle cx="172" cy="35" r="7" fill="#1d3b52"/>
+  <path d="M168.6 35.1l2.4 2.4 4.6-4.9" stroke="#7cc4f2" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="185" y="29" width="76" height="14" rx="7" fill="#171a1d" stroke="#2f3336"/>
+  <rect x="76" y="48" width="42" height="8" rx="4" fill="#26292c"/>
+
+  <!-- Tweet text (skeleton lines) -->
+  <rect x="24" y="76" width="420" height="10" rx="5" fill="#2f3336"/>
+  <rect x="24" y="94" width="290" height="10" rx="5" fill="#2f3336"/>
+
+  <!-- Action row: simple minimal placeholder glyphs, not real X icons -->
+  <g stroke="#6e767d" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- reply (speech bubble) -->
+    <path d="M20 122h20a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4h-11l-6 6v-6h-3a4 4 0 0 1-4-4v-10a4 4 0 0 1 4-4z"/>
+    <!-- retweet (two opposing arrows) -->
+    <path d="M96 124h32"/>
+    <path d="M120 118l8 6-8 6"/>
+    <path d="M140 138h-32"/>
+    <path d="M116 144l-8-6 8-6"/>
+    <!-- like (heart) -->
+    <path d="M188 142c-9-6-15-11-15-18a7 7 0 0 1 13-3.5 7 7 0 0 1 13 3.5c0 7-6 12-15 18z"/>
+    <!-- views (small bar chart) -->
+    <rect x="252" y="132" width="4" height="8" fill="#6e767d" stroke="none"/>
+    <rect x="259" y="126" width="4" height="14" fill="#6e767d" stroke="none"/>
+    <rect x="266" y="120" width="4" height="20" fill="#6e767d" stroke="none"/>
+    <!-- bookmark -->
+    <path d="M304 120h16v22l-8-6-8 6z"/>
+    <!-- share (arrow out of box) -->
+    <path d="M340 138v-14a4 4 0 0 1 4-4h14M348 128l14-14M354 114h8v8"/>
+  </g>
+
+  <!-- AI Reply button: the one real, non-skeleton element -->
+  <rect x="392" y="118" width="140" height="26" rx="13" fill="#ab9ff2"/>
+  <text x="462" y="135" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="13" font-weight="600" fill="#0a0a0a" text-anchor="middle">✦ AI Reply</text>
+
+  <!-- Callout highlight ring around the button -->
+  <rect x="386" y="112" width="152" height="38" rx="16" fill="none" stroke="#ab9ff2" stroke-width="1.5" stroke-dasharray="4 3"/>
+
+  <!-- Arrow pointing up from the caption toward the button -->
+  <line x1="440" y1="182" x2="456" y2="156" stroke="#ab9ff2" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <path d="M446 165 L457 156 L455 170" fill="none" stroke="#ab9ff2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Caption block, left-aligned so it never overflows regardless of length -->
+  <text x="24" y="200" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="13" font-weight="600" fill="#ab9ff2">Added automatically by the extension</text>
+  <text x="24" y="220" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="12" fill="#8b98a5">Shows up next to Reply, Retweet, Like &amp; Bookmark on every post.</text>
+  <text x="24" y="238" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="12" fill="#8b98a5">Click it to generate reply drafts.</text>
+
+  <!-- Footer note: this is a mockup, not a real post -->
+  <text x="392" y="238" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="10" fill="#536471" text-anchor="end">Mockup, not a real post</text>
+</svg>
