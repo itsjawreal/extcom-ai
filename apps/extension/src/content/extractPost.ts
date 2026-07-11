@@ -5,10 +5,14 @@ const POST_TEXT_SELECTOR = '[data-testid="tweetText"]';
 // Matches a status permalink path like /someuser/status/1234567890.
 const STATUS_PAGE_PATTERN = /^\/[^/]+\/status\/\d+/;
 const MAX_THREAD_CONTEXT_ITEMS = 5; // Mirrors the backend's own cap.
-// Kept shallow on purpose: this is a proximity guess, not a verified parent
-// link (X's DOM has no actual parent-tweet-id we can read), so the risk of
-// pulling in an unrelated sibling reply grows with each extra level.
-const MAX_NEAREST_ANCESTORS = 2;
+// Kept to 1 on purpose: this is a proximity guess, not a verified parent
+// link (X's DOM has no actual parent-tweet-id we can read). Live testing
+// with 2 confirmed the risk is real, not theoretical — on an ordinary
+// timeline, the 2nd-nearest article is frequently just an unrelated feed
+// item (not a real ancestor), and it visibly hijacked reply generation
+// (all 3 drafts followed the unrelated noise item, ignoring the actual
+// parent that was also captured alongside it).
+const MAX_NEAREST_ANCESTORS = 1;
 
 function cleanText(value: string | null | undefined): string | undefined {
   const cleaned = value?.replace(/\s+/g, " ").trim();
