@@ -118,23 +118,30 @@ Then in Chrome (or any Chromium browser):
 
 ## 3. Connect them
 
-1. Click the **Extcom AI Reply** icon in the toolbar. The popup opens to a
-   Stats view — connection status, total generations, and recent history
-   with a ↗ link back to each inserted post. Click the gear (⚙) for
-   Settings, which also has a **Clear history** button.
-2. In Settings → **Default** tab: enter your default tone (24 available,
-   from `degen` to `roast` to `philosophical`, plus **Auto** which lets the
-   AI pick whichever tone best fits each post — see `docs/API.md` for the
-   full list), standing instruction, default reply length (a fixed
-   character count, or **Auto** to let the AI pick a natural length capped
-   at 280 chars), draft count, and whether to use emoji by default. See
-   `docs/PROMPT.md` for exactly what's sent to the AI on every generation —
-   none of it is configurable from the extension.
-3. In Settings → **Advanced** tab: enter your backend URL (e.g.
+1. Click the **Extcom AI Reply** icon in the toolbar. The popup opens to
+   **Home** — connection status, total generations, and total drafts
+   inserted. A bottom nav switches between **Home**, **History**, **Tone**,
+   and **Advanced**.
+2. **History** tab: every generation, filterable by All / Reply / Quote /
+   Not inserted, each entry with a ↗ link back to the post it was inserted
+   into.
+3. **Tone** tab: default tone (24 available, from `degen` to `roast` to
+   `philosophical`, plus **Auto** which lets the AI pick whichever tone
+   best fits each post — see `docs/API.md` for the full list, pin up to 5
+   as quick-pick chips), standing instruction, default reply length (a
+   fixed character count, or **Auto** to let the AI pick a natural length
+   capped at 280 chars), draft count, and whether to use emoji / read
+   images by default. See `docs/PROMPT.md` for exactly what's sent to the
+   AI on every generation — none of it is configurable from the extension.
+4. **Advanced** tab: enter your backend URL (e.g.
    `https://extcom.example.com`) and the access token you put in
    `AUTH_TOKENS`, then **Save**. Chrome will ask to allow access to your
-   backend's domain — accept it.
-4. Open [x.com](https://x.com), find a post, click **✦ AI Reply**. Tone,
+   backend's domain — accept it. Also has **Test connection** and
+   **Clear history**.
+
+<img src="docs/assets/extentions.png" alt="The four popup tabs: Home (connection status and totals), History (filterable by All/Reply/Quote/Not inserted), Tone (default tone, length, draft count, emoji, read images), and Advanced (backend URL, access token, test connection, clear history)" width="900">
+
+5. Open [x.com](https://x.com), find a post, click **✦ AI Reply**. Tone,
    draft count, reply length, emoji, and a one-off instruction just for this
    reply (added on top of your standing instruction, not a replacement) can
    all be overridden per-generation right in the on-page panel — it just
