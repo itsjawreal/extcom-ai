@@ -56,10 +56,17 @@ function extractArticleText(article: HTMLElement): string | undefined {
 // has no parent-tweet-id we can read), so it can misattribute a sibling
 // reply as an ancestor on a branching thread — kept deliberately shallow
 // (MAX_NEAREST_ANCESTORS) to limit how much that risk compounds.
+//
+// Runs on every page, not just status permalinks: X sometimes injects a
+// "reply shown with its parent" unit directly into the Home/For You
+// timeline (e.g. a reply from someone you follow, shown under the original
+// post) without navigating to a /status/ URL at all. Known trade-off: on an
+// ordinary standalone post in ordinary browsing, the nearest article above
+// is often just an unrelated feed item, not a real parent — there's no
+// reliable signal available to tell the two cases apart, so this can
+// occasionally attach irrelevant context. Watch for that in testing.
 function extractThreadContext(post: HTMLElement): string[] | undefined {
   const seen = new Set<HTMLElement>([post]);
-  const isStatusPage = STATUS_PAGE_PATTERN.test(window.location.pathname);
-  if (!isStatusPage) return undefined;
 
   const ancestors: string[] = [];
   const postTop = post.getBoundingClientRect().top;
@@ -79,8 +86,12 @@ function extractThreadContext(post: HTMLElement): string[] | undefined {
 
   // Also grab the page's topmost tweet as a root-context fallback — helps
   // when the direct parent scrolled out of the DOM (virtualized away) or
-  // wasn't captured above.
-  const topArticle = document.querySelector<HTMLElement>("article");
+  // wasn't captured above. Restricted to status permalinks: that's the only
+  // case where "topmost article on the page" reliably means "the
+  // conversation's root tweet" rather than just whatever's scrolled to the
+  // top of an ordinary feed.
+  const isStatusPage = STATUS_PAGE_PATTERN.test(window.location.pathname);
+  const topArticle = isStatusPage ? document.querySelector<HTMLElement>("article") : null;
   const rootText = topArticle && !seen.has(topArticle) ? extractArticleText(topArticle) : undefined;
 
   const context = rootText ? [rootText, ...ancestors] : ancestors;
