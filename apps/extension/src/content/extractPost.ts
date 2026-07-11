@@ -2,10 +2,13 @@ import type { ExtractedPostContext } from "../shared/types";
 
 const USER_NAME_SELECTOR = '[data-testid="User-Name"]';
 const POST_TEXT_SELECTOR = '[data-testid="tweetText"]';
-const CELL_SELECTOR = '[data-testid="cellInnerDiv"]';
 // Matches a status permalink path like /someuser/status/1234567890.
 const STATUS_PAGE_PATTERN = /^\/[^/]+\/status\/\d+/;
 const MAX_THREAD_CONTEXT_ITEMS = 5; // Mirrors the backend's own cap.
+// Kept shallow on purpose: this is a proximity guess, not a verified parent
+// link (X's DOM has no actual parent-tweet-id we can read), so the risk of
+// pulling in an unrelated sibling reply grows with each extra level.
+const MAX_NEAREST_ANCESTORS = 2;
 
 function cleanText(value: string | null | undefined): string | undefined {
   const cleaned = value?.replace(/\s+/g, " ").trim();
@@ -44,50 +47,44 @@ function extractArticleText(article: HTMLElement): string | undefined {
   return cleanText(article.querySelector<HTMLElement>(POST_TEXT_SELECTOR)?.innerText);
 }
 
-// X groups a reply-to-reply (not reply-to-root) together with the tweet(s)
-// it's replying to inside one shared cellInnerDiv — the connected-looking
-// chain in the UI. A standalone top-level reply gets its own cellInnerDiv
-// with just one <article>. So multiple <article> siblings in the same cell,
-// in DOM order, is a real (if occasionally incomplete) ancestor chain —
-// this only fires for genuinely nested replies, not unrelated timeline posts.
+// X's timeline is a virtualized list: elements are positioned with CSS
+// transforms (translateY), not necessarily inserted into the DOM in visual
+// order. That rules out any DOM-tree heuristic (sibling order, shared
+// containers) for finding "what tweet is this replying to" — the only
+// reliable signal is each article's actual rendered position on screen.
+// This is still just a proximity guess, not a verified parent link (X's DOM
+// has no parent-tweet-id we can read), so it can misattribute a sibling
+// reply as an ancestor on a branching thread — kept deliberately shallow
+// (MAX_NEAREST_ANCESTORS) to limit how much that risk compounds.
 function extractThreadContext(post: HTMLElement): string[] | undefined {
-  const ancestors: string[] = [];
   const seen = new Set<HTMLElement>([post]);
+  const isStatusPage = STATUS_PAGE_PATTERN.test(window.location.pathname);
+  if (!isStatusPage) return undefined;
 
-  const cell = post.closest<HTMLElement>(CELL_SELECTOR);
-  if (cell) {
-    const siblings = Array.from(cell.querySelectorAll<HTMLElement>("article"));
-    const index = siblings.indexOf(post);
-    if (index > 0) {
-      for (const ancestor of siblings.slice(0, index)) {
-        seen.add(ancestor);
-        const text = extractArticleText(ancestor);
-        if (text) ancestors.push(text);
-      }
-    }
+  const ancestors: string[] = [];
+  const postTop = post.getBoundingClientRect().top;
+  const above = Array.from(document.querySelectorAll<HTMLElement>("article"))
+    .filter((el) => el !== post)
+    .map((el) => ({ el, top: el.getBoundingClientRect().top }))
+    .filter((candidate) => candidate.top < postTop)
+    .sort((a, b) => b.top - a.top); // nearest above first
+
+  for (const candidate of above.slice(0, MAX_NEAREST_ANCESTORS)) {
+    seen.add(candidate.el);
+    const text = extractArticleText(candidate.el);
+    // Chronological order (oldest first) so the numbered prompt list reads
+    // top-to-bottom like an actual conversation transcript.
+    if (text) ancestors.unshift(text);
   }
 
-  // On a permalink page, also grab the page's topmost tweet as a root-context
-  // fallback — helps branchy threads where the direct parent isn't grouped
-  // into the same cellInnerDiv as this reply. Skipped on the general
-  // timeline, where the topmost article is just an unrelated post.
-  let rootText: string | undefined;
-  if (STATUS_PAGE_PATTERN.test(window.location.pathname)) {
-    const topArticle = document.querySelector<HTMLElement>("article");
-    if (topArticle && !seen.has(topArticle)) {
-      rootText = extractArticleText(topArticle);
-    }
-  }
+  // Also grab the page's topmost tweet as a root-context fallback — helps
+  // when the direct parent scrolled out of the DOM (virtualized away) or
+  // wasn't captured above.
+  const topArticle = document.querySelector<HTMLElement>("article");
+  const rootText = topArticle && !seen.has(topArticle) ? extractArticleText(topArticle) : undefined;
 
-  // The ancestors immediately preceding the clicked reply are the strongest
-  // signal, so they win the cap over the (weaker-signal) root fallback.
-  const closestAncestors = ancestors.slice(-MAX_THREAD_CONTEXT_ITEMS);
-  const context =
-    rootText && closestAncestors.length < MAX_THREAD_CONTEXT_ITEMS
-      ? [rootText, ...closestAncestors]
-      : closestAncestors;
-
-  return context.length ? context : undefined;
+  const context = rootText ? [rootText, ...ancestors] : ancestors;
+  return context.length ? context.slice(0, MAX_THREAD_CONTEXT_ITEMS) : undefined;
 }
 
 function extractPostUrl(post: HTMLElement): string | undefined {
