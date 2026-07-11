@@ -62,11 +62,17 @@ on `AI_DEFAULT_MODEL`. Smaller/cheaper models tuned for concise chat
 responses (e.g. `google/gemini-2.5-flash-lite`) tend to undershoot even
 with the length guidance; a step up within the same family (e.g.
 `google/gemini-2.5-flash`) has followed it far more reliably in testing.
-Also note: OpenRouter's `response_format: json_schema` (strict mode) this
-backend relies on for reliable parsing isn't supported by every model —
-Anthropic Claude models in particular have failed with a generic
-`"Provider returned error"` in testing, most likely due to the combination
-of strict schema mode and `provider.require_parameters: true`.
+Also note: this backend relies on OpenRouter's `response_format: json_schema`
+(strict mode) for reliable parsing, combined with `provider.
+require_parameters: true` (only route to a provider that supports the exact
+parameters sent). `anthropic/claude-haiku-4.5` failed with a generic
+`"Provider returned error"` in one test even though OpenRouter's own model
+catalog lists it as supporting `structured_outputs` — the exact cause wasn't
+confirmed (could be a specific upstream provider OpenRouter routed to at
+that moment, not a blanket model incompatibility). Check a model's
+`supported_parameters` on [OpenRouter's models page](https://openrouter.ai/models)
+before picking `AI_DEFAULT_MODEL`, and don't assume an error means the model
+itself can't work here.
 
 `useEmoji` is a boolean (default
 `true`); when `false` it's a hard override that beats any emoji habit implied
