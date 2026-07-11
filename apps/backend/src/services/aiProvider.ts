@@ -55,11 +55,18 @@ function extractOutputText(result: ResponsesApiResult): string {
   throw new ProviderError("AI provider returned no text output.");
 }
 
+// Matches promptBuilder.ts's own auto-mode ceiling and the extension's
+// AUTO_REPLY_LENGTH_CEILING — "auto" has no user-picked numeric target, so
+// this is the safety-net limit applied when sanitizing the response.
+const AUTO_MAX_LENGTH_CEILING = 280;
+
 function parseReplies(
   raw: string,
   expectedCount: number,
   requestedTone: GenerateReplyRequest["tone"],
+  maxLength: GenerateReplyRequest["maxLength"],
 ): ParsedReplies {
+  const lengthLimit = maxLength === "auto" ? AUTO_MAX_LENGTH_CEILING : maxLength;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -79,7 +86,7 @@ function parseReplies(
   const texts = replies
     .map((reply) =>
       reply && typeof reply === "object" && "text" in reply
-        ? sanitizeReply(String((reply as { text: unknown }).text))
+        ? sanitizeReply(String((reply as { text: unknown }).text), lengthLimit)
         : "",
     )
     .filter(Boolean)
@@ -160,7 +167,7 @@ export async function generateWithOpenAI(
     );
   }
 
-  return parseReplies(extractOutputText(result), input.count, input.tone);
+  return parseReplies(extractOutputText(result), input.count, input.tone, input.maxLength);
 }
 
 export async function generateWithOpenRouter(
@@ -257,7 +264,7 @@ export async function generateWithOpenRouter(
 
   const content = result.choices?.[0]?.message?.content;
   if (!content) throw new ProviderError("OpenRouter returned no text output.");
-  return parseReplies(content, input.count, input.tone);
+  return parseReplies(content, input.count, input.tone, input.maxLength);
 }
 
 export async function generateReplies(input: GenerateReplyRequest): Promise<ParsedReplies> {

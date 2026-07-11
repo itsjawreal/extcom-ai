@@ -47,10 +47,14 @@ whatever length reads most natural for the tone/post, capped at 280. The
 25,000 ceiling matches X Premium+'s own post limit (Free is 280, Premium is
 4,000); the caller is responsible for picking a value that fits whichever
 plan the X account posting the reply is actually on. Above 280 characters,
-the AI is additionally instructed to structure the reply as short paragraphs
-separated by blank lines instead of one dense block of text. Replies are
-also hard-truncated client-side if a provider ignores the limit (or exceeds
-the 280 ceiling in `"auto"` mode). `useEmoji` is a boolean (default
+the AI is additionally instructed that it isn't restricted to typical
+short-tweet brevity and to structure the reply as short paragraphs separated
+by blank lines instead of one dense block of text. If a provider ignores the
+limit anyway, the backend truncates the response server-side to the actual
+requested `maxLength` (or the 280 ceiling in `"auto"` mode) — ending on a
+complete sentence within that limit when one fits, otherwise a word boundary
+with a trailing `…`. The extension additionally re-applies this same
+safety net client-side. `useEmoji` is a boolean (default
 `true`); when `false` it's a hard override that beats any emoji habit implied
 by the selected tone. `imageUrls` is optional (array of `http(s)://` URLs,
 max 2000 chars each, at most 4 items — X's own per-post max) — when present,

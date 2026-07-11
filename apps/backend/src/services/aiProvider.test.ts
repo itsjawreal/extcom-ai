@@ -14,6 +14,7 @@ test("parses and sanitizes distinct replies", () => {
     JSON.stringify({ replies: [{ text: " first   reply " }, { text: "second reply" }] }),
     2,
     "smart",
+    220,
   );
   assert.deepEqual(result.texts, ["first reply", "second reply"]);
   assert.equal(result.tone, "smart");
@@ -25,6 +26,7 @@ test("rejects duplicate replies", () => {
       JSON.stringify({ replies: [{ text: "same" }, { text: "same" }] }),
       2,
       "smart",
+      220,
     ),
     /incomplete or duplicate/,
   );
@@ -35,20 +37,48 @@ test("parseReplies resolves the AI-picked tone when tone is auto", () => {
     JSON.stringify({ tone: "roast", replies: [{ text: "one" }] }),
     1,
     "auto",
+    280,
   );
   assert.equal(result.tone, "roast");
 });
 
 test("parseReplies falls back to a safe tone when auto and the model's tone is missing or invalid", () => {
-  const missing = providerInternals.parseReplies(JSON.stringify({ replies: [{ text: "one" }] }), 1, "auto");
+  const missing = providerInternals.parseReplies(JSON.stringify({ replies: [{ text: "one" }] }), 1, "auto", 280);
   assert.equal(missing.tone, "smart");
 
   const invalid = providerInternals.parseReplies(
     JSON.stringify({ tone: "not-a-real-tone", replies: [{ text: "one" }] }),
     1,
     "auto",
+    280,
   );
   assert.equal(invalid.tone, "smart");
+});
+
+test("parseReplies does not hard-truncate long-form replies at the old hardcoded 220 cap", () => {
+  // Regression: sanitizeReply() used to slice(0, 220) unconditionally,
+  // silently cutting long-form replies off mid-sentence server-side even
+  // when maxLength was set much higher (e.g. 4000/25000 for X Premium).
+  const longText = `${"a".repeat(150)}. ${"b".repeat(150)}.`; // 302 chars, 2 full sentences
+  const result = providerInternals.parseReplies(
+    JSON.stringify({ replies: [{ text: longText }] }),
+    1,
+    "smart",
+    4_000,
+  );
+  assert.equal(result.texts[0], longText);
+});
+
+test("parseReplies still truncates on a sentence boundary when text exceeds the actual requested limit", () => {
+  const longText = `${"a".repeat(150)}. ${"b".repeat(150)}.`; // 302 chars
+  const result = providerInternals.parseReplies(
+    JSON.stringify({ replies: [{ text: longText }] }),
+    1,
+    "smart",
+    160,
+  );
+  assert.equal(result.texts[0], `${"a".repeat(150)}.`);
+  assert.ok(result.texts[0].length <= 160);
 });
 
 test("computeMaxTokens scales with maxLength and count, floored and capped", () => {

@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { sanitizeReply } from "./safety.js";
+
+test("sanitizeReply leaves short text under the limit untouched", () => {
+  assert.equal(sanitizeReply("a short reply", 220), "a short reply");
+});
+
+test("sanitizeReply does not hard-cap at the old hardcoded 220, regardless of the requested limit", () => {
+  const text = `${"word ".repeat(100)}done.`; // ~505 chars, one long sentence
+  const result = sanitizeReply(text, 4_000);
+  assert.equal(result, text.trim());
+  assert.ok(result.length > 220);
+});
+
+test("sanitizeReply truncates at the last full sentence within the actual limit", () => {
+  const text = "First sentence here. Second sentence goes on for a while longer than the limit allows.";
+  const result = sanitizeReply(text, 25);
+  assert.equal(result, "First sentence here.");
+});
+
+test("sanitizeReply falls back to a word boundary with an ellipsis when no sentence fits", () => {
+  const text = "onewordthatkeepsgoing andanotherword andmorewords withoutanyperiodsatall";
+  const result = sanitizeReply(text, 20);
+  assert.ok(result.endsWith("…"));
+  assert.ok(result.length <= 20);
+});
+
+test("sanitizeReply collapses whitespace and strips excess hashtags/emoji", () => {
+  assert.equal(sanitizeReply("hello   world", 220), "hello world");
+  assert.equal(sanitizeReply("great #win #lets #go #now", 220), "great");
+  assert.equal(sanitizeReply("fire 🔥🔥🔥🔥", 220), "fire 🔥");
+});
