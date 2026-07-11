@@ -84,3 +84,23 @@ test("auto maxLength keeps the 280-char cap and no long-form instruction", () =>
   assert.match(prompt, /capped at 280 characters/);
   assert.doesNotMatch(prompt, /short paragraphs separated by a blank line/);
 });
+
+test("buildUserPrompt omits the Persona section when no persona voice is given", () => {
+  const prompt = buildUserPrompt({
+    postText: "Post",
+    tone: "smart",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  assert.doesNotMatch(prompt, /Persona — who you are replying as/);
+  assert.match(prompt, /^Original post:/);
+});
+
+test("buildUserPrompt puts the Persona section first when a persona voice is given", () => {
+  const prompt = buildUserPrompt(
+    { postText: "Post", tone: "smart", count: 1, maxLength: 220, useEmoji: false },
+    "A blunt crypto trader, skeptical of hype.",
+  );
+  assert.match(prompt, /^Persona — who you are replying as:\nA blunt crypto trader, skeptical of hype\.\n\nOriginal post:/);
+});

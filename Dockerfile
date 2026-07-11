@@ -18,6 +18,10 @@ ENV PORT=3000
 ENV DATABASE_PATH=/data/extcom-ai.db
 WORKDIR /app
 COPY --from=build /app/apps/backend/dist ./dist
+# Read fresh per-request by services/persona.ts, resolved two directories up
+# from the running module — must land at /app/PERSONA.md to match dist
+# being flattened to /app/dist above (see persona.ts's path comment).
+COPY --from=build /app/apps/backend/PERSONA.md ./PERSONA.md
 # No VOLUME instruction here: Railway's Dockerfile builder rejects it. Mount
 # a persistent volume/disk at /data on whichever platform you deploy to.
 RUN mkdir -p /data

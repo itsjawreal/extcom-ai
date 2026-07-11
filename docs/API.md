@@ -2,7 +2,9 @@
 
 See [PROMPT.md](PROMPT.md) for the exact system prompt, user prompt
 template, and tone guidance the backend sends to the AI provider on every
-`/v1/generate-reply` call.
+`/v1/generate-reply` call — including `PERSONA.md`, an operator-editable
+file that gives every reply a consistent voice/identity (see PROMPT.md's
+Persona section). It's server-side configuration, not a request field.
 
 ## `GET /health`
 
@@ -24,7 +26,8 @@ Request body:
   "count": 3,
   "maxLength": 220,
   "useEmoji": true,
-  "imageUrls": ["https://pbs.twimg.com/media/example.jpg"]
+  "imageUrls": ["https://pbs.twimg.com/media/example.jpg"],
+  "model": "google/gemini-2.5-flash"
 }
 ```
 
@@ -65,14 +68,24 @@ with the length guidance; a step up within the same family (e.g.
 Also note: this backend relies on OpenRouter's `response_format: json_schema`
 (strict mode) for reliable parsing, combined with `provider.
 require_parameters: true` (only route to a provider that supports the exact
-parameters sent). `anthropic/claude-haiku-4.5` failed with a generic
-`"Provider returned error"` in one test even though OpenRouter's own model
-catalog lists it as supporting `structured_outputs` — the exact cause wasn't
-confirmed (could be a specific upstream provider OpenRouter routed to at
-that moment, not a blanket model incompatibility). Check a model's
-`supported_parameters` on [OpenRouter's models page](https://openrouter.ai/models)
-before picking `AI_DEFAULT_MODEL`, and don't assume an error means the model
-itself can't work here.
+parameters sent). Both `anthropic/claude-haiku-4.5` and
+`anthropic/claude-sonnet-4.6` failed with a generic `"Provider returned
+error"` in testing — consistently across two different tiers, not a
+one-off flake — even though OpenRouter's own model catalog lists both as
+supporting `structured_outputs`. The exact cause was never confirmed, but
+two-for-two across the Anthropic family was enough to exclude Anthropic
+models from the popup's default model list (`AI_ALLOWED_MODELS` or the
+custom model field can still target one directly). Separately: a
+reasoning-capable model (anything whose catalog entry lists `reasoning` in
+`supported_parameters`, e.g. `google/gemini-2.5-pro`) gets
+`reasoning: { effort: "none" }` added to the OpenRouter request
+automatically — without it, a model can spend its `max_tokens` budget on
+invisible internal reasoning before ever writing the JSON reply, which
+surfaced live as `"AI provider returned invalid JSON"` for
+`gemini-2.5-pro` specifically. Check a model's `supported_parameters` on
+[OpenRouter's models page](https://openrouter.ai/models) before picking
+`AI_DEFAULT_MODEL`, and don't assume an error means the model itself can
+never work here.
 
 `useEmoji` is a boolean (default
 `true`); when `false` it's a hard override that beats any emoji habit implied
@@ -83,6 +96,12 @@ text. Cost/latency scale linearly with image count. This **requires
 `AI_DEFAULT_MODEL` to be a vision-capable model** (e.g. an OpenRouter
 multimodal model, or `gpt-4o`/`gpt-4.1`-class models on OpenAI); non-vision
 models typically just ignore the images rather than erroring.
+
+`model` is optional (string, max 200 chars) — overrides `AI_DEFAULT_MODEL`
+for this request only. Rejected with a 400 if `AI_ALLOW_CUSTOM_MODEL=false`
+and the model isn't in the resolved allowlist (see `GET /v1/models` below).
+The extension only ever sends this from the popup's Advanced tab setting,
+never per-generation from the on-page panel.
 
 Authentication and rate-limit behavior:
 
@@ -102,6 +121,40 @@ consume one request regardless of the requested reply count.
 
 Requires `Authorization: Bearer <token>`. Returns the token plan and remaining
 daily quota without consuming it.
+
+## `GET /v1/models`
+
+Requires `Authorization: Bearer <token>`. Powers the popup's model dropdown.
+Live-fetches OpenRouter's `/api/v1/models` catalog (cached in-memory for 1
+hour; serves a stale cache rather than failing outright if OpenRouter is
+briefly unreachable), intersects it with `AI_ALLOWED_MODELS` (or a small
+built-in starter list if that's unset), and filters to models that declare
+`structured_outputs` support. An ID that's gone stale in OpenRouter's catalog
+since being added to the list is silently dropped, not shown as broken.
+
+```json
+{
+  "models": [
+    { "id": "google/gemini-2.5-flash", "name": "Gemini 2.5 Flash", "pricing": { "prompt": "0.0000003", "completion": "0.0000025" } }
+  ],
+  "allowCustom": true
+}
+```
+
+Catalog metadata isn't a guarantee a model will actually work here — see the
+`anthropic/claude-haiku-4.5` note above. Use `POST /v1/test-model` for that.
+
+## `POST /v1/test-model`
+
+Requires `Authorization: Bearer <token>`, consumes rate-limit quota exactly
+like `/v1/generate-reply` (a free-to-spam test button would be a rate-limit
+bypass). Body: `{ "model": "moonshotai/kimi-k2.6" }`. Runs one real, minimal
+generate call against that model and returns `{ "ok": true }` on success or
+the provider's actual error message on failure — this is what the popup's
+"Test" button (next to the custom model field) calls, since a model's
+catalog metadata alone doesn't prove a live generate call will succeed.
+Rejected with a 400 if `AI_ALLOW_CUSTOM_MODEL=false` and the model isn't in
+the resolved allowlist.
 
 ## `GET|POST /v1/admin/tokens`
 

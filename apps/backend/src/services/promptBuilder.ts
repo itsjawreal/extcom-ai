@@ -47,6 +47,7 @@ Rules:
 - Follow the emoji preference given in the user message — it overrides any emoji habit implied by the selected tone.
 - If one or more images are attached, use their visible content (chart, meme, screenshot, etc.) to make the reply more specific and relevant.
 - Match the selected tone and stay relevant to the post.
+- If the user message includes a "Persona" section, that defines who is replying — stay consistent with that voice/identity across every reply in the batch. The selected tone still shapes the energy of each individual reply; persona is who's talking, tone is how they're feeling about this specific post.
 - Return only JSON matching this shape: {"replies":[{"text":"..."}]}. If the user message asks you to auto-pick the tone, also include a top-level "tone" field naming the exact tone id you chose (e.g. {"tone":"smart","replies":[{"text":"..."}]}), and apply that same tone to every reply in the batch.`;
 
 // X's own free-tier post limit — the classic "one tweet" length. Anything
@@ -83,12 +84,18 @@ function toneSection(tone: GenerateReplyRequest["tone"]): string {
   return `${tone} — ${TONE_GUIDANCE[tone]}`;
 }
 
-export function buildUserPrompt(input: GenerateReplyRequest): string {
+// personaVoice comes from PERSONA.md (services/persona.ts) — an optional,
+// operator-edited file, not a per-request field. Placed first so the model
+// establishes identity before anything else; the tone section below still
+// governs the energy of this specific reply.
+export function buildUserPrompt(input: GenerateReplyRequest, personaVoice?: string): string {
   const thread = input.visibleThreadText?.length
     ? input.visibleThreadText.map((text, index) => `${index + 1}. ${text}`).join("\n")
     : "None";
 
-  return `Original post:
+  const personaSection = personaVoice ? `Persona — who you are replying as:\n${personaVoice}\n\n` : "";
+
+  return `${personaSection}Original post:
 ${input.postText || "(No caption text — reply based on the attached image below.)"}
 
 Author:

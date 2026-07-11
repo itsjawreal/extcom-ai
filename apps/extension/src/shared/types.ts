@@ -52,6 +52,20 @@ export type GenerateReplyRequest = ExtractedPostContext & {
   // reads most natural for the tone/post, capped only by a safety ceiling.
   maxLength: number | "auto";
   useEmoji: boolean;
+  // Per-request override of the backend's AI_DEFAULT_MODEL. Omitted (or
+  // empty) means "use whatever the backend has configured".
+  model?: string;
+};
+
+export type ModelOption = {
+  id: string;
+  name?: string;
+  pricing?: { prompt?: string; completion?: string };
+};
+
+export type ModelsResponse = {
+  models: ModelOption[];
+  allowCustom: boolean;
 };
 
 export type GenerateReplyResponse = {
@@ -75,6 +89,9 @@ export type ExtensionSettings = {
   // panel, on top of the full tone dropdown. Capped at 5, "auto" excluded
   // (it's already always the first dropdown option).
   favoriteTones: Tone[];
+  // Empty string means "no override" — the backend's own AI_DEFAULT_MODEL
+  // is used. Set from the Advanced tab's model dropdown/custom field.
+  aiModel: string;
 };
 
 export type ConnectionStatus = {

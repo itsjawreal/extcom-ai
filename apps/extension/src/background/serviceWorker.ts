@@ -5,6 +5,7 @@ import type {
   GenerateReplyRequest,
   GenerateReplyResponse,
   HistoryEntry,
+  ModelsResponse,
   Tone,
   UsageStats,
 } from "../shared/types";
@@ -19,6 +20,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   useEmoji: true,
   readImages: false,
   favoriteTones: [],
+  aiModel: "",
 };
 
 // "auto" mode has its own, lower safety ceiling below, since the backend
@@ -57,7 +59,9 @@ function normalizeFavoriteTones(value: unknown): Tone[] {
   return deduped.slice(0, MAX_FAVORITE_TONES);
 }
 
-type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji"> & {
+// "model" is deliberately excluded — it's a popup-level (Advanced tab)
+// setting only, not something the on-page panel can override per-generation.
+type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji" | "model"> & {
   tone?: Tone | "auto";
   count?: number;
   maxLength?: number | "auto";
@@ -72,7 +76,9 @@ type RuntimeMessage =
   | { type: "GENERATE_REPLY"; input: GenerateInput }
   | { type: "GET_USAGE_STATS" }
   | { type: "CLEAR_USAGE_STATS" }
-  | { type: "RECORD_INSERT"; historyId: string; kind: "reply" | "quote" };
+  | { type: "RECORD_INSERT"; historyId: string; kind: "reply" | "quote" }
+  | { type: "GET_MODELS" }
+  | { type: "TEST_MODEL"; model: string };
 
 type RuntimeResponse =
   | {
@@ -82,6 +88,7 @@ type RuntimeResponse =
       connection?: ConnectionStatus;
       usageStats?: UsageStats;
       historyId?: string;
+      models?: ModelsResponse;
     }
   | { ok: false; error: string };
 
@@ -97,6 +104,7 @@ async function getSettings(): Promise<ExtensionSettings> {
     useEmoji: typeof stored.useEmoji === "boolean" ? stored.useEmoji : DEFAULT_SETTINGS.useEmoji,
     readImages: typeof stored.readImages === "boolean" ? stored.readImages : DEFAULT_SETTINGS.readImages,
     favoriteTones: normalizeFavoriteTones(stored.favoriteTones),
+    aiModel: String(stored.aiModel ?? DEFAULT_SETTINGS.aiModel),
   };
 }
 
@@ -136,6 +144,42 @@ async function checkConnection(settings: ExtensionSettings): Promise<ConnectionS
     throw new Error("Backend response is incomplete.");
   }
   return { plan: body.plan, remainingToday: body.remainingToday };
+}
+
+async function getModels(settings: ExtensionSettings): Promise<ModelsResponse> {
+  const { baseUrl, token } = requireBackend(settings);
+  const response = await fetchBackend(`${baseUrl}/v1/models`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const body = await response.json().catch(() => ({})) as
+    Partial<ModelsResponse> & { error?: { message?: string } };
+  if (!response.ok) {
+    throw new Error(body.error?.message || `Backend request failed with HTTP ${response.status}.`);
+  }
+  if (!Array.isArray(body.models)) {
+    throw new Error("Backend response is incomplete.");
+  }
+  return { models: body.models, allowCustom: Boolean(body.allowCustom) };
+}
+
+// Runs a real (small, rate-limit-consuming) generate call against the given
+// model on the backend — catalog metadata alone isn't proof a model actually
+// works (confirmed during development: a model can declare support for
+// structured output and still fail live).
+async function testModel(model: string, settings: ExtensionSettings): Promise<void> {
+  const { baseUrl, token } = requireBackend(settings);
+  const response = await fetchBackend(`${baseUrl}/v1/test-model`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ model }),
+  });
+  const body = await response.json().catch(() => ({})) as { ok?: boolean; error?: { message?: string } };
+  if (!response.ok || !body.ok) {
+    throw new Error(body.error?.message || `Backend request failed with HTTP ${response.status}.`);
+  }
 }
 
 async function saveSettings(settings: Partial<ExtensionSettings>): Promise<ExtensionSettings> {
@@ -296,6 +340,9 @@ async function generateReply(
     maxLength,
     useEmoji: rawInput.useEmoji ?? settings.useEmoji,
     imageUrls: readImages ? rawInput.imageUrls : undefined,
+    // Model choice lives only in the popup's Advanced tab, not per-generation
+    // in the panel — see the GenerateInput type comment above.
+    model: settings.aiModel || undefined,
   };
 
   const response = await fetchBackend(`${baseUrl}/v1/generate-reply`, {
@@ -378,6 +425,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       if (message?.type === "RECORD_INSERT") {
         await recordInsert(message.historyId, message.kind);
+        sendResponse({ ok: true } satisfies RuntimeResponse);
+        return;
+      }
+      if (message?.type === "GET_MODELS") {
+        sendResponse({ ok: true, models: await getModels(await getSettings()) } satisfies RuntimeResponse);
+        return;
+      }
+      if (message?.type === "TEST_MODEL") {
+        await testModel(message.model, await getSettings());
         sendResponse({ ok: true } satisfies RuntimeResponse);
         return;
       }

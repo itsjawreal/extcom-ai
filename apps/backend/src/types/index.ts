@@ -45,6 +45,10 @@ export type GenerateReplyRequest = {
   // reads most natural for the tone/post, capped only by a safety ceiling.
   maxLength: number | "auto";
   useEmoji: boolean;
+  // Per-request override of AI_DEFAULT_MODEL. Validated against the backend's
+  // allowlist unless AI_ALLOW_CUSTOM_MODEL permits arbitrary values — see
+  // services/modelCatalog.ts.
+  model?: string;
 };
 
 export type GeneratedReply = {

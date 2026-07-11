@@ -331,6 +331,22 @@
     #max-length-caption {
       margin: 0 0 4px;
     }
+    #ai-model-custom-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-top: 6px;
+    }
+    #ai-model-custom-row input {
+      flex: 1;
+      margin-top: 0;
+    }
+    #ai-model-custom-row button {
+      flex: none;
+      width: auto;
+      height: 40px;
+      padding: 0 14px;
+    }
 
     .segmented {
       display: flex;
@@ -628,6 +644,21 @@
       <small style="display: block; margin-top: 4px; opacity: 0.7;">⚠️ Never share this token. It identifies your account and enforces usage limits.</small>
     </label>
     <button id="test-connection" class="button-ghost" type="button">Test connection</button>
+    <div class="field-block">
+      <span class="field-row">
+        <span>AI model</span>
+      </span>
+      <select id="ai-model-select">
+        <option value="">Use backend default</option>
+        <option value="__custom__">Custom…</option>
+      </select>
+      <div id="ai-model-custom-row" hidden>
+        <input id="ai-model-custom" type="text" placeholder="e.g. moonshotai/kimi-k2.6" autocomplete="off" />
+        <button id="ai-model-test" class="button-ghost" type="button">Test</button>
+      </div>
+      <p class="status" id="status-ai-model" aria-live="polite"></p>
+      <p class="hint field-hint">Model list is fetched live from your backend's OpenRouter catalog. Leave on "Use backend default" to keep whatever <code>AI_DEFAULT_MODEL</code> is configured server-side. Testing a custom model runs a real generation and counts against your daily quota.</p>
+    </div>
     <button id="save-advanced" class="save-button" type="button">Save</button>
     <p class="status" id="status-advanced" aria-live="polite"></p>
     <button id="clear-history" class="button-secondary" type="button">Clear history</button>

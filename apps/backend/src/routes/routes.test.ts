@@ -5,7 +5,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { adminTokensRoute } from "./adminTokens.js";
 import { generateReplyRoute } from "./generateReply.js";
 import { meRoute } from "./me.js";
+import { modelsRoute } from "./models.js";
+import { testModelRoute } from "./testModel.js";
 import { authInternals } from "../services/auth.js";
+import { resetModelCatalogCache } from "../services/modelCatalog.js";
 import { peekRateLimit, rateLimitInternals, resetRateLimits } from "../services/rateLimit.js";
 
 type CapturedResponse = {
@@ -111,6 +114,213 @@ test("admin token route authenticates and issues a persistent token", async () =
   } finally {
     if (previous === undefined) delete process.env.ADMIN_SECRET;
     else process.env.ADMIN_SECRET = previous;
+  }
+});
+
+test("GET /v1/models requires auth and returns the catalog + allowCustom flag", async () => {
+  resetModelCatalogCache();
+  const previousFetch = globalThis.fetch;
+  const previousAllowed = process.env.AI_ALLOWED_MODELS;
+  const previousCustom = process.env.AI_ALLOW_CUSTOM_MODEL;
+  process.env.AI_ALLOWED_MODELS = "google/gemini-2.5-flash";
+  process.env.AI_ALLOW_CUSTOM_MODEL = "false";
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        data: [{ id: "google/gemini-2.5-flash", supported_parameters: ["structured_outputs"] }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+
+  try {
+    const unauthorized = captureResponse();
+    await modelsRoute(request("", {}, "GET"), unauthorized.response);
+    assert.equal(unauthorized.statusCode, 401);
+
+    const authorized = captureResponse();
+    await modelsRoute(
+      request("", { authorization: `Bearer ${authInternals.DEFAULT_DEV_TOKEN}` }, "GET"),
+      authorized.response,
+    );
+    assert.equal(authorized.statusCode, 200);
+    const body = jsonBody(authorized) as { models: Array<{ id: string }>; allowCustom: boolean };
+    assert.deepEqual(body.models.map((m) => m.id), ["google/gemini-2.5-flash"]);
+    assert.equal(body.allowCustom, false);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousAllowed === undefined) delete process.env.AI_ALLOWED_MODELS;
+    else process.env.AI_ALLOWED_MODELS = previousAllowed;
+    if (previousCustom === undefined) delete process.env.AI_ALLOW_CUSTOM_MODEL;
+    else process.env.AI_ALLOW_CUSTOM_MODEL = previousCustom;
+  }
+});
+
+test("POST /v1/test-model runs a real minimal generate call against the given model", async () => {
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+
+  const missingModel = captureResponse();
+  await testModelRoute(
+    request("{}", { authorization: `Bearer ${token}` }),
+    missingModel.response,
+    async () => ({ texts: ["ok"], tone: "smart" }),
+  );
+  assert.equal(missingModel.statusCode, 400);
+
+  const success = captureResponse();
+  let receivedModel: string | undefined;
+  await testModelRoute(
+    request(JSON.stringify({ model: "google/gemini-2.5-flash" }), { authorization: `Bearer ${token}` }),
+    success.response,
+    async (input) => {
+      receivedModel = input.model;
+      return { texts: ["a test reply"], tone: "smart" };
+    },
+  );
+  assert.equal(success.statusCode, 200);
+  assert.deepEqual(jsonBody(success), { ok: true });
+  assert.equal(receivedModel, "google/gemini-2.5-flash");
+});
+
+test("POST /v1/test-model refunds quota and surfaces the provider error on failure", async () => {
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const captured = captureResponse();
+
+  await testModelRoute(
+    request(JSON.stringify({ model: "some/broken-model" }), { authorization: `Bearer ${token}` }),
+    captured.response,
+    async () => {
+      throw new Error("model test failed");
+    },
+  );
+
+  assert.equal(captured.statusCode, 500);
+  assert.equal(
+    peekRateLimit(token, "pro").remainingToday,
+    rateLimitInternals.PLAN_LIMITS.pro.perDay,
+  );
+});
+
+test("POST /v1/test-model rejects a model outside the allowlist when custom models are disabled", async () => {
+  resetModelCatalogCache();
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const previousFetch = globalThis.fetch;
+  const previousAllowed = process.env.AI_ALLOWED_MODELS;
+  const previousCustom = process.env.AI_ALLOW_CUSTOM_MODEL;
+  process.env.AI_ALLOWED_MODELS = "google/gemini-2.5-flash";
+  process.env.AI_ALLOW_CUSTOM_MODEL = "false";
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        data: [{ id: "google/gemini-2.5-flash", supported_parameters: ["structured_outputs"] }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+
+  try {
+    const captured = captureResponse();
+    await testModelRoute(
+      request(JSON.stringify({ model: "some/not-allowed" }), { authorization: `Bearer ${token}` }),
+      captured.response,
+      async () => ({ texts: ["ok"], tone: "smart" }),
+    );
+    assert.equal(captured.statusCode, 400);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousAllowed === undefined) delete process.env.AI_ALLOWED_MODELS;
+    else process.env.AI_ALLOWED_MODELS = previousAllowed;
+    if (previousCustom === undefined) delete process.env.AI_ALLOW_CUSTOM_MODEL;
+    else process.env.AI_ALLOW_CUSTOM_MODEL = previousCustom;
+  }
+});
+
+test("POST /v1/generate-reply rejects a model outside the allowlist when custom models are disabled", async () => {
+  resetModelCatalogCache();
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const previousFetch = globalThis.fetch;
+  const previousAllowed = process.env.AI_ALLOWED_MODELS;
+  const previousCustom = process.env.AI_ALLOW_CUSTOM_MODEL;
+  process.env.AI_ALLOWED_MODELS = "google/gemini-2.5-flash";
+  process.env.AI_ALLOW_CUSTOM_MODEL = "false";
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        data: [{ id: "google/gemini-2.5-flash", supported_parameters: ["structured_outputs"] }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+
+  try {
+    const input = JSON.stringify({ postText: "Post", tone: "smart", count: 1, model: "some/not-allowed" });
+    const captured = captureResponse();
+    await generateReplyRoute(
+      request(input, { authorization: `Bearer ${token}` }),
+      captured.response,
+      async () => ({ texts: ["ok"], tone: "smart" }),
+    );
+    assert.equal(captured.statusCode, 400);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousAllowed === undefined) delete process.env.AI_ALLOWED_MODELS;
+    else process.env.AI_ALLOWED_MODELS = previousAllowed;
+    if (previousCustom === undefined) delete process.env.AI_ALLOW_CUSTOM_MODEL;
+    else process.env.AI_ALLOW_CUSTOM_MODEL = previousCustom;
+  }
+});
+
+test("POST /v1/test-model returns 502 (not 400) when the allowlist can't be verified", async () => {
+  resetModelCatalogCache();
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const previousFetch = globalThis.fetch;
+  const previousCustom = process.env.AI_ALLOW_CUSTOM_MODEL;
+  process.env.AI_ALLOW_CUSTOM_MODEL = "false";
+  globalThis.fetch = async () => {
+    throw new Error("network down");
+  };
+
+  try {
+    const captured = captureResponse();
+    await testModelRoute(
+      request(JSON.stringify({ model: "some/model" }), { authorization: `Bearer ${token}` }),
+      captured.response,
+      async () => ({ texts: ["ok"], tone: "smart" }),
+    );
+    assert.equal(captured.statusCode, 502);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousCustom === undefined) delete process.env.AI_ALLOW_CUSTOM_MODEL;
+    else process.env.AI_ALLOW_CUSTOM_MODEL = previousCustom;
+  }
+});
+
+test("POST /v1/generate-reply returns 502 (not 400) when the allowlist can't be verified", async () => {
+  resetModelCatalogCache();
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const previousFetch = globalThis.fetch;
+  const previousCustom = process.env.AI_ALLOW_CUSTOM_MODEL;
+  process.env.AI_ALLOW_CUSTOM_MODEL = "false";
+  globalThis.fetch = async () => {
+    throw new Error("network down");
+  };
+
+  try {
+    const input = JSON.stringify({ postText: "Post", tone: "smart", count: 1, model: "some/model" });
+    const captured = captureResponse();
+    await generateReplyRoute(
+      request(input, { authorization: `Bearer ${token}` }),
+      captured.response,
+      async () => ({ texts: ["ok"], tone: "smart" }),
+    );
+    assert.equal(captured.statusCode, 502);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousCustom === undefined) delete process.env.AI_ALLOW_CUSTOM_MODEL;
+    else process.env.AI_ALLOW_CUSTOM_MODEL = previousCustom;
   }
 });
 

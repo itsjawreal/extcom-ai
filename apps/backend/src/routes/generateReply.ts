@@ -1,6 +1,7 @@
 import type { ServerResponse } from "node:http";
 import { authenticateToken, parseAuthToken } from "../services/auth.js";
 import { generateReplies, ProviderError } from "../services/aiProvider.js";
+import { assertModelAllowed, MODEL_ALLOWLIST_UNAVAILABLE_MESSAGE } from "../services/modelCatalog.js";
 import { consumeRateLimit, refundRateLimit } from "../services/rateLimit.js";
 import { assertSafeRequest } from "../services/safety.js";
 import { readJsonBody, sendError, sendJson } from "../serverUtils.js";
@@ -106,6 +107,7 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     imageUrls,
     visibleThreadText,
     extraInstruction: optionalString(body.extraInstruction, 500),
+    model: optionalString(body.model, 200),
   };
 }
 
@@ -133,8 +135,13 @@ export async function generateReplyRoute(
   try {
     input = validateGenerateRequest(await readJsonBody(request));
     assertSafeRequest(input.extraInstruction);
+    await assertModelAllowed(input.model);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid request.";
+    if (message === MODEL_ALLOWLIST_UNAVAILABLE_MESSAGE) {
+      sendError(response, 502, "PROVIDER_ERROR", message);
+      return;
+    }
     const code = message === "Invalid JSON body." ? "INVALID_JSON" :
       message === "Request body is too large." ? "VALIDATION_ERROR" :
       message === "Requested instruction is not allowed." ? "UNSAFE_REQUEST" :

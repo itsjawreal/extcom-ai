@@ -110,3 +110,13 @@ test("rejects a request with neither postText nor imageUrls", () => {
     /Either postText or imageUrls must be provided/,
   );
 });
+
+test("accepts an optional model override", () => {
+  const input = validateGenerateRequest({ postText: "Post", tone: "smart", model: "google/gemini-2.5-flash" });
+  assert.equal(input.model, "google/gemini-2.5-flash");
+});
+
+test("model is undefined when omitted, falling back to AI_DEFAULT_MODEL downstream", () => {
+  const input = validateGenerateRequest({ postText: "Post", tone: "smart" });
+  assert.equal(input.model, undefined);
+});

@@ -1,5 +1,13 @@
 import { clampReplyLength, TONE_AUTO_LABEL, TONE_LABELS } from "../shared/constants";
-import type { ConnectionStatus, ExtensionSettings, HistoryEntry, Tone, UsageStats } from "../shared/types";
+import type {
+  ConnectionStatus,
+  ExtensionSettings,
+  HistoryEntry,
+  ModelOption,
+  ModelsResponse,
+  Tone,
+  UsageStats,
+} from "../shared/types";
 
 type RuntimeResponse = {
   ok: boolean;
@@ -7,6 +15,7 @@ type RuntimeResponse = {
   connection?: ConnectionStatus;
   usageStats?: UsageStats;
   error?: string;
+  models?: ModelsResponse;
 };
 
 type View = "home" | "history" | "tone" | "advanced";
@@ -51,6 +60,11 @@ const readImagesButtons = Array.from(readImagesGroup.querySelectorAll<HTMLButton
 const saveAdvancedButton = document.getElementById("save-advanced") as HTMLButtonElement;
 const statusToneNode = document.getElementById("status-tone") as HTMLParagraphElement;
 const statusAdvancedNode = document.getElementById("status-advanced") as HTMLParagraphElement;
+const aiModelSelect = document.getElementById("ai-model-select") as HTMLSelectElement;
+const aiModelCustomRow = document.getElementById("ai-model-custom-row") as HTMLElement;
+const aiModelCustomInput = document.getElementById("ai-model-custom") as HTMLInputElement;
+const aiModelTestButton = document.getElementById("ai-model-test") as HTMLButtonElement;
+const statusAiModelNode = document.getElementById("status-ai-model") as HTMLParagraphElement;
 const quickTonesRow = document.getElementById("quick-tones-row") as HTMLElement;
 const favoriteTonesGrid = document.getElementById("favorite-tones-grid") as HTMLElement;
 const favoriteTonesCount = document.getElementById("favorite-tones-count") as HTMLElement;
@@ -65,6 +79,10 @@ let maxLengthMode: "auto" | "manual" = "manual";
 let latestUsageStats: UsageStats = { totalGenerations: 0, totalInserted: 0, history: [] };
 let historyFilter: HistoryFilter = "all";
 let favoriteTones: Tone[] = [];
+let pendingAiModelValue = "";
+let modelOptions: ModelOption[] = [];
+let allowCustomModel = true;
+let modelsLoaded = false;
 // Guards saveSettings() from firing before loadSettings() has populated the
 // inputs at least once. Auto-save reads every input's current .value,
 // including backendUrlInput/authTokenInput, which start out empty in the
@@ -87,6 +105,7 @@ function switchView(view: View): void {
     void loadUsageStats();
   } else if (view === "tone" || view === "advanced") {
     void loadSettings();
+    if (view === "advanced") void loadModelOptions();
   }
 }
 
@@ -262,6 +281,104 @@ favoriteTonesGrid.addEventListener("click", (event) => {
   saveToneSettings();
 });
 
+const AI_MODEL_CUSTOM_VALUE = "__custom__";
+
+function renderModelSelect(models: ModelOption[], allowCustom: boolean): void {
+  aiModelSelect.replaceChildren();
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = "Use backend default";
+  aiModelSelect.append(defaultOption);
+  for (const model of models) {
+    const option = document.createElement("option");
+    option.value = model.id;
+    option.textContent = model.name || model.id;
+    aiModelSelect.append(option);
+  }
+  if (allowCustom) {
+    const customOption = document.createElement("option");
+    customOption.value = AI_MODEL_CUSTOM_VALUE;
+    customOption.textContent = "Custom…";
+    aiModelSelect.append(customOption);
+  }
+}
+
+// Reconciles the dropdown/custom-input UI with pendingAiModelValue —
+// called after either the saved settings or the model list (fetched
+// independently, in either order) finishes loading.
+function syncAiModelUi(): void {
+  const isKnown = pendingAiModelValue === "" || modelOptions.some((model) => model.id === pendingAiModelValue);
+  if (isKnown) {
+    aiModelSelect.value = pendingAiModelValue;
+    aiModelCustomRow.hidden = true;
+    return;
+  }
+  if (allowCustomModel) {
+    aiModelSelect.value = AI_MODEL_CUSTOM_VALUE;
+    aiModelCustomInput.value = pendingAiModelValue;
+    aiModelCustomRow.hidden = false;
+    return;
+  }
+  // Saved value isn't in the allowlist and custom models are disabled
+  // (e.g. the operator tightened AI_ALLOWED_MODELS after this was saved) —
+  // fall back to the default rather than showing a selection that can't
+  // actually be chosen anymore.
+  aiModelSelect.value = "";
+  aiModelCustomRow.hidden = true;
+}
+
+async function loadModelOptions(): Promise<void> {
+  if (modelsLoaded) return;
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "GET_MODELS" }) as RuntimeResponse;
+    if (!response.ok || !response.models) {
+      showStatus(statusAiModelNode, response.error || "Could not load model list.");
+      return;
+    }
+    modelOptions = response.models.models;
+    allowCustomModel = response.models.allowCustom;
+    modelsLoaded = true;
+    renderModelSelect(modelOptions, allowCustomModel);
+    syncAiModelUi();
+  } catch (error) {
+    showStatus(statusAiModelNode, error instanceof Error ? error.message : "Could not load model list.");
+  }
+}
+
+aiModelSelect.addEventListener("change", () => {
+  if (aiModelSelect.value === AI_MODEL_CUSTOM_VALUE) {
+    aiModelCustomRow.hidden = false;
+    pendingAiModelValue = aiModelCustomInput.value.trim();
+  } else {
+    aiModelCustomRow.hidden = true;
+    pendingAiModelValue = aiModelSelect.value;
+  }
+});
+
+aiModelCustomInput.addEventListener("input", () => {
+  pendingAiModelValue = aiModelCustomInput.value.trim();
+});
+
+async function testAiModel(): Promise<void> {
+  const model = aiModelCustomInput.value.trim();
+  if (!model) {
+    showStatus(statusAiModelNode, "Type a model ID to test.");
+    return;
+  }
+  aiModelTestButton.disabled = true;
+  showStatus(statusAiModelNode, "Testing…");
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "TEST_MODEL", model }) as RuntimeResponse;
+    showStatus(statusAiModelNode, response.ok ? "✓ Model works." : response.error || "Test failed.");
+  } catch (error) {
+    showStatus(statusAiModelNode, error instanceof Error ? error.message : "Test failed.");
+  } finally {
+    aiModelTestButton.disabled = false;
+  }
+}
+
+aiModelTestButton.addEventListener("click", () => void testAiModel());
+
 historyTabs.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-history-filter]");
   if (!button) return;
@@ -350,6 +467,8 @@ async function loadSettings(): Promise<void> {
   favoriteTones = response.settings.favoriteTones ?? [];
   renderFavoriteTonesGrid();
   renderQuickTones();
+  pendingAiModelValue = response.settings.aiModel;
+  syncAiModelUi();
 }
 
 async function requestBackendPermission(backendBaseUrl: string): Promise<void> {
@@ -388,6 +507,7 @@ async function saveSettings(
       useEmoji,
       readImages,
       favoriteTones,
+      aiModel: pendingAiModelValue,
     };
     // Persist first: chrome.permissions.request() below can pop a native
     // "allow access" prompt that backgrounds/closes this popup, killing its
@@ -402,7 +522,15 @@ async function saveSettings(
       await requestBackendPermission(settings.backendBaseUrl);
     }
     showStatus(statusNode, response.ok ? "Settings saved." : response.error || "Save failed.");
-    if (response.ok && checkConnectionAfter) void checkConnection();
+    if (response.ok && checkConnectionAfter) {
+      void checkConnection();
+      // The model list is fetched from whatever backend URL/token was
+      // active at load time — an Advanced save can change either, so the
+      // cached list would otherwise keep showing the old backend's models
+      // until the popup is closed and reopened.
+      modelsLoaded = false;
+      void loadModelOptions();
+    }
   } catch (error) {
     showStatus(statusNode, error instanceof Error ? error.message : "Save failed.");
   } finally {

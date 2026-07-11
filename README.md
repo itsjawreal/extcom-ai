@@ -18,10 +18,19 @@ Chrome extension ──(your access token)──▶ your backend ──(your API
 
 - **Backend/server environment:** `OPENROUTER_API_KEY` or `OPENAI_API_KEY`,
   `AUTH_TOKENS`, optional `ADMIN_SECRET`, model, and database path.
+- **Backend source file (`apps/backend/PERSONA.md`):** optional persistent
+  voice/identity applied to every reply this backend generates, no
+  per-user setting involved. Ships empty (no effect) by default. It's a
+  git-tracked file baked into the Docker image, so on a PaaS deploy,
+  editing it means commit + redeploy like any code change (VPS with a live
+  checkout can just edit + rebuild locally). See
+  [docs/PROMPT.md](docs/PROMPT.md#persona).
 - **Extension popup (Settings → Default):** default tone, standing
   instruction, default reply length, draft count, use emoji, read images.
 - **Extension popup (Settings → Advanced):** public backend URL, one backend
-  access token.
+  access token, optional AI model override (picked from a live-fetched
+  dropdown or typed as custom, falls back to the backend's own
+  `AI_DEFAULT_MODEL` when left unset).
 
 Never put an AI-provider API key or admin secret in the extension. Anything
 stored by a browser extension must be treated as user-visible. The backend
@@ -92,6 +101,8 @@ tokens, usage counters) is lost on every redeploy or restart.
 | `OPENAI_API_KEY` | yes* | API key when `AI_DEFAULT_PROVIDER=openai`. |
 | `AI_DEFAULT_PROVIDER` | no | `openrouter` (default) or `openai`. |
 | `AI_DEFAULT_MODEL` | no | e.g. `openrouter/auto`, `anthropic/claude-haiku-4.5`. |
+| `AI_ALLOWED_MODELS` | no | Comma-separated model IDs offered in the popup's model dropdown. Empty = a small built-in starter list. See [API.md](docs/API.md). |
+| `AI_ALLOW_CUSTOM_MODEL` | no | Default `true`. Set `false` to stop the popup's custom model field from being honored — relevant if you're sharing your server and don't want a token holder picking an expensive model. |
 | `AUTH_TOKENS` | yes | Comma-separated `token:plan` pairs. Invent a long random token and paste the same value into the extension popup. Plans `free`/`pro`/`power` only differ in rate limits — it's your own API key/bill either way, not a paid tier. Running this solo? Use `power` and forget about it; the tiers matter if you share your server/key with others and want to cap how much any one of them can spend. |
 | `ADMIN_SECRET` | no | Enables `/v1/admin/tokens` for issuing extra tokens stored in SQLite (for sharing your server). Off when empty. |
 | `DATABASE_PATH` | no | SQLite file (default `data/extcom-ai.db`; the Docker image uses `/data/extcom-ai.db` on a volume). |

@@ -1,3 +1,5 @@
+import { modelSupportsParameter } from "./modelCatalog.js";
+import { getPersonaVoice } from "./persona.js";
 import { buildUserPrompt, SYSTEM_PROMPT } from "./promptBuilder.js";
 import { sanitizeReply } from "./safety.js";
 import { TONES, type GenerateReplyRequest, type Tone } from "../types/index.js";
@@ -38,6 +40,15 @@ export class ProviderError extends Error {
 // configured AI_DEFAULT_MODEL's own output-token limit.
 const MAX_TOKENS_CEILING = 20_000;
 const MIN_TOKENS_FLOOR = 800;
+
+// OpenRouter's strict JSON schema maxLength is a real generation-time
+// constraint for providers that grammar-constrain output to the schema —
+// hitting it stops the string exactly there, mid-word, with no ellipsis.
+// Requesting the schema's maxLength a bit above the real target gives the
+// model room to finish its current sentence; sanitizeReply() still trims
+// the result down to the true target afterward, using sentence/word-
+// boundary-aware truncation instead of a raw schema cutoff.
+const SCHEMA_LENGTH_BUFFER = 150;
 
 function computeMaxTokens(input: GenerateReplyRequest): number {
   const perReplyChars = input.maxLength === "auto" ? 280 : input.maxLength;
@@ -122,6 +133,7 @@ export async function generateWithOpenAI(
     /\/$/,
     "",
   );
+  const personaVoice = await getPersonaVoice();
   // Low detail keeps image cost/latency small (~85 flat tokens per image vs.
   // several hundred at high detail) — enough for a reply to reference what
   // an image shows without needing pixel-level precision. Cost scales
@@ -133,7 +145,7 @@ export async function generateWithOpenAI(
         {
           role: "user" as const,
           content: [
-            { type: "input_text" as const, text: buildUserPrompt(input) },
+            { type: "input_text" as const, text: buildUserPrompt(input, personaVoice) },
             ...input.imageUrls.map((url) => ({
               type: "input_image" as const,
               image_url: url,
@@ -142,7 +154,7 @@ export async function generateWithOpenAI(
           ],
         },
       ]
-    : buildUserPrompt(input);
+    : buildUserPrompt(input, personaVoice);
 
   const response = await fetch(`${baseUrl}/responses`, {
     method: "POST",
@@ -151,7 +163,7 @@ export async function generateWithOpenAI(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.AI_DEFAULT_MODEL || "gpt-5.4-nano",
+      model: input.model || process.env.AI_DEFAULT_MODEL || "gpt-5.4-nano",
       instructions: SYSTEM_PROMPT,
       input: requestInput,
       max_output_tokens: computeMaxTokens(input),
@@ -188,6 +200,22 @@ export async function generateWithOpenRouter(
   };
   if (process.env.APP_URL) headers["HTTP-Referer"] = process.env.APP_URL;
 
+  const personaVoice = await getPersonaVoice();
+  const model = input.model || process.env.AI_DEFAULT_MODEL || "openrouter/auto";
+  // Without this, a reasoning-capable model (e.g. google/gemini-2.5-pro) can
+  // spend most of max_tokens on invisible internal reasoning before ever
+  // writing the actual JSON reply, leaving too little budget to finish it —
+  // confirmed live: this produced "AI provider returned invalid JSON" for
+  // gemini-2.5-pro specifically, while non-reasoning and lighter
+  // (flash-tier) models were unaffected. This task is a direct
+  // reply-generation job, not multi-step reasoning, so there's nothing to
+  // gain from letting a model "think" here. Only sent when the model
+  // actually declares support for it — provider.require_parameters: true
+  // below means sending an unsupported parameter makes the whole request
+  // unroutable, not just ignored, so this has to be conditional.
+  const supportsReasoningControl = await modelSupportsParameter(model, "reasoning");
+  const schemaTextMaxLength =
+    (input.maxLength === "auto" ? 280 : input.maxLength) + SCHEMA_LENGTH_BUFFER;
   // Low detail keeps image cost/latency small (~85 flat tokens per image vs.
   // several hundred at high detail) — enough for a reply to reference what
   // an image shows without needing pixel-level precision. Cost scales
@@ -196,25 +224,26 @@ export async function generateWithOpenRouter(
   // images, providers typically just ignore the block rather than erroring.
   const userContent = input.imageUrls?.length
     ? [
-        { type: "text" as const, text: buildUserPrompt(input) },
+        { type: "text" as const, text: buildUserPrompt(input, personaVoice) },
         ...input.imageUrls.map((url) => ({
           type: "image_url" as const,
           image_url: { url, detail: "low" as const },
         })),
       ]
-    : buildUserPrompt(input);
+    : buildUserPrompt(input, personaVoice);
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers,
     body: JSON.stringify({
-      model: process.env.AI_DEFAULT_MODEL || "openrouter/auto",
+      model,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userContent },
       ],
       max_tokens: computeMaxTokens(input),
       temperature: 0.8,
+      ...(supportsReasoningControl ? { reasoning: { effort: "none" } } : {}),
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -235,10 +264,18 @@ export async function generateWithOpenRouter(
                 items: {
                   type: "object",
                   properties: {
-                    text:
-                      input.maxLength === "auto"
-                        ? { type: "string", maxLength: 280 }
-                        : { type: "string", maxLength: input.maxLength },
+                    // Padded above the real target (sanitizeReply() below
+                    // still trims to the true limit). Some providers
+                    // grammar-constrain generation to a strict schema's
+                    // maxLength and cut the string exactly there — mid-word,
+                    // with no ellipsis — confirmed live at 1000/1000 chars
+                    // ending on ".. backst". Since our own truncation only
+                    // fires when text.length exceeds the target, a string
+                    // arriving pre-cut exactly at the target slips through
+                    // untouched. The buffer gives room to finish the
+                    // sentence naturally so our own sentence/word-boundary
+                    // truncation is what actually decides where it ends.
+                    text: { type: "string", maxLength: schemaTextMaxLength },
                   },
                   required: ["text"],
                   additionalProperties: false,

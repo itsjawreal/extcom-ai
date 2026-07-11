@@ -12,6 +12,11 @@ replied to (see [API.md](API.md) for the request shape). Everything else —
 the system rules and the 24 tone descriptions — is the same for every user
 and every request.
 
+One exception: the operator running the backend can set a persistent
+persona via `apps/backend/PERSONA.md` (see the [Persona](#persona) section
+below) — this isn't a per-request field, it applies to every request this
+specific backend handles until the operator edits the file.
+
 ## System prompt
 
 Sent once, unchanged, as the system message on every call:
@@ -65,6 +70,11 @@ Sent once, unchanged, as the system message on every call:
 > - If one or more images are attached, use their visible content (chart,
 >   meme, screenshot, etc.) to make the reply more specific and relevant.
 > - Match the selected tone and stay relevant to the post.
+> - If the user message includes a "Persona" section, that defines who is
+>   replying — stay consistent with that voice/identity across every reply
+>   in the batch. The selected tone still shapes the energy of each
+>   individual reply; persona is who's talking, tone is how they're feeling
+>   about this specific post.
 > - Return only JSON matching this shape: `{"replies":[{"text":"..."}]}`. If
 >   the user message asks you to auto-pick the tone, also include a
 >   top-level `"tone"` field naming the exact tone id you chose (e.g.
@@ -76,6 +86,11 @@ Sent once, unchanged, as the system message on every call:
 Built fresh per request from the fields above:
 
 ```
+[Persona — who you are replying as:
+<content of the "## Voice" section in PERSONA.md, only when non-empty>
+— omitted entirely when PERSONA.md's Voice section is empty, which is the
+ shipped default]
+
 Original post:
 <postText>
 
@@ -164,6 +179,31 @@ section above:
 | `philosophical` | Zoomed-out and reflective — a bigger-picture musing on what the post implies. |
 | `coach_motivational` | Drill-sergeant-lite pump-up energy — "no excuses, let's go" urgency without cheesiness. |
 | `auto` | Not a real tone — tells the AI to pick whichever tone above best fits the post, and report its pick in the response. |
+
+## Persona
+
+`apps/backend/PERSONA.md` lets the operator running this backend give every
+reply (and quote) a consistent voice/identity, layered above the per-reply
+tone — persona is who's talking, tone is the energy of this specific reply.
+
+- **Not a session or memory.** `services/persona.ts` re-reads the file fresh
+  on every single generation, deliberately uncached — editing it takes
+  effect on the very next reply, no restart needed, **once the edited file
+  is actually on the running server**. It's a git-tracked source file baked
+  into the Docker image at build time — on a PaaS (Railway/Render/Fly/
+  Northflank/Zeabur), that means committing the change and redeploying, the
+  same as any other code change, unlike an env var you can update from the
+  platform dashboard instantly. Running via Docker Compose on a VPS with a
+  live checkout is the one setup where a plain file edit + `docker compose
+  up -d --build` is all it takes.
+- **Ships inert.** The default file's `## Voice` section is empty, so by
+  default this changes nothing — existing behavior is unchanged until the
+  operator actually writes something under that heading.
+- **Not a per-request field.** There is no `persona` field in the
+  `/v1/generate-reply` request body — this is entirely server-side
+  configuration, the same for every caller of a given backend instance.
+- **Applies to both providers** (OpenAI and OpenRouter), since both call
+  the same `buildUserPrompt()`.
 
 ## Keeping this in sync
 
