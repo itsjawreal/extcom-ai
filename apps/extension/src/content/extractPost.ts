@@ -109,7 +109,11 @@ export function extractPost(post: HTMLElement): ExtractedPostContext {
   const postText = cleanText(
     post.querySelector<HTMLElement>(POST_TEXT_SELECTOR)?.innerText,
   );
-  if (!postText) {
+  const imageUrls = extractImageUrls(post);
+
+  // A post can be image-only (screenshot, chart, meme with no caption) —
+  // only bail out if there's truly nothing to reply from.
+  if (!postText && !imageUrls) {
     throw new Error("Post text is not visible or could not be extracted.");
   }
 
@@ -117,10 +121,10 @@ export function extractPost(post: HTMLElement): ExtractedPostContext {
   const timestampText = cleanText(timestamp?.dateTime || timestamp?.textContent);
 
   return {
-    postText,
+    postText: postText ?? "",
     ...extractAuthor(post),
     postUrl: extractPostUrl(post),
-    imageUrls: extractImageUrls(post),
+    imageUrls,
     timestampText,
     visibleThreadText: extractThreadContext(post),
   };

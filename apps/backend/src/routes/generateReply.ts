@@ -33,8 +33,10 @@ function optionalHttpUrl(value: unknown, maxLength: number): string | undefined 
 export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
   if (!value || typeof value !== "object") throw new Error("Request body must be an object.");
   const body = value as Record<string, unknown>;
+  // postText is optional when imageUrls carries the content instead (an
+  // image-only post with no caption) — validated together further down,
+  // once imageUrls has also been parsed.
   const postText = optionalString(body.postText, 10_000);
-  if (!postText) throw new Error("postText is required and must be at most 10,000 characters.");
   if (
     typeof body.tone !== "string" ||
     (body.tone !== "auto" && !TONES.includes(body.tone as never))
@@ -85,8 +87,12 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     if (imageUrls.length === 0) imageUrls = undefined;
   }
 
+  if (!postText && !imageUrls) {
+    throw new Error("Either postText or imageUrls must be provided.");
+  }
+
   return {
-    postText,
+    postText: postText ?? "",
     tone: body.tone as GenerateReplyRequest["tone"],
     count: Number(count),
     maxLength: maxLength === "auto" ? "auto" : Number(maxLength),

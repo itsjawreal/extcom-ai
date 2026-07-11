@@ -85,3 +85,19 @@ test("treats an empty imageUrls array as undefined", () => {
   const input = validateGenerateRequest({ postText: "Post", tone: "smart", imageUrls: [] });
   assert.equal(input.imageUrls, undefined);
 });
+
+test("accepts an image-only request with no postText", () => {
+  const input = validateGenerateRequest({
+    tone: "smart",
+    imageUrls: ["https://pbs.twimg.com/media/a.jpg"],
+  });
+  assert.equal(input.postText, "");
+  assert.deepEqual(input.imageUrls, ["https://pbs.twimg.com/media/a.jpg"]);
+});
+
+test("rejects a request with neither postText nor imageUrls", () => {
+  assert.throws(
+    () => validateGenerateRequest({ tone: "smart" }),
+    /Either postText or imageUrls must be provided/,
+  );
+});

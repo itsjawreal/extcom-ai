@@ -757,7 +757,10 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
       if (response.settings.maxReplyLength) {
         setMaxLength(panel, response.settings.maxReplyLength);
       }
-      if (typeof response.settings.readImages === "boolean") {
+      // Skip if this post has no caption text — the toggle is forcibly
+      // locked to "on" in that case (see openPanel), don't let the saved
+      // default silently turn it back off.
+      if (typeof response.settings.readImages === "boolean" && panel.dataset.imagesForced !== "true") {
         setReadImagesGroup(panel, response.settings.readImages);
       }
     }
@@ -942,10 +945,27 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   // Only show the image toggle when this specific post actually has at
   // least one image — nothing to switch on/off otherwise.
   const imageCount = !("error" in input) ? input.context.imageUrls?.length ?? 0 : 0;
+  const hasPostText = !("error" in input) && Boolean(input.context.postText);
   if (imageCount > 0) {
     panel.querySelector<HTMLElement>("[data-images-label]")?.removeAttribute("hidden");
     const labelText = panel.querySelector<HTMLElement>("[data-images-label-text]");
     if (labelText) labelText.textContent = imageCount > 1 ? `Images (${imageCount})` : "Image";
+
+    // No caption text at all — the image is the only signal available, so
+    // reading it isn't optional. Force it on and lock it there (with a
+    // tooltip explaining why) instead of letting a stale "off" default
+    // silently produce a contentless generate request.
+    if (!hasPostText) {
+      panel.dataset.imagesForced = "true";
+      setReadImagesGroup(panel, true);
+      panel.querySelectorAll<HTMLButtonElement>("[data-images-group] button").forEach((button) => {
+        button.disabled = true;
+      });
+      panel.querySelector<HTMLElement>("[data-images-label]")?.setAttribute(
+        "data-tooltip",
+        "This post has no caption text, so reading the image is required to generate a reply.",
+      );
+    }
   }
 
   panel.querySelector("[data-images-group]")?.addEventListener("click", (event) => {

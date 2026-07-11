@@ -67,7 +67,7 @@ export function buildUserPrompt(input: GenerateReplyRequest): string {
     : "None";
 
   return `Original post:
-${input.postText}
+${input.postText || "(No caption text — reply based on the attached image below.)"}
 
 Author:
 ${[input.authorName, input.authorHandle].filter(Boolean).join(" ") || "Unknown"}

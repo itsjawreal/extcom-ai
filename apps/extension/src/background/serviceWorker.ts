@@ -267,8 +267,14 @@ async function generateReply(
   // readImages gates whether the already-extracted imageUrls (if any) are
   // ever sent to the backend at all — off by default, since sending images
   // adds real token cost/latency (linear per image) the user should opt
-  // into, not discover later.
-  const readImages = rawInput.readImages ?? settings.readImages;
+  // into, not discover later. Exception: a post with no caption text has
+  // nothing else to generate a reply from, so images are forced on
+  // regardless of the setting (the panel UI mirrors this by locking the
+  // toggle in that case — this is the same rule enforced again here in case
+  // a caller bypasses the panel).
+  const readImages = !rawInput.postText?.trim() && rawInput.imageUrls?.length
+    ? true
+    : rawInput.readImages ?? settings.readImages;
 
   const input: GenerateReplyRequest = {
     ...rawInput,
