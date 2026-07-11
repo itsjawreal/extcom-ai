@@ -111,10 +111,30 @@ npm ci
 npm run build --workspace=@extcom-ai/extension
 ```
 
-Then in Chrome (or any Chromium browser):
+Then in Chrome (or any Chromium browser — Edge, Brave, Opera, Vivaldi,
+Arc, …; they share the same extension engine, so this works unmodified):
 
 1. Open `chrome://extensions`, enable **Developer mode**.
 2. **Load unpacked** → select `apps/extension/dist`.
+
+### Browser support
+
+Tested on Chrome. Any Chromium-based browser should work identically —
+same manifest, same `chrome.*` APIs, no rebuild or code change needed.
+
+Firefox is **not currently supported**. Its stable channel requires
+extensions to be signed even for local installs (`about:debugging`'s
+"Load Temporary Add-on" only lasts until Firefox restarts), and this
+extension relies on a `"world": "MAIN"` content script
+(`apps/extension/src/page/pageInsert.ts`) to reliably write into X's
+React-controlled composer — whether Firefox's WebExtensions
+implementation supports that declaration the same way Chrome's does
+hasn't been verified. Treat a Firefox port as untested, not "should just
+work."
+
+Safari is not supported. It uses a separate packaging/signing pipeline
+(Xcode, Apple Developer account) rather than loading an unpacked
+extension folder at all.
 
 ## 3. Connect them
 
