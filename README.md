@@ -158,6 +158,11 @@ Clicking it opens the on-page panel — tone, length, draft count, emoji, and
 image toggles, then one card per generated draft with Copy/Regenerate/Quote/
 Insert actions:
 
+<img src="docs/assets/ai-reply-panel-overview.png" alt="The AI Reply panel open on x.com: context summary, tone chips, max length, drafts/emoji/image toggles, and generated draft cards with Copy/Regenerate/Quote/Insert" width="900">
+
+A closer look at a few of its states — the tone dropdown open, drafts
+generated at different tones, and a one-off instruction expanded:
+
 <img src="docs/assets/reply-generator-popup.png" alt="The AI Reply panel open on x.com in four states: context summary, the tone dropdown open, generated draft cards with Copy/Regenerate/Quote/Insert, and a one-off instruction expanded with more drafts" width="900">
 
 ### Optional: let it read images in posts
