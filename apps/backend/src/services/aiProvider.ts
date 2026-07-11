@@ -4,12 +4,16 @@ import { buildUserPrompt, SYSTEM_PROMPT } from "./promptBuilder.js";
 import { sanitizeReply } from "./safety.js";
 import { TONES, type GenerateReplyRequest, type Tone } from "../types/index.js";
 
+type TokenUsage = { promptTokens: number; completionTokens: number };
+
 type ParsedReplies = { texts: string[]; tone: Tone };
+type GenerateResult = ParsedReplies & { model: string; usage: TokenUsage | null };
 
 type ResponsesApiContent = { type?: string; text?: string };
 type ResponsesApiOutput = { type?: string; content?: ResponsesApiContent[] };
 type ResponsesApiResult = {
   output?: ResponsesApiOutput[];
+  usage?: { input_tokens?: number; output_tokens?: number };
   error?: { message?: string };
 };
 
@@ -17,8 +21,16 @@ type OpenRouterResult = {
   choices?: Array<{
     message?: { content?: string | null };
   }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
   error?: { message?: string };
 };
+
+// A provider or a test mock may not send usage at all — never crash on it,
+// just report "no token data" downstream instead of a wrong count.
+function extractTokenUsage(promptTokens: unknown, completionTokens: unknown): TokenUsage | null {
+  if (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens)) return null;
+  return { promptTokens: Number(promptTokens), completionTokens: Number(completionTokens) };
+}
 
 export class ProviderError extends Error {
   constructor(
@@ -123,12 +135,13 @@ function parseReplies(
 
 export async function generateWithOpenAI(
   input: GenerateReplyRequest,
-): Promise<ParsedReplies> {
+): Promise<GenerateResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new ProviderError("OPENAI_API_KEY is not configured.", 503);
   }
 
+  const model = input.model || process.env.AI_DEFAULT_MODEL || "gpt-5.4-nano";
   const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(
     /\/$/,
     "",
@@ -163,7 +176,7 @@ export async function generateWithOpenAI(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: input.model || process.env.AI_DEFAULT_MODEL || "gpt-5.4-nano",
+      model,
       instructions: SYSTEM_PROMPT,
       input: requestInput,
       max_output_tokens: computeMaxTokens(input),
@@ -179,12 +192,14 @@ export async function generateWithOpenAI(
     );
   }
 
-  return parseReplies(extractOutputText(result), input.count, input.tone, input.maxLength);
+  const parsed = parseReplies(extractOutputText(result), input.count, input.tone, input.maxLength);
+  const usage = extractTokenUsage(result.usage?.input_tokens, result.usage?.output_tokens);
+  return { ...parsed, model, usage };
 }
 
 export async function generateWithOpenRouter(
   input: GenerateReplyRequest,
-): Promise<ParsedReplies> {
+): Promise<GenerateResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new ProviderError("OPENROUTER_API_KEY is not configured.", 503);
@@ -301,10 +316,12 @@ export async function generateWithOpenRouter(
 
   const content = result.choices?.[0]?.message?.content;
   if (!content) throw new ProviderError("OpenRouter returned no text output.");
-  return parseReplies(content, input.count, input.tone, input.maxLength);
+  const parsed = parseReplies(content, input.count, input.tone, input.maxLength);
+  const usage = extractTokenUsage(result.usage?.prompt_tokens, result.usage?.completion_tokens);
+  return { ...parsed, model, usage };
 }
 
-export async function generateReplies(input: GenerateReplyRequest): Promise<ParsedReplies> {
+export async function generateReplies(input: GenerateReplyRequest): Promise<GenerateResult> {
   const provider = process.env.AI_DEFAULT_PROVIDER || "openrouter";
   if (provider === "openrouter") return generateWithOpenRouter(input);
   if (provider === "openai") return generateWithOpenAI(input);

@@ -120,6 +120,31 @@ export async function modelSupportsParameter(model: string, parameter: string): 
   }
 }
 
+// Looks up pricing for any live catalog model (not just the starter/allowed
+// list — a custom model the caller typed in can still get a cost estimate).
+// Returns null on any missing/non-numeric pricing data or catalog fetch
+// failure, never throws — a missing cost estimate is a much smaller problem
+// than breaking the response that carries it.
+export async function getModelPricing(
+  modelId: string,
+): Promise<{ prompt: number; completion: number } | null> {
+  try {
+    const catalog = await getLiveCatalog();
+    const entry = catalog.find((candidate) => candidate.id === modelId);
+    // Number("") is 0, not NaN — trim first so a blank pricing string reads
+    // as "missing" rather than silently pricing the model as free.
+    const promptRaw = entry?.pricing?.prompt?.trim();
+    const completionRaw = entry?.pricing?.completion?.trim();
+    if (!promptRaw || !completionRaw) return null;
+    const prompt = Number(promptRaw);
+    const completion = Number(completionRaw);
+    if (!Number.isFinite(prompt) || !Number.isFinite(completion)) return null;
+    return { prompt, completion };
+  } catch {
+    return null;
+  }
+}
+
 export function isCustomModelAllowed(): boolean {
   const value = process.env.AI_ALLOW_CUSTOM_MODEL;
   return value !== "false" && value !== "0";

@@ -31,9 +31,31 @@
       --radius-lg: 12px;
     }
     * { box-sizing: border-box; }
+    /* Chrome caps how tall an extension popup is actually allowed to
+       render (commonly cited around 600px, sometimes less depending on
+       display/DPI scaling) — independent of any CSS overflow rule inside
+       the page. Asking for more than that cap (this used to be 620px)
+       doesn't get clipped or internally scrolled the way our own
+       overflow:hidden expects; Chrome renders at its own real max and
+       lets the excess scroll at the window level, dragging the whole
+       page — header included — with it, no matter what html/body's own
+       overflow says. Keeping the fixed height (rather than switching to
+       content-driven auto-sizing) is deliberate: it's what keeps the
+       popup from visibly resizing every time you switch bottom-nav tabs
+       — taller views (History/Tone/Advanced) instead scroll internally
+       via .view-content's own overflow-y. This value just needs to stay
+       safely under Chrome's real cap; lower it further if it's still cut
+       off on a particular display. */
+    html {
+      width: 380px;
+      height: 560px;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
     body {
       width: 380px;
-      height: 620px;
+      height: 560px;
       margin: 0;
       padding: 0;
       display: flex;
@@ -52,14 +74,33 @@
       letter-spacing: -0.01em;
     }
 
-    /* Header */
+    /* Header — flex: none + sibling before the scrollable .view-content
+       below, so it never scrolls no matter how tall a view's content gets. */
     .popup-header {
       flex: none;
       min-height: 34px;
       padding: 16px 18px 0;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       margin-bottom: 14px;
+    }
+    .header-links {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-links a {
+      display: inline-flex;
+      color: var(--muted-2);
+    }
+    .header-links a:hover {
+      color: var(--text);
+    }
+    .header-links svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
     }
     /* Every view lives in this fixed-height region so switching tabs never
        resizes the popup window — taller views (Tone, History) scroll
@@ -68,7 +109,7 @@
       flex: 1 1 auto;
       min-height: 0;
       overflow-y: auto;
-      padding: 0 18px 84px;
+      padding: 0 18px;
     }
     .brand {
       display: flex;
@@ -161,6 +202,7 @@
       display: block;
       font-size: 22px;
       font-weight: 700;
+      overflow-wrap: anywhere;
     }
     .stat-card .stat-label {
       display: block;
@@ -230,27 +272,9 @@
     }
     .button-secondary:hover { background: #1a1013; }
 
-    .footer-links {
-      display: flex;
-      justify-content: center;
-      gap: 18px;
-      margin-top: 14px;
-    }
-    .footer-links a {
-      display: inline-flex;
-      color: var(--muted-2);
-    }
-    .footer-links a:hover {
-      color: var(--text);
-    }
-    .footer-links svg {
-      width: 17px;
-      height: 17px;
-      fill: currentColor;
-    }
-
     label {
       display: block;
+      position: relative;
       margin-bottom: 11px;
       font-weight: 650;
     }
@@ -315,6 +339,7 @@
     }
     .field-row {
       display: flex;
+      position: relative;
       align-items: baseline;
       justify-content: space-between;
       gap: 8px;
@@ -325,8 +350,90 @@
     }
     .field-block {
       display: block;
+      position: relative;
       margin-bottom: 11px;
       font-weight: 650;
+    }
+
+    /* Info/warning tooltip icon — replaces long inline hint paragraphs.
+       .info-icon itself is `position: relative` (below), so its ::after
+       tooltip's containing block is the 15x15px icon itself, centered and
+       anchored directly under it regardless of surrounding label text
+       length. This wrapper is kept only as a layout convenience (groups
+       "label text + icon" so they don't get split across a flex row's
+       justify-content: space-between) — it no longer affects tooltip
+       positioning. It previously did (when .info-icon had no position of
+       its own, its ::after resolved against whichever ancestor was
+       positioned), which centered the tooltip on the wrapper's full width
+       — including the label text — pulling it noticeably left/below of the
+       actual icon. */
+    .info-icon-anchor {
+      position: relative;
+      display: inline-block;
+    }
+    .info-icon {
+      position: relative;
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: 15px;
+      height: 15px;
+      margin-left: 5px;
+      padding: 0;
+      border-radius: 50%;
+      border: 1px solid var(--border-soft);
+      background: var(--panel-3);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      font-style: normal;
+      line-height: 1;
+      vertical-align: middle;
+      cursor: help;
+    }
+    .info-icon:hover,
+    .info-icon:focus-visible {
+      border-color: var(--accent);
+      color: var(--accent);
+      outline: none;
+    }
+    .info-icon.info-icon-warn {
+      color: var(--danger);
+    }
+    .info-icon.info-icon-warn:hover,
+    .info-icon.info-icon-warn:focus-visible {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+    .info-icon::after {
+      content: attr(data-tip);
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 50%;
+      z-index: 20;
+      width: max-content;
+      max-width: 240px;
+      padding: 7px 9px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--panel-3);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+      color: var(--text-soft);
+      font-size: 11px;
+      font-weight: 400;
+      line-height: 1.4;
+      text-align: left;
+      white-space: normal;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-50%) translateY(-4px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .info-icon:hover::after,
+    .info-icon:focus-visible::after {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
     #max-length-caption {
       margin: 0 0 4px;
@@ -454,6 +561,10 @@
       font-size: 11px;
       padding: 0 2px;
     }
+    .section-divider {
+      border-top: 1px solid var(--border-soft);
+      margin: 18px 0 12px;
+    }
 
     /* Scrollable regions stay scrollable (wheel/trackpad/keyboard) but never
        show a visible track/thumb. */
@@ -464,42 +575,45 @@
       display: none;
     }
 
-    /* Bottom nav — fixed pill bar, Phantom-style */
+    /* Bottom nav — flat icon row, no pill/rounded container, matches the
+       reference wallet-app screenshot: icons sit directly on the page
+       background, only color (not a background box) marks the active tab.
+       A normal in-flow flex child of body (flex:none), NOT position:fixed
+       — fixed positioning's containing block is the viewport, which is
+       ambiguous/quirky inside an extension popup's rendering context and
+       was the actual cause of the whole popup (header included) becoming
+       scrollable. Being a plain flex sibling next to .popup-header and
+       .view-content keeps everything inside the single flex column that
+       body's own fixed height + overflow:hidden already constrains. */
     .bottom-nav {
-      position: fixed;
-      left: 18px;
-      right: 18px;
-      bottom: 16px;
+      flex: none;
       display: flex;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-      padding: 6px;
-      gap: 4px;
+      background: var(--bg);
+      border-top: 1px solid var(--border-soft);
+      padding: 14px 20px 16px;
     }
     .nav-button {
       flex: 1;
       width: auto;
-      height: 48px;
+      height: auto;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 3px;
+      padding: 4px 0;
       background: transparent;
       color: var(--muted);
-      border-radius: 999px;
-      font-size: 10px;
-      font-weight: 600;
+      border-radius: var(--radius-sm);
     }
+    /* Overrides the generic button:hover { background: var(--accent-hover) }
+       rule above — that selector's specificity (element + pseudo-class)
+       otherwise beats .nav-button's own background:transparent and leaks
+       the purple hover fill back in. Hover here should be zoom-only. */
     .nav-button:hover {
-      background: var(--panel-3);
-      color: var(--text-soft);
+      background: transparent;
     }
     .nav-button svg {
-      width: 19px;
-      height: 19px;
+      width: 23px;
+      height: 23px;
       fill: none;
       stroke: currentColor;
       stroke-width: 2;
@@ -518,7 +632,6 @@
       to { transform: rotate(360deg); }
     }
     .nav-button[aria-current="page"] {
-      background: var(--accent-soft);
       color: var(--accent);
     }
   </style>
@@ -533,6 +646,14 @@
         </svg>
       </span>
       <span>Extcom</span>
+    </div>
+    <div class="header-links">
+      <a href="https://github.com/itsjawreal/extcom-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository" title="GitHub repository">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+      </a>
+      <a href="https://x.com/itsjaw_real" target="_blank" rel="noopener noreferrer" aria-label="X profile" title="X profile">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      </a>
     </div>
   </header>
 
@@ -552,6 +673,14 @@
         <span class="stat-value" id="stat-inserted">0</span>
         <span class="stat-label">Inserted</span>
       </div>
+      <div class="stat-card card">
+        <span class="stat-value" id="stat-tokens">—</span>
+        <span class="stat-label">Tokens used</span>
+      </div>
+      <div class="stat-card card">
+        <span class="stat-value" id="stat-cost">—</span>
+        <span class="stat-label">Est. cost</span>
+      </div>
     </div>
 
     <p class="hint">On X, the ✦ AI Reply button only generates drafts using your Tone/Default settings. Posting always stays manual.</p>
@@ -570,125 +699,145 @@
 
   <section id="view-tone" data-view-panel="tone" hidden>
     <h1 class="view-title">Tone / Default</h1>
-    <div class="chip-row" id="quick-tones-row" hidden></div>
-    <label>
-      Default tone
-      <select id="tone-default"></select>
-    </label>
-    <div class="field-block">
-      <span class="field-row">
-        <span>Favorite tones</span>
-        <span class="field-row-value" id="favorite-tones-count">0/5</span>
-      </span>
-      <div class="chip-grid" id="favorite-tones-grid"></div>
-      <p class="hint field-hint">Pick up to 5 — they show as quick buttons above, and in the on-page panel.</p>
+    <div class="tabs tabs-compact" id="tone-subtabs" role="tablist">
+      <button type="button" class="tab" data-tone-subtab="tone" role="tab" aria-selected="true">Tone</button>
+      <button type="button" class="tab" data-tone-subtab="defaults" role="tab" aria-selected="false">Reply defaults</button>
     </div>
-    <label>
-      Standing instruction (optional)
-      <textarea id="default-instruction" rows="3" placeholder="e.g. never use hashtags"></textarea>
-    </label>
-    <div class="field-block">
-      <span class="field-row">
-        <span>Default reply length</span>
-        <div class="segmented segmented-inline" id="max-length-mode" role="group" aria-label="Reply length mode">
-          <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
-          <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
-        </div>
-      </span>
-      <div id="max-length-manual-row">
-        <p class="field-row-value" id="max-length-caption"><span id="max-length-value">220</span> characters</p>
-        <div class="segmented" id="max-length-preset" role="group" aria-label="Reply length preset">
-          <button type="button" data-length-preset="280" aria-pressed="false">280</button>
-          <button type="button" data-length-preset="4000" aria-pressed="false">4,000</button>
-          <button type="button" data-length-preset="25000" aria-pressed="false">25,000</button>
-        </div>
-        <input id="max-length" type="number" inputmode="numeric" min="50" max="25000" step="10" value="220" placeholder="Custom characters" />
-        <p class="hint field-hint">280/4,000/25,000 match X's own Free/Premium/Premium+ post limits — pick whichever matches your account, or type an exact custom value.</p>
+
+    <div id="tone-subpanel-tone" data-tone-subpanel="tone">
+      <div class="chip-row" id="quick-tones-row" hidden></div>
+      <label>
+        Default tone
+        <select id="tone-default"></select>
+      </label>
+      <div class="field-block">
+        <span class="field-row">
+          <span>Favorite tones
+            <button type="button" class="info-icon" aria-label="More info" data-tip="Pick up to 5 — they show as quick buttons above, and in the on-page panel.">i</button>
+          </span>
+          <span class="field-row-value" id="favorite-tones-count">0/5</span>
+        </span>
+        <div class="chip-grid" id="favorite-tones-grid"></div>
       </div>
     </div>
-    <label>
-      Draft options per generation
-      <div class="segmented" id="draft-count" role="group" aria-label="Draft options per generation">
-        <button type="button" data-count="1" aria-pressed="false">1</button>
-        <button type="button" data-count="2" aria-pressed="false">2</button>
-        <button type="button" data-count="3" aria-pressed="true">3</button>
+
+    <div id="tone-subpanel-defaults" data-tone-subpanel="defaults" hidden>
+      <label>
+        Standing instruction (optional)
+        <textarea id="default-instruction" rows="3" placeholder="e.g. never use hashtags"></textarea>
+      </label>
+      <div class="field-block">
+        <span class="field-row">
+          <span>Default reply length
+            <button type="button" class="info-icon" aria-label="More info" data-tip="280/4,000/25,000 match X's own Free/Premium/Premium+ post limits — pick whichever matches your account, or type an exact custom value.">i</button>
+          </span>
+          <div class="segmented segmented-inline" id="max-length-mode" role="group" aria-label="Reply length mode">
+            <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
+            <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
+          </div>
+        </span>
+        <div id="max-length-manual-row">
+          <p class="field-row-value" id="max-length-caption"><span id="max-length-value">220</span> characters</p>
+          <div class="segmented" id="max-length-preset" role="group" aria-label="Reply length preset">
+            <button type="button" data-length-preset="280" aria-pressed="false">280</button>
+            <button type="button" data-length-preset="4000" aria-pressed="false">4,000</button>
+            <button type="button" data-length-preset="25000" aria-pressed="false">25,000</button>
+          </div>
+          <input id="max-length" type="number" inputmode="numeric" min="50" max="25000" step="10" value="220" placeholder="Custom characters" />
+        </div>
       </div>
-    </label>
-    <label>
-      Use emoji
-      <div class="segmented" id="use-emoji" role="group" aria-label="Use emoji">
-        <button type="button" data-emoji="off" aria-pressed="false">Off</button>
-        <button type="button" data-emoji="on" aria-pressed="true">On</button>
-      </div>
-    </label>
-    <label>
-      Read images in posts
-      <div class="segmented" id="read-images" role="group" aria-label="Read images in posts">
-        <button type="button" data-images="off" aria-pressed="true">Off</button>
-        <button type="button" data-images="on" aria-pressed="false">On</button>
-      </div>
-    </label>
-    <p class="hint field-hint">When on, an attached image is sent along with the post text — uses more tokens and takes a bit longer per generate.</p>
+      <label>
+        Draft options per generation
+        <div class="segmented" id="draft-count" role="group" aria-label="Draft options per generation">
+          <button type="button" data-count="1" aria-pressed="false">1</button>
+          <button type="button" data-count="2" aria-pressed="false">2</button>
+          <button type="button" data-count="3" aria-pressed="true">3</button>
+        </div>
+      </label>
+      <label>
+        Use emoji
+        <div class="segmented" id="use-emoji" role="group" aria-label="Use emoji">
+          <button type="button" data-emoji="off" aria-pressed="false">Off</button>
+          <button type="button" data-emoji="on" aria-pressed="true">On</button>
+        </div>
+      </label>
+      <label>
+        <span class="info-icon-anchor">Read images in posts
+          <button type="button" class="info-icon" aria-label="More info" data-tip="When on, an attached image is sent along with the post text — uses more tokens and takes a bit longer per generate.">i</button>
+        </span>
+        <div class="segmented" id="read-images" role="group" aria-label="Read images in posts">
+          <button type="button" data-images="off" aria-pressed="true">Off</button>
+          <button type="button" data-images="on" aria-pressed="false">On</button>
+        </div>
+      </label>
+    </div>
+
     <p class="status" id="status-tone" aria-live="polite"></p>
   </section>
 
   <section id="view-advanced" data-view-panel="advanced" hidden>
     <h1 class="view-title">Advanced</h1>
-    <label>
-      Backend URL
-      <input id="backend-url" type="url" placeholder="https://your-backend.example.com" />
-    </label>
-    <label>
-      Access token
-      <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" autocorrect="off" />
-      <small style="display: block; margin-top: 4px; opacity: 0.7;">⚠️ Never share this token. It identifies your account and enforces usage limits.</small>
-    </label>
-    <button id="test-connection" class="button-ghost" type="button">Test connection</button>
-    <div class="field-block">
-      <span class="field-row">
-        <span>AI model</span>
-      </span>
-      <select id="ai-model-select">
-        <option value="">Use backend default</option>
-        <option value="__custom__">Custom…</option>
-      </select>
-      <div id="ai-model-custom-row" hidden>
-        <input id="ai-model-custom" type="text" placeholder="e.g. moonshotai/kimi-k2.6" autocomplete="off" />
-        <button id="ai-model-test" class="button-ghost" type="button">Test</button>
-      </div>
-      <p class="status" id="status-ai-model" aria-live="polite"></p>
-      <p class="hint field-hint">Model list is fetched live from your backend's OpenRouter catalog. Leave on "Use backend default" to keep whatever <code>AI_DEFAULT_MODEL</code> is configured server-side. Testing a custom model runs a real generation and counts against your daily quota.</p>
+    <div class="tabs tabs-compact" id="advanced-subtabs" role="tablist">
+      <button type="button" class="tab" data-advanced-subtab="connection" role="tab" aria-selected="true">Connection</button>
+      <button type="button" class="tab" data-advanced-subtab="model" role="tab" aria-selected="false">AI Model</button>
     </div>
+
+    <div id="advanced-subpanel-connection" data-advanced-subpanel="connection">
+      <label>
+        Backend URL
+        <input id="backend-url" type="url" placeholder="https://your-backend.example.com" />
+      </label>
+      <label>
+        <span class="info-icon-anchor">Access token
+          <button type="button" class="info-icon info-icon-warn" aria-label="Warning" data-tip="Never share this token. It identifies your account and enforces usage limits.">!</button>
+        </span>
+        <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" autocorrect="off" />
+      </label>
+      <button id="test-connection" class="button-ghost" type="button">Test connection</button>
+    </div>
+
+    <div id="advanced-subpanel-model" data-advanced-subpanel="model" hidden>
+      <div class="field-block">
+        <span class="field-row">
+          <span>AI model
+            <button type="button" class="info-icon" aria-label="More info" data-tip="Model list is fetched live from your backend's OpenRouter catalog. Leave on &quot;Use backend default&quot; to keep whatever AI_DEFAULT_MODEL is configured server-side. Testing a custom model runs a real generation and counts against your daily quota.">i</button>
+          </span>
+        </span>
+        <select id="ai-model-select">
+          <option value="">Use backend default</option>
+          <option value="__custom__">Custom…</option>
+        </select>
+        <div id="ai-model-custom-row" hidden>
+          <input id="ai-model-custom" type="text" placeholder="e.g. moonshotai/kimi-k2.6" autocomplete="off" />
+          <button id="ai-model-test" class="button-ghost" type="button">Test</button>
+        </div>
+        <p class="status" id="status-ai-model" aria-live="polite"></p>
+      </div>
+    </div>
+
     <button id="save-advanced" class="save-button" type="button">Save</button>
     <p class="status" id="status-advanced" aria-live="polite"></p>
+
+    <div class="section-divider"></div>
+    <p class="history-heading">Danger zone</p>
     <button id="clear-history" class="button-secondary" type="button">Clear history</button>
-    <div class="footer-links">
-      <a href="https://github.com/itsjawreal/extcom-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository" title="GitHub repository">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-      </a>
-      <a href="https://x.com/itsjaw_real" target="_blank" rel="noopener noreferrer" aria-label="X profile" title="X profile">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-      </a>
-    </div>
   </section>
   </div>
 
   <nav class="bottom-nav" id="bottom-nav">
-    <button type="button" class="nav-button" data-view="home" aria-current="page">
+    <button type="button" class="nav-button" data-view="home" aria-current="page" aria-label="Home">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M4 11.5 12 4l8 7.5" />
         <path d="M6 10v9a1 1 0 0 0 1 1h4v-6h2v6h4a1 1 0 0 0 1-1v-9" />
       </svg>
-      Home
     </button>
-    <button type="button" class="nav-button" data-view="history" aria-current="false">
+    <button type="button" class="nav-button" data-view="history" aria-current="false" aria-label="History">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="8.5" />
         <path d="M12 7.5V12l3 2" />
       </svg>
-      History
     </button>
-    <button type="button" class="nav-button" data-view="tone" aria-current="false">
+    <button type="button" class="nav-button" data-view="tone" aria-current="false" aria-label="Tone">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <line x1="4" y1="6" x2="20" y2="6" />
         <circle cx="9" cy="6" r="2" fill="currentColor" stroke="none" />
@@ -697,14 +846,12 @@
         <line x1="4" y1="18" x2="20" y2="18" />
         <circle cx="11" cy="18" r="2" fill="currentColor" stroke="none" />
       </svg>
-      Tone
     </button>
-    <button type="button" class="nav-button" data-view="advanced" aria-current="false">
+    <button type="button" class="nav-button" data-view="advanced" aria-current="false" aria-label="Advanced">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="3" />
         <path d="M19.4 13.5a7.97 7.97 0 0 0 0-3l2-1.5-2-3.5-2.4 1a8 8 0 0 0-2.6-1.5L14 2h-4l-.4 2.5a8 8 0 0 0-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.97 7.97 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a8 8 0 0 0 2.6 1.5L10 22h4l.4-2.5a8 8 0 0 0 2.6-1.5l2.4 1 2-3.5-2-1.5Z" />
       </svg>
-      Advanced
     </button>
   </nav>
 

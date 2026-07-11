@@ -40,6 +40,9 @@ const DEFAULT_USAGE_STATS: UsageStats = {
   totalGenerations: 0,
   totalInserted: 0,
   history: [],
+  totalPromptTokens: 0,
+  totalCompletionTokens: 0,
+  totalEstimatedCostUsd: 0,
 };
 
 function clampInt(value: unknown, fallback: number, min: number, max: number): number {
@@ -201,6 +204,9 @@ async function getUsageStats(): Promise<UsageStats> {
     totalGenerations: Number.isFinite(stats?.totalGenerations) ? Number(stats?.totalGenerations) : 0,
     totalInserted: Number.isFinite(stats?.totalInserted) ? Number(stats?.totalInserted) : 0,
     history: Array.isArray(stats?.history) ? (stats?.history as HistoryEntry[]) : [],
+    totalPromptTokens: Number.isFinite(stats?.totalPromptTokens) ? Number(stats?.totalPromptTokens) : 0,
+    totalCompletionTokens: Number.isFinite(stats?.totalCompletionTokens) ? Number(stats?.totalCompletionTokens) : 0,
+    totalEstimatedCostUsd: Number.isFinite(stats?.totalEstimatedCostUsd) ? Number(stats?.totalEstimatedCostUsd) : 0,
   };
 }
 
@@ -226,11 +232,22 @@ async function recordGeneration(
     tone: data.replies[0]?.tone ?? "smart",
     drafts: data.replies.map((reply) => reply.text),
     inserted: false,
+    model: data.model,
+    promptTokens: data.tokenUsage?.promptTokens,
+    completionTokens: data.tokenUsage?.completionTokens,
+    estimatedCostUsd: data.tokenUsage?.estimatedCostUsd,
   };
 
   const stats = await getUsageStats();
   stats.totalGenerations += 1;
   stats.history = [entry, ...stats.history].slice(0, HISTORY_CAP);
+  if (data.tokenUsage) {
+    stats.totalPromptTokens = (stats.totalPromptTokens ?? 0) + data.tokenUsage.promptTokens;
+    stats.totalCompletionTokens = (stats.totalCompletionTokens ?? 0) + data.tokenUsage.completionTokens;
+    if (data.tokenUsage.estimatedCostUsd !== undefined) {
+      stats.totalEstimatedCostUsd = (stats.totalEstimatedCostUsd ?? 0) + data.tokenUsage.estimatedCostUsd;
+    }
+  }
   await saveUsageStats(stats);
   return historyId;
 }
@@ -357,6 +374,8 @@ async function generateReply(
     error?: { message?: string };
     replies?: GenerateReplyResponse["replies"];
     usage?: GenerateReplyResponse["usage"];
+    model?: GenerateReplyResponse["model"];
+    tokenUsage?: GenerateReplyResponse["tokenUsage"];
   };
 
   if (!response.ok) {
@@ -373,6 +392,11 @@ async function generateReply(
       text: truncateReply(reply.text, input.maxLength),
     })),
     usage: body.usage,
+    // Older backend deployments (pre-token/cost feature) won't send `model`
+    // yet — fall back to whatever model the request asked for rather than
+    // leaving the response type's required field empty.
+    model: body.model ?? input.model ?? "unknown",
+    tokenUsage: body.tokenUsage,
   };
 }
 

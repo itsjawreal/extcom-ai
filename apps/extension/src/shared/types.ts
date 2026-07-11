@@ -74,6 +74,16 @@ export type GenerateReplyResponse = {
     remainingToday: number | null;
     plan: "free" | "pro" | "power";
   };
+  // The model actually used to generate this response.
+  model: string;
+  // Absent when the provider didn't return usage data. estimatedCostUsd is
+  // only present when the resolved model's pricing is available from
+  // OpenRouter's live catalog (see backend services/modelCatalog.ts).
+  tokenUsage?: {
+    promptTokens: number;
+    completionTokens: number;
+    estimatedCostUsd?: number;
+  };
 };
 
 export type ExtensionSettings = {
@@ -109,6 +119,12 @@ export type HistoryEntry = {
   inserted: boolean;
   // Only set once inserted — which composer the draft was inserted into.
   insertKind?: "reply" | "quote";
+  // Absent for entries recorded before this field existed, or when the
+  // provider didn't return usage data for that generation.
+  model?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  estimatedCostUsd?: number;
 };
 
 export type UsageStats = {
@@ -118,4 +134,9 @@ export type UsageStats = {
   // Tracks which history entries have been inserted (survives eviction from
   // history[] when cap is reached). Prevents insert count divergence.
   insertedIds?: Record<string, "reply" | "quote">;
+  // Optional (like insertedIds above) so existing stored stats without these
+  // fields don't need a migration — getUsageStats() normalizes them to 0.
+  totalPromptTokens?: number;
+  totalCompletionTokens?: number;
+  totalEstimatedCostUsd?: number;
 };

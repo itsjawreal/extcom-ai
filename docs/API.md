@@ -31,6 +31,28 @@ Request body:
 }
 ```
 
+Response body:
+
+```json
+{
+  "replies": [{ "id": "reply_1", "text": "...", "tone": "smart" }],
+  "usage": { "remainingToday": 199, "plan": "pro" },
+  "model": "google/gemini-2.5-flash",
+  "tokenUsage": { "promptTokens": 512, "completionTokens": 84, "estimatedCostUsd": 0.000364 }
+}
+```
+
+`model` is the model actually used to generate the response (the request's
+`model` override, `AI_DEFAULT_MODEL`, or the provider's own fallback).
+`tokenUsage` is present whenever the AI provider reports token counts in its
+response — `estimatedCostUsd` within it is only present when the resolved
+model's pricing is available from OpenRouter's live model catalog (the same
+catalog `GET /v1/models` reads from, see `services/modelCatalog.ts`). In
+practice that means an `AI_DEFAULT_PROVIDER=openai` response, or an
+OpenRouter model without pricing metadata in its catalog entry, will have
+`tokenUsage` with real token counts but no `estimatedCostUsd` — never a
+fabricated/stale price.
+
 Valid tones: `degen`, `bullish`, `smart`, `funny`, `respectful`, `short_alpha`,
 `one_liner`, `single_word`, `ct_maxi`, `alpha_drop`, `unhinged_degen`,
 `hype_founder`, `bold_populist`, `unhinged_meme`, `supportive_hype`,

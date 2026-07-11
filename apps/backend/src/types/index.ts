@@ -63,6 +63,20 @@ export type GenerateReplyResponse = {
     remainingToday: number | null;
     plan: "free" | "pro" | "power";
   };
+  // The model actually used to generate this response (resolved from the
+  // request's model override, AI_DEFAULT_MODEL, or the provider's own
+  // fallback — never "unset").
+  model: string;
+  // Absent when the provider didn't return usage data. estimatedCostUsd is
+  // only present when the resolved model's pricing is available from
+  // OpenRouter's live catalog (see services/modelCatalog.ts) — an
+  // OpenAI-provider response, or an OpenRouter model without pricing
+  // metadata, will have token counts but no cost estimate.
+  tokenUsage?: {
+    promptTokens: number;
+    completionTokens: number;
+    estimatedCostUsd?: number;
+  };
 };
 
 export type ApiErrorCode =

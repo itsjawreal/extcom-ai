@@ -33,6 +33,8 @@ const navButtons = Array.from(bottomNav.querySelectorAll<HTMLButtonElement>(".na
 const clearHistoryButton = document.getElementById("clear-history") as HTMLButtonElement;
 const statGenerations = document.getElementById("stat-generations") as HTMLElement;
 const statInserted = document.getElementById("stat-inserted") as HTMLElement;
+const statTokens = document.getElementById("stat-tokens") as HTMLElement;
+const statCost = document.getElementById("stat-cost") as HTMLElement;
 const historyList = document.getElementById("history-list") as HTMLElement;
 const historyTabs = document.getElementById("history-tabs") as HTMLElement;
 
@@ -68,6 +70,16 @@ const statusAiModelNode = document.getElementById("status-ai-model") as HTMLPara
 const quickTonesRow = document.getElementById("quick-tones-row") as HTMLElement;
 const favoriteTonesGrid = document.getElementById("favorite-tones-grid") as HTMLElement;
 const favoriteTonesCount = document.getElementById("favorite-tones-count") as HTMLElement;
+const toneSubtabs = document.getElementById("tone-subtabs") as HTMLElement;
+const toneSubpanels = {
+  tone: document.getElementById("tone-subpanel-tone") as HTMLElement,
+  defaults: document.getElementById("tone-subpanel-defaults") as HTMLElement,
+};
+const advancedSubtabs = document.getElementById("advanced-subtabs") as HTMLElement;
+const advancedSubpanels = {
+  connection: document.getElementById("advanced-subpanel-connection") as HTMLElement,
+  model: document.getElementById("advanced-subpanel-model") as HTMLElement,
+};
 
 const MAX_FAVORITE_TONES = 5;
 
@@ -123,6 +135,31 @@ bottomNav.addEventListener("click", (event) => {
   spinNavIcon(button);
   switchView((button.dataset.view as View) || "home");
 });
+
+// Purely presentational grouping within a single view (e.g. Tone's
+// "Tone" vs "Reply defaults", Advanced's "Connection" vs "AI Model") — all
+// inputs stay mounted regardless of which sub-tab is active, so nothing
+// here touches settings load/save.
+function wireSubTabs(
+  tabs: HTMLElement,
+  panels: Record<string, HTMLElement>,
+  getTarget: (button: HTMLButtonElement) => string | undefined,
+): void {
+  tabs.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>(".tab");
+    const target = button ? getTarget(button) : undefined;
+    if (!button || !target || !(target in panels)) return;
+    tabs.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) => {
+      tab.setAttribute("aria-selected", String(tab === button));
+    });
+    for (const [name, panel] of Object.entries(panels)) {
+      panel.hidden = name !== target;
+    }
+  });
+}
+
+wireSubTabs(toneSubtabs, toneSubpanels, (button) => button.dataset.toneSubtab);
+wireSubTabs(advancedSubtabs, advancedSubpanels, (button) => button.dataset.advancedSubtab);
 
 function setDraftCount(count: number): void {
   draftCount = count;
@@ -602,7 +639,11 @@ function renderHistoryList(history: HistoryEntry[]): void {
     const meta = document.createElement("div");
     meta.className = "history-meta";
     const left = document.createElement("span");
-    left.textContent = `${relativeTime(entry.createdAt)} · ${TONE_LABELS[entry.tone] ?? entry.tone}`;
+    let leftText = `${relativeTime(entry.createdAt)} · ${TONE_LABELS[entry.tone] ?? entry.tone}`;
+    if (entry.promptTokens !== undefined && entry.completionTokens !== undefined) {
+      leftText += ` · ${(entry.promptTokens + entry.completionTokens).toLocaleString()} tok`;
+    }
+    left.textContent = leftText;
     let right: HTMLElement;
     if (entry.inserted && entry.postUrl) {
       // We only ever know the URL of the post being replied to, not the
@@ -626,10 +667,28 @@ function renderHistoryList(history: HistoryEntry[]): void {
   }
 }
 
+// Typical per-call costs are fractions of a cent — 2 decimals would round
+// almost everything to "$0.00", so small amounts get more precision.
+function formatCostUsd(value: number): string {
+  return value < 0.01 ? `$${value.toFixed(4)}` : `$${value.toFixed(2)}`;
+}
+
 function renderUsageStats(stats: UsageStats): void {
   latestUsageStats = stats;
   statGenerations.textContent = String(stats.totalGenerations);
   statInserted.textContent = String(stats.totalInserted);
+
+  const promptTokens = stats.totalPromptTokens ?? 0;
+  const completionTokens = stats.totalCompletionTokens ?? 0;
+  const totalTokens = promptTokens + completionTokens;
+  // "—" distinguishes "no generation has reported token data yet" from a
+  // genuine 0/$0.00, which would otherwise look broken on a fresh install.
+  statTokens.textContent = totalTokens > 0 ? totalTokens.toLocaleString() : "—";
+  statCost.textContent =
+    stats.totalEstimatedCostUsd !== undefined && stats.totalEstimatedCostUsd > 0
+      ? formatCostUsd(stats.totalEstimatedCostUsd)
+      : "—";
+
   renderHistoryList(stats.history);
 }
 

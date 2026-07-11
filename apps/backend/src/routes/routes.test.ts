@@ -344,3 +344,139 @@ test("provider failure refunds reserved quota", async () => {
     rateLimitInternals.PLAN_LIMITS.pro.perDay,
   );
 });
+
+test("POST /v1/generate-reply includes the resolved model even when the provider reports no usage", async () => {
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const captured = captureResponse();
+  const input = JSON.stringify({ postText: "Post", tone: "smart", count: 1, model: "google/gemini-2.5-flash" });
+
+  await generateReplyRoute(
+    request(input, { authorization: `Bearer ${token}` }),
+    captured.response,
+    async () => ({ texts: ["ok"], tone: "smart", model: "google/gemini-2.5-flash", usage: null }),
+  );
+
+  assert.equal(captured.statusCode, 200);
+  const body = jsonBody(captured) as { model?: string; tokenUsage?: unknown };
+  assert.equal(body.model, "google/gemini-2.5-flash");
+  assert.equal(body.tokenUsage, undefined);
+});
+
+test("POST /v1/generate-reply includes tokenUsage with an estimated cost when the provider reports usage and pricing is known", async () => {
+  resetModelCatalogCache();
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        data: [{ id: "google/gemini-2.5-flash", pricing: { prompt: "0.0000003", completion: "0.0000025" } }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+
+  try {
+    const captured = captureResponse();
+    const input = JSON.stringify({ postText: "Post", tone: "smart", count: 1, model: "google/gemini-2.5-flash" });
+
+    await generateReplyRoute(
+      request(input, { authorization: `Bearer ${token}` }),
+      captured.response,
+      async () => ({
+        texts: ["ok"],
+        tone: "smart",
+        model: "google/gemini-2.5-flash",
+        usage: { promptTokens: 1000, completionTokens: 200 },
+      }),
+    );
+
+    assert.equal(captured.statusCode, 200);
+    const body = jsonBody(captured) as {
+      model?: string;
+      tokenUsage?: { promptTokens: number; completionTokens: number; estimatedCostUsd?: number };
+    };
+    assert.equal(body.model, "google/gemini-2.5-flash");
+    assert.deepEqual(body.tokenUsage, {
+      promptTokens: 1000,
+      completionTokens: 200,
+      estimatedCostUsd: 1000 * 0.0000003 + 200 * 0.0000025,
+    });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("POST /v1/generate-reply reports tokenUsage without estimatedCostUsd when pricing is unknown", async () => {
+  resetModelCatalogCache();
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+
+  try {
+    const captured = captureResponse();
+    const input = JSON.stringify({ postText: "Post", tone: "smart", count: 1 });
+
+    await generateReplyRoute(
+      request(input, { authorization: `Bearer ${token}` }),
+      captured.response,
+      async () => ({
+        texts: ["ok"],
+        tone: "smart",
+        model: "some/unpriced-model",
+        usage: { promptTokens: 50, completionTokens: 10 },
+      }),
+    );
+
+    assert.equal(captured.statusCode, 200);
+    const body = jsonBody(captured) as {
+      tokenUsage?: { promptTokens: number; completionTokens: number; estimatedCostUsd?: number };
+    };
+    // JSON.stringify drops an undefined estimatedCostUsd entirely, so the
+    // wire response has no such key at all — not a literal `undefined` value.
+    assert.deepEqual(body.tokenUsage, { promptTokens: 50, completionTokens: 10 });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("POST /v1/generate-reply does not let a hung pricing lookup delay the response", async () => {
+  // Regression: the pricing lookup used to be awaited with no bound, so an
+  // unreachable/slow OpenRouter catalog fetch (up to modelCatalog's own 10s
+  // timeout) would delay returning already-generated replies for something
+  // as non-critical as a cost estimate.
+  resetModelCatalogCache();
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = () => new Promise<Response>(() => {}); // never resolves
+
+  try {
+    const captured = captureResponse();
+    const input = JSON.stringify({ postText: "Post", tone: "smart", count: 1, model: "some/model" });
+
+    const startedAt = Date.now();
+    await generateReplyRoute(
+      request(input, { authorization: `Bearer ${token}` }),
+      captured.response,
+      async () => ({
+        texts: ["ok"],
+        tone: "smart",
+        model: "some/model",
+        usage: { promptTokens: 50, completionTokens: 10 },
+      }),
+    );
+    const elapsedMs = Date.now() - startedAt;
+
+    assert.equal(captured.statusCode, 200);
+    assert.ok(elapsedMs < 3_500, `expected the response to return well under 3.5s, took ${elapsedMs}ms`);
+    const body = jsonBody(captured) as {
+      tokenUsage?: { promptTokens: number; completionTokens: number; estimatedCostUsd?: number };
+    };
+    assert.deepEqual(body.tokenUsage, { promptTokens: 50, completionTokens: 10 });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});

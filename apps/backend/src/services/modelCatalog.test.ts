@@ -4,13 +4,20 @@ import {
   assertModelAllowed,
   expireModelCatalogCacheForTest,
   getModelOptions,
+  getModelPricing,
   isCustomModelAllowed,
   MODEL_ALLOWLIST_UNAVAILABLE_MESSAGE,
   modelSupportsParameter,
   resetModelCatalogCache,
 } from "./modelCatalog.js";
 
-function mockCatalog(models: Array<{ id: string; supported_parameters?: string[] }>) {
+function mockCatalog(
+  models: Array<{
+    id: string;
+    supported_parameters?: string[];
+    pricing?: { prompt?: string; completion?: string };
+  }>,
+) {
   return async () =>
     new Response(JSON.stringify({ data: models }), {
       status: 200,
@@ -242,6 +249,75 @@ test("modelSupportsParameter returns true only when the model declares that para
     assert.equal(await modelSupportsParameter("google/gemini-2.5-pro", "reasoning"), true);
     assert.equal(await modelSupportsParameter("openai/gpt-4o-mini", "reasoning"), false);
     assert.equal(await modelSupportsParameter("some/unknown-model", "reasoning"), false);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("getModelPricing returns prompt/completion pricing for a known catalog model", async () => {
+  resetModelCatalogCache();
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = mockCatalog([
+    { id: "google/gemini-2.5-flash", pricing: { prompt: "0.0000003", completion: "0.0000025" } },
+  ]);
+  try {
+    const pricing = await getModelPricing("google/gemini-2.5-flash");
+    assert.deepEqual(pricing, { prompt: 0.0000003, completion: 0.0000025 });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("getModelPricing returns null for a model missing from the catalog", async () => {
+  resetModelCatalogCache();
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = mockCatalog([
+    { id: "google/gemini-2.5-flash", pricing: { prompt: "0.0000003", completion: "0.0000025" } },
+  ]);
+  try {
+    assert.equal(await getModelPricing("some/unknown-model"), null);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("getModelPricing returns null when pricing fields are missing or non-numeric", async () => {
+  resetModelCatalogCache();
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = mockCatalog([
+    { id: "no/pricing-field" },
+    { id: "bad/pricing-shape", pricing: { prompt: "not-a-number", completion: "0.0000025" } },
+  ]);
+  try {
+    assert.equal(await getModelPricing("no/pricing-field"), null);
+    assert.equal(await getModelPricing("bad/pricing-shape"), null);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("getModelPricing treats a blank pricing string as missing, not free", async () => {
+  // Regression: Number("") is 0, not NaN — a naive Number() coercion would
+  // silently report a blank/missing price as "$0 per token" instead of
+  // omitting the cost estimate.
+  resetModelCatalogCache();
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = mockCatalog([{ id: "blank/pricing", pricing: { prompt: "", completion: "0.0000025" } }]);
+  try {
+    assert.equal(await getModelPricing("blank/pricing"), null);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("getModelPricing returns null (not a throw) when the catalog can't be reached", async () => {
+  resetModelCatalogCache();
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error("network down");
+  };
+  try {
+    assert.equal(await getModelPricing("google/gemini-2.5-flash"), null);
   } finally {
     globalThis.fetch = previousFetch;
   }
