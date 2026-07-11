@@ -54,7 +54,21 @@ limit anyway, the backend truncates the response server-side to the actual
 requested `maxLength` (or the 280 ceiling in `"auto"` mode) — ending on a
 complete sentence within that limit when one fits, otherwise a word boundary
 with a trailing `…`. The extension additionally re-applies this same
-safety net client-side. `useEmoji` is a boolean (default
+safety net client-side.
+
+The long-form instructions above are only a prompt-level nudge — how
+closely the model actually reaches for the requested length depends a lot
+on `AI_DEFAULT_MODEL`. Smaller/cheaper models tuned for concise chat
+responses (e.g. `google/gemini-2.5-flash-lite`) tend to undershoot even
+with the length guidance; a step up within the same family (e.g.
+`google/gemini-2.5-flash`) has followed it far more reliably in testing.
+Also note: OpenRouter's `response_format: json_schema` (strict mode) this
+backend relies on for reliable parsing isn't supported by every model —
+Anthropic Claude models in particular have failed with a generic
+`"Provider returned error"` in testing, most likely due to the combination
+of strict schema mode and `provider.require_parameters: true`.
+
+`useEmoji` is a boolean (default
 `true`); when `false` it's a hard override that beats any emoji habit implied
 by the selected tone. `imageUrls` is optional (array of `http(s)://` URLs,
 max 2000 chars each, at most 4 items — X's own per-post max) — when present,

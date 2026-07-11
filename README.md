@@ -113,6 +113,14 @@ OpenRouter: **$0.02 total spend**, 186K tokens. Actual cost depends
 heavily on which model you pick in `AI_DEFAULT_MODEL` — this is one real
 data point, not a guarantee.
 
+Note: this ultra-cheap tier is great for typical short replies, but
+under-delivers on the long-form length feature below (maxLength above 280)
+— `flash-lite`'s own brevity tuning kept replies around 200-400 characters
+even when explicitly asked to write longer. Bumping one tier to
+`google/gemini-2.5-flash` (same family, still inexpensive) followed the
+length guidance far more reliably in testing. If you plan to use long
+replies regularly, budget for that tier rather than the lite one.
+
 ## 2. Build & install the extension
 
 ```bash
