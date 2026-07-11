@@ -77,8 +77,8 @@ mounted at `/data` (SQLite lives there). Per-platform walkthroughs:
 | [Railway](docs/deploy-railway.md) | Dockerfile | Railway Volume mounted to `/data` |
 | [Render](docs/deploy-render.md) | Dockerfile | Persistent Disk mounted to `/data` |
 | [Fly.io](docs/deploy-fly.md) | Dockerfile | Fly Volume mounted to `/data` |
-| Northflank | Dockerfile | Volume mounted to `/data` |
-| Zeabur | Dockerfile | Volume mounted to `/data` |
+| [Northflank](docs/deploy-northflank.md) | Dockerfile | Volume mounted to `/data` |
+| [Zeabur](docs/deploy-zeabur.md) | Dockerfile | Volume mounted to `/data` |
 | [VPS](docs/deploy-vps.md) | Docker Compose | Docker named volume mounted to `/data` |
 
 Without persistent storage mounted at `/data`, the SQLite database (issued
