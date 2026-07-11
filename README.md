@@ -220,6 +220,11 @@ Repo layout: `apps/extension` (MV3, TypeScript + Vite; content script UI,
 MAIN-world insert bridge, settings popup) and `apps/backend` (zero-dependency
 Node `http` server; SQLite via `node:sqlite`).
 
+## Privacy
+
+[Privacy policy](docs/privacy-policy.md) — short version: nothing leaves
+your device except to the backend URL you configure yourself.
+
 ## License
 
 [MIT](LICENSE)
