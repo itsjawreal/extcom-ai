@@ -26,6 +26,11 @@ let activeToneList: HTMLElement | null = null;
 // transitionend for it.
 const pendingHeightListeners = new WeakMap<HTMLElement, (event: TransitionEvent) => void>();
 
+// Tracks the in-flight request ID per draft card so regenerateSlot can ignore
+// stale responses if the user regenerates the same slot again before the
+// previous response arrives. Key is the card's DOM node.
+const pendingSlotRequestIds = new WeakMap<HTMLElement, string>();
+
 function getPostKey(post: HTMLElement): string | null {
   const timeLink = post.querySelector("time")?.closest("a");
   const match = timeLink?.getAttribute("href")?.match(/\/status\/(\d+)/);
@@ -101,14 +106,25 @@ function animatePanelHeight(panel: HTMLElement, mutate: () => void): void {
 
   const onEnd = (event: TransitionEvent) => {
     if (event.propertyName !== "max-height" || event.target !== panel) return;
+    cleanup();
+  };
+
+  const cleanup = () => {
     panel.removeEventListener("transitionend", onEnd);
     pendingHeightListeners.delete(panel);
     // Hand control back to the CSS rule so it keeps responding to viewport
     // resizes instead of staying pinned to this one stale pixel value.
     panel.style.maxHeight = "";
+    if (timeoutId) clearTimeout(timeoutId);
   };
+
   pendingHeightListeners.set(panel, onEnd);
   panel.addEventListener("transitionend", onEnd);
+
+  // Fallback: if transitionend never fires (e.g., transition was cancelled
+  // mid-flight, or browser doesn't fire the event for some reason), clean up
+  // after ~3 seconds to prevent listener leak on rapid toggle cycles.
+  const timeoutId = window.setTimeout(cleanup, 3000);
 }
 
 function showStatus(panel: HTMLElement, message: string): void {
@@ -304,12 +320,21 @@ async function regenerateSlot(
   context: ExtractedPostContext,
 ): Promise<void> {
   const card = panel.querySelectorAll<HTMLElement>(".eks-reply-option")[index];
-  card?.classList.add("eks-reply-option-loading");
+  if (!card) return;
+
+  card.classList.add("eks-reply-option-loading");
   // Lock the whole panel for the duration of this request, same as a full
   // Generate — otherwise the user could start a second regenerate (or a full
   // Generate) before this one resolves, and whichever response lands last
   // would silently overwrite the other with a stale items[] snapshot.
   setControlsDisabled(panel, true);
+
+  // Unique ID for this regenerate request. If user regenerates this same slot
+  // again before this request completes, the stored ID will change and this
+  // response will be ignored as stale.
+  const requestId = Math.random().toString(36).slice(2);
+  pendingSlotRequestIds.set(card, requestId);
+
   try {
     const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
     const tone = (toneSelect?.value || undefined) as Tone | "auto" | undefined;
@@ -321,6 +346,10 @@ async function regenerateSlot(
       type: "GENERATE_REPLY",
       input: { ...context, tone, count: 1, useEmoji, maxLength, readImages, extraInstruction },
     });
+
+    // Ignore response if this slot was regenerated again while we were waiting.
+    if (pendingSlotRequestIds.get(card) !== requestId) return;
+
     const newReply = response.data.replies[0];
     if (!newReply) throw new Error("No draft returned.");
 
@@ -333,8 +362,11 @@ async function regenerateSlot(
     renderUsage(panel, response.data.usage, tone === "auto" ? newReply.tone : undefined);
     showStatus(panel, "Draft regenerated.");
   } catch (error) {
-    card?.classList.remove("eks-reply-option-loading");
-    showStatus(panel, error instanceof Error ? error.message : "Regenerate failed.");
+    // Only show error if this is still the latest request for this slot.
+    if (pendingSlotRequestIds.get(card) === requestId) {
+      card.classList.remove("eks-reply-option-loading");
+      showStatus(panel, error instanceof Error ? error.message : "Regenerate failed.");
+    }
   } finally {
     setControlsDisabled(panel, false);
   }

@@ -98,4 +98,7 @@ export type UsageStats = {
   totalGenerations: number;
   totalInserted: number;
   history: HistoryEntry[];
+  // Tracks which history entries have been inserted (survives eviction from
+  // history[] when cap is reached). Prevents insert count divergence.
+  insertedIds?: Record<string, "reply" | "quote">;
 };

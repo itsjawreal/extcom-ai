@@ -6,7 +6,9 @@ const UNSAFE_INSTRUCTION_PATTERNS = [
 ];
 
 const EXCESS_HASHTAGS = /(?:\s*#[\p{L}\p{N}_]+){3,}/gu;
-const EXCESS_EMOJI = /(\p{Extended_Pictographic})(?:\s*\1){2,}/gu;
+// Match repeated emojis (including Extended_Pictographic, Emoji variants, and
+// regional indicators). Allows one occurrence, removes repeats (e.g., "🔥🔥🔥" → "🔥").
+const EXCESS_EMOJI = /([\p{Extended_Pictographic}\p{Emoji_Component}])(?:\s*\1){2,}/gu;
 
 export function assertSafeRequest(extraInstruction?: string): void {
   if (!extraInstruction) return;

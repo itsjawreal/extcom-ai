@@ -192,13 +192,25 @@ async function recordGeneration(
 async function recordInsert(historyId: string, kind: "reply" | "quote"): Promise<void> {
   const stats = await getUsageStats();
   const entry = stats.history.find((item) => item.id === historyId);
-  // Entry may already be gone (cap eviction) or already marked — either way,
-  // this is a fire-and-forget signal from the panel, not something worth
-  // surfacing an error for.
-  if (!entry || entry.inserted) return;
-  entry.inserted = true;
-  entry.insertKind = kind;
-  stats.totalInserted += 1;
+
+  if (entry) {
+    // Entry is still in history — mark it and increment counter if not
+    // already marked.
+    if (!entry.inserted) {
+      entry.inserted = true;
+      entry.insertKind = kind;
+      stats.totalInserted += 1;
+    }
+  } else {
+    // Entry was evicted from history (cap reached). Still track it in
+    // insertedIds so totalInserted stays accurate.
+    if (!stats.insertedIds) stats.insertedIds = {};
+    if (!stats.insertedIds[historyId]) {
+      stats.insertedIds[historyId] = kind;
+      stats.totalInserted += 1;
+    }
+  }
+
   await saveUsageStats(stats);
 }
 
@@ -304,7 +316,7 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  void (async () => {
+  (async () => {
     try {
       if (message?.type === "PING") {
         sendResponse({ ok: true } satisfies RuntimeResponse);
@@ -359,7 +371,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         error: error instanceof Error ? error.message : "Unknown extension error.",
       } satisfies RuntimeResponse);
     }
-  })();
+  })().catch((error) => {
+    console.error("Unhandled error in message handler:", error);
+    sendResponse({
+      ok: false,
+      error: "Message handler failed.",
+    } satisfies RuntimeResponse);
+  });
 
   return true;
 });

@@ -68,10 +68,14 @@ export function consumeRateLimit(token: string, plan: UserPlan, now = new Date()
 
   if (usage.minuteCount >= limits.perMinute) {
     saveUsageWindow(token, usage);
+    // Calculate seconds until the next minute boundary (accounting for
+    // milliseconds to avoid off-by-one UX issues). E.g., if we're at 12:34:00.500,
+    // we want to say "retry in 59s" not "60s".
+    const retryAfterSeconds = Math.ceil((60000 - (now.getTime() % 60000)) / 1000);
     return {
       allowed: false,
       remainingToday: Math.max(0, limits.perDay - usage.dayCount),
-      retryAfterSeconds: Math.max(1, 60 - now.getUTCSeconds()),
+      retryAfterSeconds: Math.max(1, retryAfterSeconds),
       limitedBy: "minute",
     };
   }

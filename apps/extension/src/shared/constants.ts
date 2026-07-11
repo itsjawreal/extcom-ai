@@ -36,7 +36,10 @@ export function toneLabel(value: Tone | "auto" | string): string {
   return TONE_LABELS[value as Tone] ?? value;
 }
 
-export const DEFAULT_SETTINGS = {
+// Partial defaults for reference only — the authoritative DEFAULT_SETTINGS
+// (with all 8 fields) lives in serviceWorker.ts to keep the source of truth
+// in one place and prevent divergence.
+export const DEFAULT_SETTINGS_PARTIAL = {
   backendBaseUrl: "http://localhost:3000",
   authToken: "dev-local-token",
   toneDefault: "degen",

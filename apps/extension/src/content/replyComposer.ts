@@ -119,7 +119,11 @@ function resolveEditableTarget(composer: HTMLElement): HTMLElement {
     if (focusedEditable && composer.contains(focusedEditable)) return focusedEditable;
   }
 
-  return composer.querySelector<HTMLElement>('[contenteditable="true"], [role="textbox"]') || composer;
+  const editable = composer.querySelector<HTMLElement>('[contenteditable="true"], [role="textbox"]');
+  if (!editable) {
+    throw new Error("Editable target not found in composer");
+  }
+  return editable;
 }
 
 function setSelection(editable: HTMLElement, mode: "all" | "end"): boolean {
