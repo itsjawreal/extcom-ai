@@ -49,12 +49,24 @@ function findReanchorTarget(): { anchor: HTMLButtonElement; post: HTMLElement } 
 }
 
 async function sendRuntimeMessage<T>(message: unknown): Promise<T> {
-  const response = await chrome.runtime.sendMessage(message) as {
-    ok: boolean;
-    data?: GenerateReplyResponse;
-    historyId?: string;
-    error?: string;
-  };
+  type Response = { ok: boolean; data?: GenerateReplyResponse; historyId?: string; error?: string };
+  let response: Response;
+  try {
+    response = await chrome.runtime.sendMessage(message) as Response;
+  } catch (error) {
+    // Thrown (not returned as { ok: false }) when this content script is a
+    // stale leftover from before the extension was reloaded/updated in
+    // chrome://extensions — its connection to the background service
+    // worker is permanently dead, reloading the extension again won't fix
+    // it, only reloading THIS page will. The raw browser message
+    // ("Extension context invalidated.") gives no hint that a page refresh
+    // is the actual fix, so callers would otherwise show that cryptic
+    // string verbatim in the panel status.
+    if (error instanceof Error && /context invalidated/i.test(error.message)) {
+      throw new Error("Extension was reloaded or updated — refresh this page (F5) and try again.");
+    }
+    throw error;
+  }
   if (!response.ok) throw new Error(response.error || "Extension request failed.");
   return response as T;
 }
@@ -215,8 +227,11 @@ async function performInsert(
       await insertQuoteIntoComposer(activePost, reply.text);
     }
     if (historyId) {
-      // Fire-and-forget: don't make Insert feel slow waiting on this.
-      void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId, kind });
+      // Fire-and-forget: don't make Insert feel slow waiting on this. The
+      // catch is just to avoid an unhandled-rejection console warning if
+      // the extension context went stale (see sendRuntimeMessage) — losing
+      // one history record in that case isn't worth surfacing to the user.
+      void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId, kind }).catch(() => {});
     }
     closePanel();
   } catch (error) {

@@ -47,6 +47,16 @@ function extractImageUrls(post: HTMLElement): string[] | undefined {
   return urls.length ? urls : undefined;
 }
 
+// X renders native video and GIFs inside a [data-testid="videoPlayer"]
+// wrapper — a completely different element from [data-testid="tweetPhoto"]
+// img used for static images, so extractImageUrls() never matches it. Not
+// live-verified against x.com's current markup (same caveat as the rest of
+// this file's selectors) — if this stops matching, the effect is just the
+// less-accurate generic error message below, not a crash.
+function hasVideo(post: HTMLElement): boolean {
+  return post.querySelector('[data-testid="videoPlayer"]') !== null;
+}
+
 function extractArticleText(article: HTMLElement): string | undefined {
   return cleanText(article.querySelector<HTMLElement>(POST_TEXT_SELECTOR)?.innerText);
 }
@@ -134,6 +144,13 @@ export function extractPost(post: HTMLElement): ExtractedPostContext {
   // A post can be image-only (screenshot, chart, meme with no caption) —
   // only bail out if there's truly nothing to reply from.
   if (!postText && !imageUrls) {
+    // Distinguishes "this post has a video, which we don't read yet" from
+    // the generic case below — the old message ("Post text is not visible")
+    // was actively misleading here, since the real issue isn't that text
+    // failed to extract, it's that video content isn't supported at all.
+    if (hasVideo(post)) {
+      throw new Error("This post only has a video — video content isn't supported yet. Try a post with text or images.");
+    }
     throw new Error("Post text is not visible or could not be extracted.");
   }
 
