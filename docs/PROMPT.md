@@ -103,12 +103,14 @@ distinct angles on the post — a reaction to a specific detail, relevant
 context or a comparison, and an implication or follow-up thought. Structured
 as short paragraphs separated by a blank line, roughly one per angle,
 instead of one dense unbroken block of text — mirrors how real long-form X
-posts read. A concrete numeric target is also given: roughly
-`min(500, maxLength × 0.15)` to `min(1200, maxLength × 0.35)` characters —
-calibrated against a real long-form X post example, and capped so a very
-high ceiling like 25,000 doesn't push toward writing an essay by default.
-Brevity-focused tones (one_liner, single_word, short_alpha) are told to
-stay true to their own brevity regardless)
+posts read. The low end of that range,
+`min(500, maxLength × 0.15)` characters, is framed as a firm minimum — the
+same way the character limit itself is framed as a firm maximum — with the
+high end, `min(1200, maxLength × 0.35)`, as the rest of the target range.
+Both are calibrated against a real long-form X post example, and capped so
+a very high ceiling like 25,000 doesn't push toward writing an essay by
+default. Brevity-focused tones (one_liner, single_word, short_alpha) are
+told to stay true to their own brevity regardless)
 (or, if maxLength is "auto": no fixed target, capped at 280 chars, prioritize
 a natural-sounding reply over hitting a specific length)
 

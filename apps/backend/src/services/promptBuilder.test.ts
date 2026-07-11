@@ -44,7 +44,12 @@ test("long-form maxLength adds the paragraph-structure instruction", () => {
   // Regression 3: prose permission alone still wasn't enough — LLMs follow
   // concrete numeric targets far more reliably than "use the room" language.
   // 4000 * 0.15 = 600, capped at 500; 4000 * 0.35 = 1400, capped at 1200.
-  assert.match(prompt, /around 500-1200 characters/);
+  assert.match(prompt, /500-1200 range/);
+  // Regression 4: even the earlier "as a rough guide, usually lands
+  // around X-Y" phrasing under-delivered in practice (~300-315 char
+  // replies against a 500 floor) — softer than the upper-bound wording.
+  // Mirroring that same "firm" framing for the floor is the next attempt.
+  assert.match(prompt, /firm minimum/);
 });
 
 test("the soft length target plateaus instead of scaling all the way to a very high maxLength", () => {
@@ -60,7 +65,12 @@ test("the soft length target plateaus instead of scaling all the way to a very h
     useEmoji: false,
   });
   assert.match(prompt, /25000 characters, hard limit/);
-  assert.match(prompt, /around 500-1200 characters/);
+  assert.match(prompt, /500-1200 range/);
+  // Regression 4: even the earlier "as a rough guide, usually lands
+  // around X-Y" phrasing under-delivered in practice (~300-315 char
+  // replies against a 500 floor) — softer than the upper-bound wording.
+  // Mirroring that same "firm" framing for the floor is the next attempt.
+  assert.match(prompt, /firm minimum/);
 });
 
 test("auto maxLength keeps the 280-char cap and no long-form instruction", () => {
