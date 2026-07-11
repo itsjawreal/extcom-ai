@@ -147,6 +147,12 @@ Then in Chrome (or any Chromium browser):
 
 <img src="docs/assets/ai-reply-button-preview.svg" alt="Mockup showing the AI Reply button placed in a post's action row, next to Reply, Retweet, Like, and Bookmark" width="560">
 
+Clicking it opens the on-page panel — tone, length, draft count, emoji, and
+image toggles, then one card per generated draft with Copy/Regenerate/Quote/
+Insert actions:
+
+<img src="docs/assets/ai-reply-popup.png" alt="Mockup of the AI Reply panel open on x.com, showing tone chips, length/draft/emoji/image controls, and three generated draft cards each with Copy, Regenerate, Quote, and Insert buttons" width="900">
+
 ### Optional: let it read images in posts
 
 The panel can attach every image in the post (up to 4, X's own per-post max)
