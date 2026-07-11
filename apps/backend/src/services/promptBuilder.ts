@@ -29,7 +29,7 @@ const TONE_GUIDANCE: Record<Tone, string> = {
 
 export const SYSTEM_PROMPT = `You are an expert social reply assistant for X/Twitter.
 
-Generate short, natural, human-sounding replies to the supplied post.
+Generate natural, human-sounding replies to the supplied post. Length should follow what the character limit and tone in the user message call for — do not default to the shortest possible reaction just because that's the norm for a typical tweet reply.
 
 Rules:
 - Do not sound like a bot. Write like a real person casually typing, not a formal report: vary sentence length, use short fragments and natural pauses (commas, dashes, or a line break between two ideas) instead of one long, evenly-paced run-on sentence every time.
@@ -61,7 +61,7 @@ function lengthGuidance(maxLength: GenerateReplyRequest["maxLength"]): string {
   }
   const base = `${maxLength} characters, hard limit. The reply as written must already be complete and fit within this — do not write a longer reply that relies on being cut off.`;
   if (maxLength <= SHORT_FORM_LIMIT) return base;
-  return `${base} This is long-form, beyond the classic 280-char tweet length — structure it as short paragraphs separated by a blank line, each one a single beat or idea (setup, a fact, a reaction, a punchline), the way real long-form X posts actually read. Do not just fill the space with one dense, unbroken block of text.`;
+  return `${base} This is long-form, well beyond the classic 280-char tweet length — you are not restricted to typical short-tweet brevity here. Use the room: write as long and developed as the post and tone genuinely call for, up to this limit. A short one-liner is usually a poor use of a limit this high — treat a fuller, multi-sentence or multi-paragraph reply as the expected norm at this length, not the exception. Structure it as short paragraphs separated by a blank line, each one a single beat or idea (setup, a fact, a reaction, a punchline), the way real long-form X posts actually read — do not just fill the space with one dense, unbroken block of text. Brevity-focused tones (one_liner, single_word, short_alpha) should still stay true to their own brevity regardless of this ceiling.`;
 }
 
 function toneSection(tone: GenerateReplyRequest["tone"]): string {
