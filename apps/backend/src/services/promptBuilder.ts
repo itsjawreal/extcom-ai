@@ -59,9 +59,20 @@ function lengthGuidance(maxLength: GenerateReplyRequest["maxLength"]): string {
   if (maxLength === "auto") {
     return "No fixed character target — pick whatever length reads most natural for the selected tone and this specific post (a short punchy reaction and a longer thought are both fine), capped at 280 characters. Prioritize a complete, natural-sounding reply over hitting any particular length.";
   }
-  const base = `${maxLength} characters, hard limit. The reply as written must already be complete and fit within this — do not write a longer reply that relies on being cut off.`;
+  const base = `${maxLength} characters, hard limit — an upper bound to fill sensibly, not a reason to default to something short. The reply as written must already be complete and fit within this; never write something that relies on being cut off.`;
   if (maxLength <= SHORT_FORM_LIMIT) return base;
-  return `${base} This is long-form, well beyond the classic 280-char tweet length — you are not restricted to typical short-tweet brevity here. Use the room: write as long and developed as the post and tone genuinely call for, up to this limit. A short one-liner is usually a poor use of a limit this high — treat a fuller, multi-sentence or multi-paragraph reply as the expected norm at this length, not the exception. Structure it as short paragraphs separated by a blank line, each one a single beat or idea (setup, a fact, a reaction, a punchline), the way real long-form X posts actually read — do not just fill the space with one dense, unbroken block of text. Brevity-focused tones (one_liner, single_word, short_alpha) should still stay true to their own brevity regardless of this ceiling.`;
+  // Capped percentages of maxLength, not a flat percentage all the way up —
+  // calibrated against a real reference example (~550-600 chars for a
+  // genuinely long-form, multi-beat X post), not an arbitrary guess. A vague
+  // "use the room" instruction alone wasn't enough in practice (live testing
+  // still produced ~220-260 char replies at maxLength 4000) — LLMs are bad
+  // at judging "how long" from prose alone but follow concrete numeric
+  // targets far more reliably. The cap keeps a 25,000 ceiling from pushing
+  // toward an essay by default; the model can still go further if the post
+  // genuinely warrants it, this is a floor/target, not a second hard limit.
+  const softFloor = Math.min(500, Math.round(maxLength * 0.15));
+  const softTarget = Math.min(1_200, Math.round(maxLength * 0.35));
+  return `${base} This is long-form, well beyond the classic 280-char tweet length — you are not restricted to typical short-tweet brevity here. Don't just stretch a single quick reaction with filler words: actually develop the reply with at least 2-3 distinct angles on the post — react to a specific detail, add relevant context or a comparison, close with an implication or follow-up thought — the way a real person elaborating on something they actually care about would write it. Structure it as short paragraphs separated by a blank line, roughly one per angle, the way real long-form X posts actually read, not one dense unbroken block of text. As a rough guide, a well-developed reply at this length usually lands around ${softFloor}-${softTarget} characters — a reply notably under ${softFloor} characters is almost always underusing the room you were given. Brevity-focused tones (one_liner, single_word, short_alpha) are the exception and should stay true to their own brevity regardless of this ceiling.`;
 }
 
 function toneSection(tone: GenerateReplyRequest["tone"]): string {

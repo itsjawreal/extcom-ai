@@ -94,15 +94,21 @@ Extra user instruction:
 <extraInstruction, or "None">
 
 Character limit per reply:
-<maxLength> characters, hard limit
+<maxLength> characters, hard limit — an upper bound to fill sensibly, not a
+reason to default to something short
 (above 280 characters, an extra instruction is appended: explicitly not
-restricted to typical short-tweet brevity, a longer multi-sentence or
-multi-paragraph reply is the expected norm at this length rather than the
-exception, structured as short paragraphs separated by a blank line, each
-one a single beat or idea, instead of one dense unbroken block of text —
-mirrors how real long-form X posts read. Brevity-focused tones (one_liner,
-single_word, short_alpha) are told to stay true to their own brevity
-regardless)
+restricted to typical short-tweet brevity, told not to just stretch a
+single quick reaction with filler, and instead to develop at least 2-3
+distinct angles on the post — a reaction to a specific detail, relevant
+context or a comparison, and an implication or follow-up thought. Structured
+as short paragraphs separated by a blank line, roughly one per angle,
+instead of one dense unbroken block of text — mirrors how real long-form X
+posts read. A concrete numeric target is also given: roughly
+`min(500, maxLength × 0.15)` to `min(1200, maxLength × 0.35)` characters —
+calibrated against a real long-form X post example, and capped so a very
+high ceiling like 25,000 doesn't push toward writing an essay by default.
+Brevity-focused tones (one_liner, single_word, short_alpha) are told to
+stay true to their own brevity regardless)
 (or, if maxLength is "auto": no fixed target, capped at 280 chars, prioritize
 a natural-sounding reply over hitting a specific length)
 

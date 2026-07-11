@@ -35,6 +35,32 @@ test("long-form maxLength adds the paragraph-structure instruction", () => {
   // brevity bias for long-form requests — without it the model kept
   // writing ~150-220 char replies even at maxLength 4000/25000.
   assert.match(prompt, /not restricted to typical short-tweet brevity/);
+  // Regression 2: even after the above, live testing showed the model
+  // still defaulted to ~200-260 char replies at maxLength 4000 — a bare
+  // "you're allowed to go longer" permission gave it no concrete reason to
+  // actually elaborate. This directive asks for real content structure
+  // (multiple angles) so length grows from depth, not from padding.
+  assert.match(prompt, /at least 2-3 distinct angles/);
+  // Regression 3: prose permission alone still wasn't enough — LLMs follow
+  // concrete numeric targets far more reliably than "use the room" language.
+  // 4000 * 0.15 = 600, capped at 500; 4000 * 0.35 = 1400, capped at 1200.
+  assert.match(prompt, /around 500-1200 characters/);
+});
+
+test("the soft length target plateaus instead of scaling all the way to a very high maxLength", () => {
+  // At maxLength 25000, a flat percentage would suggest a multi-thousand
+  // character target — closer to a standalone essay than a reply. The
+  // target should plateau at the same reasonable "developed reply" range
+  // used for 4000, not balloon just because the ceiling is technically higher.
+  const prompt = buildUserPrompt({
+    postText: "Post",
+    tone: "smart",
+    count: 1,
+    maxLength: 25_000,
+    useEmoji: false,
+  });
+  assert.match(prompt, /25000 characters, hard limit/);
+  assert.match(prompt, /around 500-1200 characters/);
 });
 
 test("auto maxLength keeps the 280-char cap and no long-form instruction", () => {
