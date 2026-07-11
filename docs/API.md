@@ -41,11 +41,16 @@ manually-picked tone this just mirrors the request; with `"auto"` it tells
 the caller which tone the AI chose.
 
 `count` must be between 1 and 3 (default `3`). `maxLength` must be either an
-integer between 50 and 280 characters (default `220`), or the string `"auto"`
-— which drops the fixed character target and lets the AI pick whatever
-length reads most natural for the tone/post, capped at 280. Replies are also
-hard-truncated client-side if a provider ignores the limit (or exceeds the
-280 ceiling in `"auto"` mode). `useEmoji` is a boolean (default
+integer between 50 and 25,000 characters (default `220`), or the string
+`"auto"` — which drops the fixed character target and lets the AI pick
+whatever length reads most natural for the tone/post, capped at 280. The
+25,000 ceiling matches X Premium+'s own post limit (Free is 280, Premium is
+4,000); the caller is responsible for picking a value that fits whichever
+plan the X account posting the reply is actually on. Above 280 characters,
+the AI is additionally instructed to structure the reply as short paragraphs
+separated by blank lines instead of one dense block of text. Replies are
+also hard-truncated client-side if a provider ignores the limit (or exceeds
+the 280 ceiling in `"auto"` mode). `useEmoji` is a boolean (default
 `true`); when `false` it's a hard override that beats any emoji habit implied
 by the selected tone. `imageUrls` is optional (array of `http(s)://` URLs,
 max 2000 chars each, at most 4 items — X's own per-post max) — when present,

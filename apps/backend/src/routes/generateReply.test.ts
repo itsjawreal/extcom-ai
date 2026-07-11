@@ -48,11 +48,20 @@ test("rejects an invalid maxLength string", () => {
   );
 });
 
-test("rejects maxLength outside the 50-280 range", () => {
+test("rejects maxLength outside the 50-25000 range", () => {
   assert.throws(
     () => validateGenerateRequest({ postText: "Post", tone: "smart", maxLength: 30 }),
     /maxLength must be "auto" or an integer/,
   );
+  assert.throws(
+    () => validateGenerateRequest({ postText: "Post", tone: "smart", maxLength: 25_001 }),
+    /maxLength must be "auto" or an integer/,
+  );
+});
+
+test("accepts a long-form maxLength up to the X Premium+ ceiling", () => {
+  const input = validateGenerateRequest({ postText: "Post", tone: "smart", maxLength: 25_000 });
+  assert.equal(input.maxLength, 25_000);
 });
 
 test("accepts multiple imageUrls up to 4", () => {

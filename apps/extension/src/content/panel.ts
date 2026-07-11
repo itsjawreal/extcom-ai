@@ -1,5 +1,5 @@
 import { insertQuoteIntoComposer, insertReplyIntoComposer } from "./replyComposer";
-import { TONE_AUTO_LABEL, TONE_LABELS, toneLabel } from "../shared/constants";
+import { clampReplyLength, REPLY_LENGTH_PRESETS, TONE_AUTO_LABEL, TONE_LABELS, toneLabel } from "../shared/constants";
 import type {
   ExtractedPostContext,
   GenerateReplyResponse,
@@ -700,7 +700,21 @@ function readMaxLength(panel: HTMLElement): number | "auto" | undefined {
   );
   if (activeMode?.dataset.lengthMode === "auto") return "auto";
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
-  return input ? Number(input.value) : undefined;
+  // Clamped here, not just on the input's own change listener — this is a
+  // free-typed number field with no native min/max enforcement, and it's
+  // read directly at generate-time, which can happen before a blur/change
+  // event has had a chance to fire and correct the display.
+  return input ? clampReplyLength(Number(input.value)) : undefined;
+}
+
+function syncMaxLengthPreset(panel: HTMLElement): void {
+  const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
+  const current = input ? Number(input.value) : NaN;
+  panel
+    .querySelectorAll<HTMLButtonElement>("[data-max-length-preset-group] button[data-length-preset]")
+    .forEach((button) => {
+      button.setAttribute("aria-pressed", String(Number(button.dataset.lengthPreset) === current));
+    });
 }
 
 function setMaxLength(panel: HTMLElement, value: number | "auto"): void {
@@ -712,6 +726,7 @@ function setMaxLength(panel: HTMLElement, value: number | "auto"): void {
   const display = panel.querySelector<HTMLElement>("[data-max-length-value]");
   if (input) input.value = String(value);
   if (display) display.textContent = String(value);
+  syncMaxLengthPreset(panel);
   setLengthMode(panel, "manual");
 }
 
@@ -847,7 +862,10 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
           </span>
           <div data-max-length-manual-row>
             <p class="eks-field-row-value eks-max-length-value-row"><span data-max-length-value>220</span> chars</p>
-            <input type="range" data-max-length-input min="50" max="280" step="10" value="220" />
+            <div class="eks-count-group" data-max-length-preset-group role="group" aria-label="Reply length preset">
+              ${REPLY_LENGTH_PRESETS.map((preset) => `<button type="button" data-length-preset="${preset}" aria-pressed="false">${preset.toLocaleString()}</button>`).join("")}
+            </div>
+            <input type="number" inputmode="numeric" data-max-length-input min="50" max="25000" step="10" value="220" />
           </div>
         </div>
         <div class="eks-panel-config">
@@ -919,6 +937,25 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   maxLengthInput?.addEventListener("input", () => {
     panel.dataset.controlsTouched = "true";
     if (maxLengthValue) maxLengthValue.textContent = maxLengthInput.value;
+    syncMaxLengthPreset(panel);
+  });
+
+  // "change" (fires once on blur/commit) clamps the visible value into
+  // range — "input" (fires on every keystroke) deliberately doesn't, or
+  // typing "4" toward "4000" would get snapped to 50 after the first digit.
+  maxLengthInput?.addEventListener("change", () => {
+    maxLengthInput.value = String(clampReplyLength(Number(maxLengthInput.value)));
+    if (maxLengthValue) maxLengthValue.textContent = maxLengthInput.value;
+    syncMaxLengthPreset(panel);
+  });
+
+  panel.querySelector("[data-max-length-preset-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-length-preset]");
+    if (!button?.dataset.lengthPreset) return;
+    panel.dataset.controlsTouched = "true";
+    if (maxLengthInput) maxLengthInput.value = button.dataset.lengthPreset;
+    if (maxLengthValue) maxLengthValue.textContent = button.dataset.lengthPreset;
+    syncMaxLengthPreset(panel);
   });
 
   panel.querySelector("[data-length-mode-group]")?.addEventListener("click", (event) => {

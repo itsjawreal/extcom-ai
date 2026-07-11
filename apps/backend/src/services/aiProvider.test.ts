@@ -51,6 +51,33 @@ test("parseReplies falls back to a safe tone when auto and the model's tone is m
   assert.equal(invalid.tone, "smart");
 });
 
+test("computeMaxTokens scales with maxLength and count, floored and capped", () => {
+  assert.equal(
+    providerInternals.computeMaxTokens({ postText: "Post", tone: "smart", count: 3, maxLength: 220, useEmoji: false }),
+    800,
+  );
+  assert.equal(
+    providerInternals.computeMaxTokens({ postText: "Post", tone: "smart", count: 3, maxLength: "auto", useEmoji: false }),
+    800,
+  );
+  const longForm = providerInternals.computeMaxTokens({
+    postText: "Post",
+    tone: "smart",
+    count: 3,
+    maxLength: 4_000,
+    useEmoji: false,
+  });
+  assert.ok(longForm > 800, "long-form maxLength should raise the token budget above the floor");
+  const extreme = providerInternals.computeMaxTokens({
+    postText: "Post",
+    tone: "smart",
+    count: 3,
+    maxLength: 25_000,
+    useEmoji: false,
+  });
+  assert.equal(extreme, 20_000);
+});
+
 test("OpenRouter is the default provider and requires its server-side key", async () => {
   const previousProvider = process.env.AI_DEFAULT_PROVIDER;
   const previousKey = process.env.OPENROUTER_API_KEY;
@@ -150,6 +177,43 @@ test("sends one content block per image when imageUrls has multiple entries", as
       imageBlocks.map((block) => block.image_url?.url),
       ["https://pbs.twimg.com/media/a.jpg", "https://pbs.twimg.com/media/b.jpg"],
     );
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
+  }
+});
+
+test("scales max_tokens and the JSON schema's text length for a long-form request", async () => {
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  let requestBody: Record<string, unknown> | undefined;
+
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({ replies: [{ text: "one" }] }) } }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  try {
+    await generateWithOpenRouter({
+      postText: "Post",
+      tone: "smart",
+      count: 1,
+      maxLength: 4_000,
+      useEmoji: false,
+    });
+
+    assert.ok((requestBody?.max_tokens as number) > 800);
+    const schema = (
+      (requestBody?.response_format as { json_schema?: { schema?: unknown } })?.json_schema?.schema
+    ) as { properties?: { replies?: { items?: { properties?: { text?: { maxLength?: number } } } } } };
+    assert.equal(schema.properties?.replies?.items?.properties?.text?.maxLength, 4_000);
   } finally {
     globalThis.fetch = previousFetch;
     if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;

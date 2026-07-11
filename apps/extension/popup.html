@@ -332,53 +332,6 @@
       margin: 0 0 4px;
     }
 
-    /* Custom range slider — the native control looks cheap/default otherwise */
-    input[type="range"] {
-      -webkit-appearance: none;
-      appearance: none;
-      min-height: auto;
-      height: 5px;
-      padding: 0;
-      margin-top: 10px;
-      border: none;
-      border-radius: 999px;
-      background: #241f30;
-    }
-    input[type="range"]::-webkit-slider-runnable-track {
-      height: 5px;
-      border-radius: 999px;
-      background: transparent;
-    }
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: var(--accent);
-      border: none;
-      margin-top: -5.5px;
-      cursor: pointer;
-    }
-    input[type="range"]::-moz-range-track {
-      height: 5px;
-      border-radius: 999px;
-      background: #241f30;
-      border: none;
-    }
-    input[type="range"]::-moz-range-thumb {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: var(--accent);
-      border: none;
-      cursor: pointer;
-    }
-    input[type="range"]:disabled {
-      opacity: 0.4;
-      pointer-events: none;
-    }
-
     .segmented {
       display: flex;
       gap: 6px;
@@ -628,7 +581,13 @@
       </span>
       <div id="max-length-manual-row">
         <p class="field-row-value" id="max-length-caption"><span id="max-length-value">220</span> characters</p>
-        <input id="max-length" type="range" min="50" max="280" step="10" value="220" />
+        <div class="segmented" id="max-length-preset" role="group" aria-label="Reply length preset">
+          <button type="button" data-length-preset="280" aria-pressed="false">280</button>
+          <button type="button" data-length-preset="4000" aria-pressed="false">4,000</button>
+          <button type="button" data-length-preset="25000" aria-pressed="false">25,000</button>
+        </div>
+        <input id="max-length" type="number" inputmode="numeric" min="50" max="25000" step="10" value="220" placeholder="Custom characters" />
+        <p class="hint field-hint">280/4,000/25,000 match X's own Free/Premium/Premium+ post limits — pick whichever matches your account, or type an exact custom value.</p>
       </div>
     </div>
     <label>

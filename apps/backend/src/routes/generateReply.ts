@@ -49,12 +49,15 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     throw new Error("count must be an integer between 1 and 3.");
   }
 
+  // 25,000 matches X Premium+'s own post limit — Free/Premium accounts have
+  // lower caps (280/4,000), but that's a per-account plan choice the caller
+  // makes, not something the backend needs to enforce.
   const maxLength = body.maxLength === undefined ? 220 : body.maxLength;
   if (
     maxLength !== "auto" &&
-    (!Number.isInteger(maxLength) || Number(maxLength) < 50 || Number(maxLength) > 280)
+    (!Number.isInteger(maxLength) || Number(maxLength) < 50 || Number(maxLength) > 25_000)
   ) {
-    throw new Error('maxLength must be "auto" or an integer between 50 and 280.');
+    throw new Error('maxLength must be "auto" or an integer between 50 and 25000.');
   }
 
   const useEmoji = body.useEmoji === undefined ? true : body.useEmoji;

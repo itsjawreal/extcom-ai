@@ -28,6 +28,23 @@ export class ProviderError extends Error {
   }
 }
 
+// max_tokens/max_output_tokens has to scale with the requested reply length
+// or long-form (X Premium) requests get cut off mid-reply — or mid-JSON,
+// which breaks parsing entirely. 2.2 chars/token is a conservative floor
+// (real English averages ~4) that leaves headroom for JSON structure
+// overhead and less token-dense text. Capped well below what most providers
+// support so a single request can't run away in cost; how far a very long
+// maxLength × count combination actually gets still depends on the
+// configured AI_DEFAULT_MODEL's own output-token limit.
+const MAX_TOKENS_CEILING = 20_000;
+const MIN_TOKENS_FLOOR = 800;
+
+function computeMaxTokens(input: GenerateReplyRequest): number {
+  const perReplyChars = input.maxLength === "auto" ? 280 : input.maxLength;
+  const estimated = Math.ceil((perReplyChars * input.count) / 2.2) + 300;
+  return Math.min(MAX_TOKENS_CEILING, Math.max(MIN_TOKENS_FLOOR, estimated));
+}
+
 function extractOutputText(result: ResponsesApiResult): string {
   for (const item of result.output ?? []) {
     if (item.type !== "message") continue;
@@ -130,7 +147,7 @@ export async function generateWithOpenAI(
       model: process.env.AI_DEFAULT_MODEL || "gpt-5.4-nano",
       instructions: SYSTEM_PROMPT,
       input: requestInput,
-      max_output_tokens: 800,
+      max_output_tokens: computeMaxTokens(input),
       reasoning: { effort: "none" },
     }),
     signal: AbortSignal.timeout(30_000),
@@ -189,7 +206,7 @@ export async function generateWithOpenRouter(
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userContent },
       ],
-      max_tokens: 800,
+      max_tokens: computeMaxTokens(input),
       temperature: 0.8,
       response_format: {
         type: "json_schema",
@@ -250,4 +267,4 @@ export async function generateReplies(input: GenerateReplyRequest): Promise<Pars
   throw new ProviderError(`Unsupported AI provider: ${provider}.`, 503);
 }
 
-export const providerInternals = { extractOutputText, parseReplies };
+export const providerInternals = { extractOutputText, parseReplies, computeMaxTokens };

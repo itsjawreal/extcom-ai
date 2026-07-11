@@ -77,6 +77,10 @@ Extra user instruction:
 
 Character limit per reply:
 <maxLength> characters, hard limit
+(above 280 characters, an extra instruction is appended: structure the reply
+as short paragraphs separated by a blank line, each one a single beat or
+idea, instead of one dense unbroken block of text — mirrors how real
+long-form X posts read)
 (or, if maxLength is "auto": no fixed target, capped at 280 chars, prioritize
 a natural-sounding reply over hitting a specific length)
 

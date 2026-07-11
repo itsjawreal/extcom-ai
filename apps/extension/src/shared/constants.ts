@@ -29,6 +29,27 @@ export const TONE_LABELS: Record<Tone, string> = {
 
 export const TONE_AUTO_LABEL = "Auto (AI picks)";
 
+// Reply-length presets shown in the popup/panel, matching X's own post
+// limits per plan: Free (280), Premium (4,000), Premium+ (25,000). A custom
+// numeric input next to these covers any exact value in between.
+export const REPLY_LENGTH_PRESETS = [280, 4_000, 25_000] as const;
+
+// The custom-length input has no native min/max enforcement like the range
+// slider it replaced did, so popup/panel must clamp a typed value back into
+// this range themselves before persisting it or sending a generation
+// request — otherwise an out-of-bounds value either gets silently
+// re-clamped on next read (popup settings) or rejected outright by the
+// backend's own 50-25000 validation (panel, which sends it straight
+// through), surfacing as a confusing generation error instead of just
+// being corrected up front.
+export const MIN_REPLY_LENGTH = 50;
+export const MAX_REPLY_LENGTH = 25_000;
+
+export function clampReplyLength(value: number): number {
+  if (!Number.isFinite(value)) return MIN_REPLY_LENGTH;
+  return Math.min(MAX_REPLY_LENGTH, Math.max(MIN_REPLY_LENGTH, Math.round(value)));
+}
+
 // Tone/label lookup that also covers the "auto" sentinel — TONE_LABELS
 // itself stays keyed by the 24 real tones only, matching the backend.
 export function toneLabel(value: Tone | "auto" | string): string {

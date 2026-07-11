@@ -33,6 +33,9 @@ Generate short, natural, human-sounding replies to the supplied post.
 
 Rules:
 - Do not sound like a bot. Write like a real person casually typing, not a formal report: vary sentence length, use short fragments and natural pauses (commas, dashes, or a line break between two ideas) instead of one long, evenly-paced run-on sentence every time.
+- Don't force textbook capitalization or a trailing period/question mark just to look "complete" or "correct". For casual, blunt, or chaotic tones (e.g. degen, funny, roast, hot_take, sarcastic_dry, ct_maxi, alpha_drop, unhinged_degen, unhinged_meme, bold_populist, one_liner, short_alpha), a lowercase sentence start and no ending punctuation is often the more natural, human choice — not a mistake to correct. Formal, respectful, philosophical, wholesome, coach_motivational, or corporate-parody tones should keep standard capitalization and punctuation.
+- A short setup clause, a line break, then a punchline is a natural human structure real tweets use — reach for it instead of always writing one single flowing sentence, when the reply length allows it.
+- Comma splices and casual run-on joins (two short clauses linked by a comma instead of a formal conjunction) are fine for casual tones — don't over-correct toward semicolons or "and"/"but" every time.
 - Avoid overused AI tells: don't lean on the em dash ("—") as a crutch, and skip stock phrases like "it's worth noting", "at the end of the day", "not just X, but Y", or "double-edged sword". Commit to the point directly instead of softening it with hedges like "arguably" or "potentially" unless a qualifier is genuinely needed.
 - When asked for more than one reply, make them genuinely distinct from each other — different opening words, different structure, different angle on the post — not the same sentence reworded with synonyms.
 - Do not use hashtags unless requested.
@@ -46,11 +49,19 @@ Rules:
 - Match the selected tone and stay relevant to the post.
 - Return only JSON matching this shape: {"replies":[{"text":"..."}]}. If the user message asks you to auto-pick the tone, also include a top-level "tone" field naming the exact tone id you chose (e.g. {"tone":"smart","replies":[{"text":"..."}]}), and apply that same tone to every reply in the batch.`;
 
+// X's own free-tier post limit — the classic "one tweet" length. Anything
+// requested above this only makes sense for accounts on a paid X plan that
+// raises the cap (Premium: 4,000, Premium+: 25,000), so it's the threshold
+// for switching from single-block to paragraph-broken long-form structure.
+const SHORT_FORM_LIMIT = 280;
+
 function lengthGuidance(maxLength: GenerateReplyRequest["maxLength"]): string {
   if (maxLength === "auto") {
     return "No fixed character target — pick whatever length reads most natural for the selected tone and this specific post (a short punchy reaction and a longer thought are both fine), capped at 280 characters. Prioritize a complete, natural-sounding reply over hitting any particular length.";
   }
-  return `${maxLength} characters, hard limit. The reply as written must already be complete and fit within this — do not write a longer reply that relies on being cut off.`;
+  const base = `${maxLength} characters, hard limit. The reply as written must already be complete and fit within this — do not write a longer reply that relies on being cut off.`;
+  if (maxLength <= SHORT_FORM_LIMIT) return base;
+  return `${base} This is long-form, beyond the classic 280-char tweet length — structure it as short paragraphs separated by a blank line, each one a single beat or idea (setup, a fact, a reaction, a punchline), the way real long-form X posts actually read. Do not just fill the space with one dense, unbroken block of text.`;
 }
 
 function toneSection(tone: GenerateReplyRequest["tone"]): string {

@@ -1,4 +1,4 @@
-import { TONE_LABELS } from "../shared/constants";
+import { clampReplyLength, MAX_REPLY_LENGTH, MIN_REPLY_LENGTH, TONE_LABELS } from "../shared/constants";
 import type {
   ConnectionStatus,
   ExtensionSettings,
@@ -21,8 +21,10 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   favoriteTones: [],
 };
 
-const MIN_REPLY_LENGTH = 50;
-const MAX_REPLY_LENGTH = 280;
+// "auto" mode has its own, lower safety ceiling below, since the backend
+// always caps auto-picked length at the classic 280 regardless of
+// MAX_REPLY_LENGTH (the ceiling for a manually picked length).
+const AUTO_REPLY_LENGTH_CEILING = 280;
 const MIN_DRAFT_COUNT = 1;
 const MAX_DRAFT_COUNT = 3;
 const MAX_FAVORITE_TONES = 5;
@@ -231,9 +233,10 @@ function lastSentenceEnd(window: string): number | null {
 }
 
 function truncateReply(text: string, maxLength: number | "auto"): string {
-  // "auto" has no user-picked target — MAX_REPLY_LENGTH is still enforced as
-  // an absolute safety ceiling in case a provider returns something absurd.
-  const limit = maxLength === "auto" ? MAX_REPLY_LENGTH : maxLength;
+  // "auto" has no user-picked target — AUTO_REPLY_LENGTH_CEILING mirrors the
+  // backend's own auto-mode cap, enforced client-side as a safety net in
+  // case a provider ignores it and returns something absurd.
+  const limit = maxLength === "auto" ? AUTO_REPLY_LENGTH_CEILING : maxLength;
   if (text.length <= limit) return text;
 
   const sentenceEnd = lastSentenceEnd(text.slice(0, limit));
@@ -276,12 +279,21 @@ async function generateReply(
     ? true
     : rawInput.readImages ?? settings.readImages;
 
+  // The panel's max-length field is a free-typed number input (no native
+  // min/max enforcement like a range slider), so a manually picked value
+  // reaching here could be outside the backend's valid 50-25000 range —
+  // clamp it here, the single choke point every generation request passes
+  // through, rather than trusting the panel/popup UI to have already done
+  // it. "auto" passes through untouched, it isn't a number to clamp.
+  const requestedMaxLength = rawInput.maxLength ?? settings.maxReplyLength;
+  const maxLength = requestedMaxLength === "auto" ? "auto" : clampReplyLength(requestedMaxLength);
+
   const input: GenerateReplyRequest = {
     ...rawInput,
     tone: rawInput.tone ?? settings.toneDefault,
     extraInstruction: combinedInstruction || undefined,
     count: rawInput.count ?? settings.draftCount,
-    maxLength: rawInput.maxLength ?? settings.maxReplyLength,
+    maxLength,
     useEmoji: rawInput.useEmoji ?? settings.useEmoji,
     imageUrls: readImages ? rawInput.imageUrls : undefined,
   };

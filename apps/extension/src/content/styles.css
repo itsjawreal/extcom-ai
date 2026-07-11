@@ -441,55 +441,8 @@
   margin: 0 0 4px;
 }
 
-/* Custom range slider — override the generic .eks-tone-label input box
-   styling above and reset the native track/thumb, which otherwise renders
-   as a plain default OS slider. */
-.eks-tone-label input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  background: rgb(47, 51, 54);
-  border: none;
-  border-radius: 999px;
-  height: 5px;
-  padding: 0;
-}
-
-.eks-tone-label input[type="range"]:disabled {
-  pointer-events: none;
-}
-
-.eks-tone-label input[type="range"]::-webkit-slider-runnable-track {
-  background: transparent;
-  border-radius: 999px;
-  height: 5px;
-}
-
-.eks-tone-label input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  background: rgb(29, 155, 240);
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  height: 16px;
-  margin-top: -5.5px;
-  width: 16px;
-}
-
-.eks-tone-label input[type="range"]::-moz-range-track {
-  background: rgb(47, 51, 54);
-  border: none;
-  border-radius: 999px;
-  height: 5px;
-}
-
-.eks-tone-label input[type="range"]::-moz-range-thumb {
-  background: rgb(29, 155, 240);
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  height: 16px;
-  width: 16px;
+.eks-tone-label [data-max-length-preset-group] {
+  margin-bottom: 8px;
 }
 
 .eks-extra-details {

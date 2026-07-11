@@ -1,4 +1,4 @@
-import { TONE_AUTO_LABEL, TONE_LABELS } from "../shared/constants";
+import { clampReplyLength, TONE_AUTO_LABEL, TONE_LABELS } from "../shared/constants";
 import type { ConnectionStatus, ExtensionSettings, HistoryEntry, Tone, UsageStats } from "../shared/types";
 
 type RuntimeResponse = {
@@ -40,6 +40,8 @@ const maxLengthValue = document.getElementById("max-length-value") as HTMLElemen
 const maxLengthManualRow = document.getElementById("max-length-manual-row") as HTMLElement;
 const maxLengthModeGroup = document.getElementById("max-length-mode") as HTMLElement;
 const maxLengthModeButtons = Array.from(maxLengthModeGroup.querySelectorAll<HTMLButtonElement>("button"));
+const maxLengthPresetGroup = document.getElementById("max-length-preset") as HTMLElement;
+const maxLengthPresetButtons = Array.from(maxLengthPresetGroup.querySelectorAll<HTMLButtonElement>("button"));
 const draftCountGroup = document.getElementById("draft-count") as HTMLElement;
 const draftCountButtons = Array.from(draftCountGroup.querySelectorAll<HTMLButtonElement>("button"));
 const useEmojiGroup = document.getElementById("use-emoji") as HTMLElement;
@@ -163,13 +165,37 @@ maxLengthModeGroup.addEventListener("click", (event) => {
   saveToneSettings();
 });
 
+function syncMaxLengthPreset(): void {
+  const current = Number(maxLengthInput.value);
+  for (const button of maxLengthPresetButtons) {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.lengthPreset) === current));
+  }
+}
+
 maxLengthInput.addEventListener("input", () => {
   maxLengthValue.textContent = maxLengthInput.value;
+  syncMaxLengthPreset();
 });
 
-// "change" (fires once on release), not "input" (fires continuously while
-// dragging) — avoids saving on every tick of the drag.
-maxLengthInput.addEventListener("change", saveToneSettings);
+// "change" (fires once on blur/commit), not "input" (fires on every
+// keystroke) — avoids clamping/saving mid-type on every digit (typing "4",
+// then "40", then "400" toward 4000 would otherwise get snapped to 50 after
+// the first keystroke).
+maxLengthInput.addEventListener("change", () => {
+  maxLengthInput.value = String(clampReplyLength(Number(maxLengthInput.value)));
+  maxLengthValue.textContent = maxLengthInput.value;
+  syncMaxLengthPreset();
+  saveToneSettings();
+});
+
+maxLengthPresetGroup.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-length-preset]");
+  if (!button?.dataset.lengthPreset) return;
+  maxLengthInput.value = button.dataset.lengthPreset;
+  maxLengthValue.textContent = maxLengthInput.value;
+  syncMaxLengthPreset();
+  saveToneSettings();
+});
 
 toneSelect.addEventListener("change", () => {
   syncQuickTonesActive();
@@ -309,12 +335,13 @@ async function loadSettings(): Promise<void> {
   authTokenInput.value = response.settings.authToken;
   toneSelect.value = response.settings.toneDefault;
   instructionInput.value = response.settings.defaultInstruction;
-  // The slider always needs a numeric value to fall back to if the user
+  // The input always needs a numeric value to fall back to if the user
   // switches from Auto back to Manual, so it keeps the last-known number (or
-  // its own default) even while Auto is active and the slider is disabled.
+  // its own default) even while Auto is active and the input is disabled.
   if (response.settings.maxReplyLength !== "auto") {
     maxLengthInput.value = String(response.settings.maxReplyLength);
     maxLengthValue.textContent = maxLengthInput.value;
+    syncMaxLengthPreset();
   }
   setMaxLengthMode(response.settings.maxReplyLength === "auto" ? "auto" : "manual");
   setDraftCount(response.settings.draftCount);
@@ -356,7 +383,7 @@ async function saveSettings(
       authToken: authTokenInput.value.trim(),
       toneDefault: toneSelect.value as Tone | "auto",
       defaultInstruction: instructionInput.value.trim(),
-      maxReplyLength: maxLengthMode === "auto" ? "auto" : Number(maxLengthInput.value),
+      maxReplyLength: maxLengthMode === "auto" ? "auto" : clampReplyLength(Number(maxLengthInput.value)),
       draftCount,
       useEmoji,
       readImages,
