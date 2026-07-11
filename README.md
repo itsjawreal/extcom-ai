@@ -104,6 +104,15 @@ connection/plan/remaining quota without consuming it), `POST
 /v1/generate-reply` (bearer token), and `POST|GET /v1/admin/tokens` (admin
 secret, optional).
 
+### Real-world cost example
+
+<img src="docs/assets/openrouter-usage.png" alt="OpenRouter usage dashboard showing 251 requests, 186K tokens, and $0.02 total spend over 2 days" width="700">
+
+251 generations over 2 days using `google/gemini-2.5-flash-lite` on
+OpenRouter: **$0.02 total spend**, 186K tokens. Actual cost depends
+heavily on which model you pick in `AI_DEFAULT_MODEL` — this is one real
+data point, not a guarantee.
+
 ## 2. Build & install the extension
 
 ```bash
