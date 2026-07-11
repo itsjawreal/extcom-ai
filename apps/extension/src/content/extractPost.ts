@@ -64,11 +64,19 @@ function extractArticleText(article: HTMLElement): string | undefined {
 // Runs on every page, not just status permalinks: X sometimes injects a
 // "reply shown with its parent" unit directly into the Home/For You
 // timeline (e.g. a reply from someone you follow, shown under the original
-// post) without navigating to a /status/ URL at all. Known trade-off: on an
-// ordinary standalone post in ordinary browsing, the nearest article above
-// is often just an unrelated feed item, not a real parent — there's no
-// reliable signal available to tell the two cases apart, so this can
-// occasionally attach irrelevant context. Watch for that in testing.
+// post) without navigating to a /status/ URL at all.
+//
+// Accepted trade-off (deliberate, not a bug to fix): on an ordinary
+// standalone post — including a top-level post that isn't a reply to
+// anything at all — the nearest article above is sometimes just an
+// unrelated feed item, not a real parent. There is no cheap, reliable DOM
+// signal to tell "reply with its parent shown above" apart from "unrelated
+// post that happens to be above" (X only shows a "Replying to @x" caption
+// when the parent ISN'T shown alongside it, which is the opposite of the
+// case we need to detect). Live-tested impact: capped at 1 item, this
+// occasionally attaches one irrelevant sentence of context rather than
+// none — in practice the model still weighs the actual post text more
+// heavily and the effect on reply quality has been minor to unnoticeable.
 function extractThreadContext(post: HTMLElement): string[] | undefined {
   const seen = new Set<HTMLElement>([post]);
 
