@@ -135,9 +135,25 @@ function extractPostUrl(post: HTMLElement): string | undefined {
   }
 }
 
+function normalizeLanguageTag(value: string | null | undefined): string | undefined {
+  const candidate = value?.trim();
+  if (!candidate || candidate.toLowerCase() === "und") return undefined;
+  try {
+    // X still emits a few legacy identifiers (notably "in" and "iw").
+    // Canonicalization turns them into modern BCP 47 tags ("id" / "he")
+    // and safely drops malformed DOM values instead of breaking generation.
+    return Intl.getCanonicalLocales(candidate)[0];
+  } catch {
+    return undefined;
+  }
+}
+
 export function extractPost(post: HTMLElement): ExtractedPostContext {
-  const postText = cleanText(
-    post.querySelector<HTMLElement>(POST_TEXT_SELECTOR)?.innerText,
+  const postTextNode = post.querySelector<HTMLElement>(POST_TEXT_SELECTOR);
+  const postText = cleanText(postTextNode?.innerText);
+  const sourceLanguage = normalizeLanguageTag(
+    postTextNode?.getAttribute("lang")
+      ?? postTextNode?.querySelector<HTMLElement>("[lang]")?.getAttribute("lang"),
   );
   const imageUrls = extractImageUrls(post);
 
@@ -159,6 +175,7 @@ export function extractPost(post: HTMLElement): ExtractedPostContext {
 
   return {
     postText: postText ?? "",
+    sourceLanguage,
     ...extractAuthor(post),
     postUrl: extractPostUrl(post),
     imageUrls,

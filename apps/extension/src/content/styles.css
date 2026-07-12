@@ -251,8 +251,13 @@
 .eks-panel-config {
   align-items: start;
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 10px;
+}
+
+.eks-language-label {
+  flex-basis: 100%;
 }
 
 .eks-count-label {

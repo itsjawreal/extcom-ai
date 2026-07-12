@@ -66,6 +66,16 @@ function optionalHttpUrl(value: unknown, maxLength: number): string | undefined 
   }
 }
 
+function optionalLanguageTag(value: unknown): string | undefined {
+  const candidate = optionalString(value, 35);
+  if (!candidate || candidate.toLowerCase() === "und") return undefined;
+  try {
+    return Intl.getCanonicalLocales(candidate)[0];
+  } catch {
+    throw new Error("sourceLanguage must be a valid BCP 47 language tag.");
+  }
+}
+
 export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
   if (!value || typeof value !== "object") throw new Error("Request body must be an object.");
   const body = value as Record<string, unknown>;
@@ -101,6 +111,13 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     throw new Error("useEmoji must be a boolean.");
   }
 
+  const replyLanguage = body.replyLanguage === undefined ? "post" : body.replyLanguage;
+  if (replyLanguage !== "post" && replyLanguage !== "en") {
+    throw new Error('replyLanguage must be "post" or "en".');
+  }
+
+  const sourceLanguage = optionalLanguageTag(body.sourceLanguage);
+
   let visibleThreadText: string[] | undefined;
   if (body.visibleThreadText !== undefined) {
     if (!Array.isArray(body.visibleThreadText) || body.visibleThreadText.length > 5) {
@@ -132,6 +149,8 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
 
   return {
     postText: postText ?? "",
+    sourceLanguage,
+    replyLanguage,
     tone: body.tone as GenerateReplyRequest["tone"],
     count: Number(count),
     maxLength: maxLength === "auto" ? "auto" : Number(maxLength),

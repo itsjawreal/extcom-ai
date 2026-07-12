@@ -9,13 +9,54 @@ test("SYSTEM_PROMPT does not bias every reply toward being short", () => {
   assert.doesNotMatch(SYSTEM_PROMPT, /Generate short/);
 });
 
-test("SYSTEM_PROMPT tells the model to match the original post's language by default", () => {
+test("SYSTEM_PROMPT enforces the per-post language choice", () => {
   // Previously there was no language instruction at all, so a non-English
   // post (e.g. Indonesian) could still get an English reply — tone guidance
   // and examples in this file are all written in English, with nothing
   // steering the model toward matching the post's own language instead.
-  assert.match(SYSTEM_PROMPT, /same language the original post is written in/);
-  assert.match(SYSTEM_PROMPT, /unless the extra user instruction explicitly asks for a different language/);
+  assert.match(SYSTEM_PROMPT, /Follow the "Required reply language"/);
+  assert.match(SYSTEM_PROMPT, /overrides.*conflicting extra instruction/);
+});
+
+test("buildUserPrompt uses X language metadata for any post language", () => {
+  const prompt = buildUserPrompt({
+    postText: "Pasar lagi ramai hari ini",
+    sourceLanguage: "id",
+    replyLanguage: "post",
+    tone: "smart",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  assert.match(prompt, /Required reply language:\nIndonesian \(id\)/);
+  assert.match(prompt, /Write every reply in this language/);
+});
+
+test("buildUserPrompt can force English for a non-English post", () => {
+  const prompt = buildUserPrompt({
+    postText: "Pasar lagi ramai hari ini",
+    sourceLanguage: "id",
+    replyLanguage: "en",
+    tone: "smart",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  assert.match(prompt, /Required reply language:\nEnglish \(en\)/);
+  assert.match(prompt, /explicit user override/);
+});
+
+test("buildUserPrompt falls back to post-text inference without X metadata", () => {
+  const prompt = buildUserPrompt({
+    postText: "bullish",
+    replyLanguage: "post",
+    tone: "degen",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  assert.match(prompt, /X supplied no language metadata/);
+  assert.match(prompt, /infer it from Original post only/);
 });
 
 test("short-form maxLength does not add the long-form paragraph instruction", () => {

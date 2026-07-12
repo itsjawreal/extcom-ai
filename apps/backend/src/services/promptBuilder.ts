@@ -47,7 +47,7 @@ Rules:
 - Follow the emoji preference given in the user message — it overrides any emoji habit implied by the selected tone.
 - If one or more images are attached, use their visible content (chart, meme, screenshot, etc.) to make the reply more specific and relevant.
 - Match the selected tone and stay relevant to the post.
-- Reply in the same language the original post is written in by default (e.g. an Indonesian post gets an Indonesian reply), unless the extra user instruction explicitly asks for a different language.
+- Follow the "Required reply language" in the user message for every reply. It is an explicit per-post user choice and overrides the language used by tone/persona guidance and any conflicting extra instruction.
 - If the user message includes a "Persona" section, that defines who is replying — stay consistent with that voice/identity across every reply in the batch. The selected tone still shapes the energy of each individual reply; persona is who's talking, tone is how they're feeling about this specific post.
 - Return only JSON matching this shape: {"replies":[{"text":"..."}]}. If the user message asks you to auto-pick the tone, also include a top-level "tone" field naming the exact tone id you chose (e.g. {"tone":"smart","replies":[{"text":"..."}]}), and apply that same tone to every reply in the batch.`;
 
@@ -85,6 +85,25 @@ function toneSection(tone: GenerateReplyRequest["tone"]): string {
   return `${tone} — ${TONE_GUIDANCE[tone]}`;
 }
 
+function languageGuidance(input: GenerateReplyRequest): string {
+  if (input.replyLanguage === "en") {
+    return "English (en) — this is an explicit user override. Write every reply in English even when the original post uses another language.";
+  }
+
+  if (input.sourceLanguage) {
+    let displayName = input.sourceLanguage;
+    try {
+      displayName = new Intl.DisplayNames(["en"], { type: "language" }).of(input.sourceLanguage) || input.sourceLanguage;
+    } catch {
+      // A valid but uncommon BCP 47 tag may not be known to the runtime's
+      // ICU data. The tag itself remains an unambiguous instruction.
+    }
+    return `${displayName} (${input.sourceLanguage}) — this language was detected by X on the original post. Write every reply in this language.`;
+  }
+
+  return "Same language as the original post — X supplied no language metadata, so infer it from Original post only. Do not infer the reply language from the English tone/persona instructions or thread context.";
+}
+
 // personaVoice comes from PERSONA.md (services/persona.ts) — an optional,
 // operator-edited file, not a per-request field. Placed first so the model
 // establishes identity before anything else; the tone section below still
@@ -107,6 +126,9 @@ ${thread}
 
 Selected tone:
 ${toneSection(input.tone)}
+
+Required reply language:
+${languageGuidance(input)}
 
 Extra user instruction:
 ${input.extraInstruction || "None"}

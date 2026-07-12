@@ -120,3 +120,34 @@ test("model is undefined when omitted, falling back to AI_DEFAULT_MODEL downstre
   const input = validateGenerateRequest({ postText: "Post", tone: "smart" });
   assert.equal(input.model, undefined);
 });
+
+test("accepts post-language metadata and English override", () => {
+  const input = validateGenerateRequest({
+    postText: "Pasar lagi ramai",
+    tone: "smart",
+    sourceLanguage: "id-ID",
+    replyLanguage: "en",
+  });
+  assert.equal(input.sourceLanguage, "id-ID");
+  assert.equal(input.replyLanguage, "en");
+});
+
+test("defaults replyLanguage to post and rejects invalid language values", () => {
+  const input = validateGenerateRequest({ postText: "Post", tone: "smart" });
+  assert.equal(input.replyLanguage, "post");
+  assert.throws(
+    () => validateGenerateRequest({ postText: "Post", tone: "smart", replyLanguage: "fr" }),
+    /replyLanguage must be "post" or "en"/,
+  );
+  assert.throws(
+    () => validateGenerateRequest({ postText: "Post", tone: "smart", sourceLanguage: "not a tag" }),
+    /valid BCP 47 language tag/,
+  );
+});
+
+test("canonicalizes X legacy language codes and treats und as unknown", () => {
+  const indonesian = validateGenerateRequest({ postText: "Pasar naik", tone: "smart", sourceLanguage: "in" });
+  const unknown = validateGenerateRequest({ postText: "gm", tone: "smart", sourceLanguage: "und" });
+  assert.equal(indonesian.sourceLanguage, "id");
+  assert.equal(unknown.sourceLanguage, undefined);
+});

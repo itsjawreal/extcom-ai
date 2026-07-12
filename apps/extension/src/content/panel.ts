@@ -512,10 +512,11 @@ async function regenerateSlot(
     const useEmoji = readUseEmoji(panel);
     const maxLength = readMaxLength(panel);
     const readImages = readReadImages(panel);
+    const replyLanguage = readReplyLanguage(panel);
     const extraInstruction = readExtraInstruction(panel);
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse; historyId?: string }>({
       type: "GENERATE_REPLY",
-      input: { ...context, tone, count: 1, useEmoji, maxLength, readImages, extraInstruction },
+      input: { ...context, tone, count: 1, useEmoji, maxLength, readImages, replyLanguage, extraInstruction },
     });
 
     // Ignore response if this slot was regenerated again while we were waiting.
@@ -908,6 +909,27 @@ function readReadImages(panel: HTMLElement): boolean | undefined {
   return active ? active.dataset.images === "on" : undefined;
 }
 
+function setReplyLanguage(panel: HTMLElement, value: "post" | "en"): void {
+  panel.querySelectorAll<HTMLButtonElement>("[data-language-group] button").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.language === value));
+  });
+}
+
+function readReplyLanguage(panel: HTMLElement): "post" | "en" {
+  const active = panel.querySelector<HTMLButtonElement>('[data-language-group] button[aria-pressed="true"]');
+  return active?.dataset.language === "en" ? "en" : "post";
+}
+
+function languageDisplayName(languageTag?: string): string {
+  if (!languageTag) return "Post language";
+  try {
+    const name = new Intl.DisplayNames(["en"], { type: "language" }).of(languageTag);
+    return name ? `Post (${name})` : "Post language";
+  } catch {
+    return `Post (${languageTag})`;
+  }
+}
+
 function setLengthMode(panel: HTMLElement, mode: "auto" | "manual"): void {
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
   const manualRow = panel.querySelector<HTMLElement>("[data-max-length-manual-row]");
@@ -1033,10 +1055,11 @@ async function generateRepliesForPanel(
     const useEmoji = readUseEmoji(panel);
     const maxLength = readMaxLength(panel);
     const readImages = readReadImages(panel);
+    const replyLanguage = readReplyLanguage(panel);
     const extraInstruction = readExtraInstruction(panel);
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse; historyId?: string }>({
       type: "GENERATE_REPLY",
-      input: { ...context, tone, count, useEmoji, maxLength, readImages, extraInstruction },
+      input: { ...context, tone, count, useEmoji, maxLength, readImages, replyLanguage, extraInstruction },
     });
     animatePanelHeight(panel, () => renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context));
     renderUsage(panel, response.data.usage, tone === "auto" ? response.data.replies[0]?.tone : undefined);
@@ -1104,6 +1127,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
           </div>
         </div>
         <div class="eks-panel-config">
+          <div class="eks-count-label eks-language-label">
+            Language
+            <div class="eks-count-group" data-language-group role="group" aria-label="Reply language">
+              <button type="button" data-language="post" aria-pressed="true">Post language</button>
+              <button type="button" data-language="en" aria-pressed="false">English</button>
+            </div>
+          </div>
           <div class="eks-count-label">
             Drafts
             <div class="eks-count-group" data-count-group role="group" aria-label="Number of drafts">
@@ -1222,6 +1252,17 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     if (!button) return;
     panel.dataset.controlsTouched = "true";
     setUseEmojiGroup(panel, button.dataset.emoji === "on");
+  });
+
+  if (!("error" in input)) {
+    const postLanguageButton = panel.querySelector<HTMLButtonElement>('[data-language="post"]');
+    if (postLanguageButton) postLanguageButton.textContent = languageDisplayName(input.context.sourceLanguage);
+  }
+
+  panel.querySelector("[data-language-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-language]");
+    if (!button) return;
+    setReplyLanguage(panel, button.dataset.language === "en" ? "en" : "post");
   });
 
   // Only show the image toggle when this specific post actually has at

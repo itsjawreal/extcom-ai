@@ -32,6 +32,9 @@ export type GeneratedReply = {
 
 export type ExtractedPostContext = {
   postText: string;
+  // BCP 47 language tag exposed by X on the clicked post's tweetText node.
+  // Undefined means X did not provide a usable language signal.
+  sourceLanguage?: string;
   authorHandle?: string;
   authorName?: string;
   postUrl?: string;
@@ -42,6 +45,9 @@ export type ExtractedPostContext = {
 };
 
 export type GenerateReplyRequest = ExtractedPostContext & {
+  // Per-panel language choice. "post" follows sourceLanguage (or lets the
+  // model infer it when X supplied none); "en" is an explicit English override.
+  replyLanguage?: "post" | "en";
   // "auto" means the AI picks whichever single tone best fits this post,
   // applied consistently across every reply in the batch — the resolved
   // tone (never "auto") is echoed back per-reply in GeneratedReply.tone.

@@ -29,6 +29,10 @@ export type Tone = (typeof TONES)[number];
 
 export type GenerateReplyRequest = {
   postText: string;
+  // BCP 47 language tag captured from X's tweetText element, when available.
+  sourceLanguage?: string;
+  // "post" follows sourceLanguage/original text; "en" forces English.
+  replyLanguage?: "post" | "en";
   authorHandle?: string;
   authorName?: string;
   postUrl?: string;
