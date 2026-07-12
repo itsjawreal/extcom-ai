@@ -13,6 +13,34 @@ const MAX_THREAD_CONTEXT_ITEMS = 5; // Mirrors the backend's own cap.
 // (all 3 drafts followed the unrelated noise item, ignoring the actual
 // parent that was also captured alongside it).
 const MAX_NEAREST_ANCESTORS = 1;
+const ORIGINAL_RESTORE_TIMEOUT_MS = 2_500;
+
+// X localizes this control to the account UI language. Keep matching exact
+// accessible labels so we don't accidentally click an unrelated control
+// containing a loose word such as "original". English covers the reported
+// case; the remaining values cover X's currently supported UI locales.
+const SHOW_ORIGINAL_LABELS = new Set([
+  "show original",
+  "mostrar original",
+  "afficher l’original",
+  "afficher l'original",
+  "voir l’original",
+  "voir l'original",
+  "original anzeigen",
+  "mostra originale",
+  "mostrar o original",
+  "показать оригинал",
+  "原文を表示",
+  "显示原文",
+  "顯示原文",
+  "원문 보기",
+  "عرض النص الأصلي",
+  "origineel weergeven",
+  "pokaż oryginał",
+  "orijinali göster",
+  "tampilkan yang asli",
+  "tampilkan versi asli",
+]);
 
 function cleanText(value: string | null | undefined): string | undefined {
   const cleaned = value?.replace(/\s+/g, " ").trim();
@@ -146,6 +174,54 @@ function normalizeLanguageTag(value: string | null | undefined): string | undefi
   } catch {
     return undefined;
   }
+}
+
+function findShowOriginalControl(post: HTMLElement): HTMLElement | null {
+  const controls = post.querySelectorAll<HTMLElement>('button, [role="button"], a');
+  for (const control of controls) {
+    // Avoid a translation control belonging to a nested/quoted article.
+    if (control.closest("article") !== post) continue;
+    const label = cleanText(control.getAttribute("aria-label") || control.textContent)?.toLocaleLowerCase();
+    if (label && SHOW_ORIGINAL_LABELS.has(label)) return control;
+  }
+  return null;
+}
+
+function waitForOriginalText(post: HTMLElement, previousText: string | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      window.clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve();
+    };
+    const hasChanged = (): boolean => {
+      const current = cleanText(post.querySelector<HTMLElement>(POST_TEXT_SELECTOR)?.innerText);
+      return Boolean(current && current !== previousText);
+    };
+    const observer = new MutationObserver(() => {
+      if (hasChanged()) finish();
+    });
+    observer.observe(post, { childList: true, subtree: true, characterData: true, attributes: true });
+    const timeout = window.setTimeout(() => {
+      if (hasChanged()) finish();
+      else finish(new Error("X did not restore the original post text. Try clicking Show original, then retry."));
+    }, ORIGINAL_RESTORE_TIMEOUT_MS);
+  });
+}
+
+export async function extractPostForReply(post: HTMLElement): Promise<ExtractedPostContext> {
+  const showOriginal = findShowOriginalControl(post);
+  if (!showOriginal) return extractPost(post);
+
+  const translatedText = cleanText(post.querySelector<HTMLElement>(POST_TEXT_SELECTOR)?.innerText);
+  const restored = waitForOriginalText(post, translatedText);
+  showOriginal.click();
+  await restored;
+  return extractPost(post);
 }
 
 export function extractPost(post: HTMLElement): ExtractedPostContext {

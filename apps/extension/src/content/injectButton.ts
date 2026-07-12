@@ -31,7 +31,7 @@ function resolveInsertionTarget(post: HTMLElement): InsertionTarget | null {
 
 export function injectReplyButton(
   post: HTMLElement,
-  onClick: (button: HTMLButtonElement, post: HTMLElement) => void,
+  onClick: (button: HTMLButtonElement, post: HTMLElement) => void | Promise<void>,
 ): boolean {
   if (post.hasAttribute(PROCESSED_ATTRIBUTE)) return false;
 

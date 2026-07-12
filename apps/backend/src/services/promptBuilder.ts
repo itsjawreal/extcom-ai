@@ -87,7 +87,7 @@ function toneSection(tone: GenerateReplyRequest["tone"]): string {
 
 function languageGuidance(input: GenerateReplyRequest): string {
   if (input.replyLanguage === "en") {
-    return "English (en) — this is an explicit user override. Write every reply in English even when the original post uses another language.";
+    return "English (en) — this is an explicit user override. Write every reply in natural, conversational English even when the original post uses another language.";
   }
 
   if (input.sourceLanguage) {
@@ -98,10 +98,13 @@ function languageGuidance(input: GenerateReplyRequest): string {
       // A valid but uncommon BCP 47 tag may not be known to the runtime's
       // ICU data. The tag itself remains an unambiguous instruction.
     }
-    return `${displayName} (${input.sourceLanguage}) — this language was detected by X on the original post. Write every reply in this language.`;
+    const nativeStyle = input.sourceLanguage === "id"
+      ? " Write directly as a native Indonesian speaker on X, not as translated English. Match the post's level of formality; for casual tones use natural everyday Indonesian and particles when they fit, while avoiding stiff translationese such as unnecessary saya/Anda, merupakan, tersebut, or dengan demikian. Do not force a regional dialect."
+      : " Write directly as a native speaker composing for social media, not as someone translating English. Match the original post's register and level of formality; for casual tones, prefer natural colloquial wording, idioms, particles, contractions, and casing used by native speakers. Avoid literal English sentence structure or textbook phrasing.";
+    return `${displayName} (${input.sourceLanguage}) — this language was detected by X on the original post. Write every reply in this language.${nativeStyle}`;
   }
 
-  return "Same language as the original post — X supplied no language metadata, so infer it from Original post only. Do not infer the reply language from the English tone/persona instructions or thread context.";
+  return "Same language as the original post — X supplied no language metadata, so infer it from Original post only. Write directly as a native speaker in that language, matching the post's register; never produce wording that feels translated from English. Do not infer the reply language from the English tone/persona instructions or thread context.";
 }
 
 // personaVoice comes from PERSONA.md (services/persona.ts) — an optional,

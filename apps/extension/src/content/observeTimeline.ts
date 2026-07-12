@@ -1,5 +1,5 @@
 import { injectReplyButton, PROCESSED_ATTRIBUTE } from "./injectButton";
-import { extractPost } from "./extractPost";
+import { extractPostForReply } from "./extractPost";
 import { openPanel, syncPanelPosition, syncPanelTheme } from "./panel";
 
 const POST_SELECTOR = "article";
@@ -22,9 +22,12 @@ function scanPosts(root: ParentNode = document): void {
   posts.forEach((post) => {
     if (!isCandidatePost(post)) return;
     candidateCount += 1;
-    const injected = injectReplyButton(post, (button, clickedPost) => {
+    const injected = injectReplyButton(post, async (button, clickedPost) => {
+      const previousLabel = button.textContent;
+      button.disabled = true;
+      button.textContent = "Reading original…";
       try {
-        openPanel(button, clickedPost, { context: extractPost(clickedPost) });
+        openPanel(button, clickedPost, { context: await extractPostForReply(clickedPost) });
       } catch (error) {
         openPanel(button, clickedPost, {
           error:
@@ -32,6 +35,9 @@ function scanPosts(root: ParentNode = document): void {
               ? error.message
               : "Post context could not be extracted.",
         });
+      } finally {
+        button.disabled = false;
+        button.textContent = previousLabel;
       }
     });
     if (injected) injectedCount += 1;

@@ -30,6 +30,9 @@ test("buildUserPrompt uses X language metadata for any post language", () => {
   });
   assert.match(prompt, /Required reply language:\nIndonesian \(id\)/);
   assert.match(prompt, /Write every reply in this language/);
+  assert.match(prompt, /native Indonesian speaker on X/);
+  assert.match(prompt, /not as translated English/);
+  assert.match(prompt, /avoiding stiff translationese/);
 });
 
 test("buildUserPrompt can force English for a non-English post", () => {
@@ -57,6 +60,23 @@ test("buildUserPrompt falls back to post-text inference without X metadata", () 
   });
   assert.match(prompt, /X supplied no language metadata/);
   assert.match(prompt, /infer it from Original post only/);
+  assert.match(prompt, /directly as a native speaker/);
+  assert.match(prompt, /never produce wording that feels translated from English/);
+});
+
+test("non-Indonesian post languages also receive native social-register guidance", () => {
+  const prompt = buildUserPrompt({
+    postText: "Qué locura",
+    sourceLanguage: "es",
+    replyLanguage: "post",
+    tone: "funny",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  assert.match(prompt, /Spanish \(es\)/);
+  assert.match(prompt, /native speaker composing for social media/);
+  assert.match(prompt, /Avoid literal English sentence structure or textbook phrasing/);
 });
 
 test("short-form maxLength does not add the long-form paragraph instruction", () => {
