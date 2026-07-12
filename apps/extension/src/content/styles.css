@@ -260,6 +260,10 @@
   flex-basis: 100%;
 }
 
+.eks-language-label[hidden] {
+  display: none;
+}
+
 .eks-count-label {
   display: grid;
   font: 600 13px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;

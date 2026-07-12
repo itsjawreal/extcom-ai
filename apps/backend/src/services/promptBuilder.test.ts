@@ -79,6 +79,33 @@ test("non-Indonesian post languages also receive native social-register guidance
   assert.match(prompt, /Avoid literal English sentence structure or textbook phrasing/);
 });
 
+test("emoji ON requires a relevant emoji in every reply", () => {
+  const prompt = buildUserPrompt({
+    postText: "This is huge",
+    tone: "bullish",
+    count: 3,
+    maxLength: 220,
+    useEmoji: true,
+  });
+  assert.match(prompt, /Include at least one relevant emoji in every reply/);
+  assert.match(prompt, /Usually use exactly 1/);
+  assert.match(prompt, /use at most 2/);
+  assert.match(SYSTEM_PROMPT, /Emoji preference.*authoritative/);
+  assert.match(SYSTEM_PROMPT, /overrides the selected tone, persona, and any conflicting extra instruction/);
+});
+
+test("emoji OFF prohibits emojis", () => {
+  const prompt = buildUserPrompt({
+    postText: "This is huge",
+    tone: "bullish",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  assert.match(prompt, /Do not use any emojis in this reply/);
+  assert.doesNotMatch(prompt, /Include at least one relevant emoji/);
+});
+
 test("short-form maxLength does not add the long-form paragraph instruction", () => {
   const prompt = buildUserPrompt({
     postText: "Post",

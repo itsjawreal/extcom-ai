@@ -1255,8 +1255,18 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   });
 
   if (!("error" in input)) {
-    const postLanguageButton = panel.querySelector<HTMLButtonElement>('[data-language="post"]');
-    if (postLanguageButton) postLanguageButton.textContent = languageDisplayName(input.context.sourceLanguage);
+    const sourceLanguage = input.context.sourceLanguage;
+    const languageLabel = panel.querySelector<HTMLElement>(".eks-language-label");
+    if (!sourceLanguage || sourceLanguage.split("-", 1)[0]?.toLowerCase() === "en") {
+      // Show this override only when X positively identifies a non-English
+      // source language. English makes both choices identical; unknown/und
+      // is common on short English posts and otherwise leaves a confusing
+      // generic "Post language" control with no useful language label.
+      if (languageLabel) languageLabel.hidden = true;
+    } else {
+      const postLanguageButton = panel.querySelector<HTMLButtonElement>('[data-language="post"]');
+      if (postLanguageButton) postLanguageButton.textContent = languageDisplayName(sourceLanguage);
+    }
   }
 
   panel.querySelector("[data-language-group]")?.addEventListener("click", (event) => {

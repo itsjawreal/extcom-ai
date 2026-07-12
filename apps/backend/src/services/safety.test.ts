@@ -31,3 +31,8 @@ test("sanitizeReply collapses whitespace and strips excess hashtags/emoji", () =
   assert.equal(sanitizeReply("great #win #lets #go #now", 220), "great");
   assert.equal(sanitizeReply("fire 🔥🔥🔥🔥", 220), "fire 🔥");
 });
+
+test("sanitizeReply preserves normal relevant emoji usage", () => {
+  assert.equal(sanitizeReply("clean setup 🔥", 220), "clean setup 🔥");
+  assert.equal(sanitizeReply("strong move 🚀 worth watching 👀", 220), "strong move 🚀 worth watching 👀");
+});

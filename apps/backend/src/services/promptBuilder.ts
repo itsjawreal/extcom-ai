@@ -44,7 +44,7 @@ Rules:
 - Do not produce spammy or repetitive replies.
 - Never instruct software to publish or auto-post.
 - Keep every reply within the character limit given in the user message. This is a hard limit, not a suggestion — write a complete, self-contained thought that already fits; never write a longer reply and expect it to be cut off.
-- Follow the emoji preference given in the user message — it overrides any emoji habit implied by the selected tone.
+- Treat the "Emoji preference" in the user message as authoritative. When it is ON, every reply must contain the requested relevant emoji; when it is OFF, no reply may contain an emoji. This overrides the selected tone, persona, and any conflicting extra instruction.
 - If one or more images are attached, use their visible content (chart, meme, screenshot, etc.) to make the reply more specific and relevant.
 - Match the selected tone and stay relevant to the post.
 - Follow the "Required reply language" in the user message for every reply. It is an explicit per-post user choice and overrides the language used by tone/persona guidance and any conflicting extra instruction.
@@ -140,7 +140,7 @@ Character limit per reply:
 ${lengthGuidance(input.maxLength)}
 
 Emoji preference:
-${input.useEmoji ? "Emojis are OK if they fit the tone naturally, but don't overuse them." : "Do not use any emojis in this reply, even if the tone would normally suggest them."}
+${input.useEmoji ? "Include at least one relevant emoji in every reply. Usually use exactly 1; use at most 2 only when both genuinely fit. Choose emojis that match the post and selected tone—never add random decoration or repeat the same emoji excessively." : "Do not use any emojis in this reply, even if the tone would normally suggest them."}
 ${input.imageUrls?.length ? `\n${input.imageUrls.length > 1 ? `${input.imageUrls.length} images are` : "An image is"} attached to this post below. Use what ${input.imageUrls.length > 1 ? "they visibly show" : "it visibly shows"} to inform the reply.\n` : ""}
 Generate ${input.count} replies, each genuinely distinct in structure and angle (not reworded restatements of each other). Return JSON only.`;
 }
