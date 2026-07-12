@@ -70,6 +70,9 @@ Sent once, unchanged, as the system message on every call:
 > - If one or more images are attached, use their visible content (chart,
 >   meme, screenshot, etc.) to make the reply more specific and relevant.
 > - Match the selected tone and stay relevant to the post.
+> - Reply in the same language the original post is written in by default
+>   (e.g. an Indonesian post gets an Indonesian reply), unless the extra
+>   user instruction explicitly asks for a different language.
 > - If the user message includes a "Persona" section, that defines who is
 >   replying — stay consistent with that voice/identity across every reply
 >   in the batch. The selected tone still shapes the energy of each

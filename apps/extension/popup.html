@@ -17,7 +17,7 @@
       --text: #f8fafc;
       --text-soft: #cbd5e1;
       --muted: #948fa3;
-      --muted-2: #6b6578;
+      --muted-2: #817a91;
 
       --accent: #ab9ff2;
       --accent-hover: #9a8ae0;
@@ -85,10 +85,23 @@
       justify-content: space-between;
       margin-bottom: 14px;
     }
+    .header-actions {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      width: 92px;
+      min-height: 20px;
+    }
     .header-links {
       display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 12px;
+      width: 100%;
+    }
+    .header-links[hidden] {
+      display: none;
     }
     .header-links a {
       display: inline-flex;
@@ -102,6 +115,50 @@
       height: 16px;
       fill: currentColor;
     }
+    .header-connection-feedback {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      width: 100%;
+      color: var(--text-soft);
+      font-size: 11.5px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .header-connection-feedback[hidden] {
+      display: none;
+    }
+    .header-feedback-dot {
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    .header-connection-feedback[data-state="testing"] .header-feedback-dot {
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      background: transparent;
+      animation: header-feedback-spin 0.7s linear infinite;
+    }
+    .header-connection-feedback[data-state="connected"] {
+      color: var(--success);
+    }
+    .header-connection-feedback[data-state="connected"] .header-feedback-dot {
+      background: var(--success);
+    }
+    .header-connection-feedback[data-state="error"] {
+      color: var(--danger);
+    }
+    .header-connection-feedback[data-state="error"] .header-feedback-dot {
+      background: var(--danger);
+    }
+    @keyframes header-feedback-spin {
+      to { transform: rotate(360deg); }
+    }
     /* Every view lives in this fixed-height region so switching tabs never
        resizes the popup window — taller views (Tone, History) scroll
        internally instead of growing the body. */
@@ -110,6 +167,9 @@
       min-height: 0;
       overflow-y: auto;
       padding: 0 18px;
+    }
+    .view-content[data-active-view="history"] {
+      overflow-y: hidden;
     }
     .brand {
       display: flex;
@@ -158,6 +218,13 @@
       padding: 12px 16px;
       margin-bottom: 12px;
       background: var(--panel-2);
+    }
+    /* This class's own `display: flex` above outranks the browser's default
+       `[hidden] { display: none }` rule (same specificity, but author beats
+       user-agent) — without this, toggling .hidden in JS on #status-card /
+       #onboarding-card has no visual effect and both stay showing. */
+    .status-card[hidden] {
+      display: none;
     }
     .status-title {
       display: flex;
@@ -211,6 +278,57 @@
       font-size: 11.5px;
     }
 
+    .data-feedback {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+    .data-feedback[hidden] {
+      display: none;
+    }
+    .data-feedback[data-state="error"] {
+      color: var(--danger);
+    }
+    .data-feedback-spinner {
+      flex: none;
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: data-feedback-spin 0.7s linear infinite;
+    }
+    .data-feedback button {
+      width: auto;
+      height: 28px;
+      padding: 0 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-soft);
+      font-size: 11.5px;
+    }
+    .data-feedback button:hover,
+    .data-feedback button:focus-visible {
+      background: var(--panel-3);
+      border-color: var(--accent);
+      color: var(--text);
+      outline: none;
+    }
+    #usage-feedback {
+      margin: -6px 0 8px;
+    }
+    .history-list > .data-feedback {
+      flex: 1 1 auto;
+    }
+    @keyframes data-feedback-spin {
+      to { transform: rotate(360deg); }
+    }
+
     .history-heading {
       margin: 0 0 8px;
       font-size: 11.5px;
@@ -220,11 +338,21 @@
       letter-spacing: 0.4px;
     }
     .history-list {
-      max-height: 400px;
+      flex: 1 1 auto;
+      min-height: 0;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+    #view-history {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+    }
+    #view-history[hidden] {
+      display: none;
     }
     .history-item {
       background: var(--panel-2);
@@ -327,6 +455,9 @@
       text-align: center;
       color: var(--muted);
     }
+    .status[data-state="error"] {
+      color: var(--danger);
+    }
     .hint {
       margin: 10px 0 0;
       color: var(--muted-2);
@@ -355,21 +486,20 @@
       font-weight: 650;
     }
 
-    /* Info/warning tooltip icon — replaces long inline hint paragraphs.
-       .info-icon itself is `position: relative` (below), so its ::after
-       tooltip's containing block is the 15x15px icon itself, centered and
-       anchored directly under it regardless of surrounding label text
-       length. This wrapper is kept only as a layout convenience (groups
-       "label text + icon" so they don't get split across a flex row's
-       justify-content: space-between) — it no longer affects tooltip
-       positioning. It previously did (when .info-icon had no position of
-       its own, its ::after resolved against whichever ancestor was
-       positioned), which centered the tooltip on the wrapper's full width
-       — including the label text — pulling it noticeably left/below of the
-       actual icon. */
+    /* Info/warning icon. The tooltip itself is a single fixed element near
+       the end of <body>; popup.ts opens and positions it only after an
+       intentional pointer/keyboard interaction. Keeping it out of the
+       scrollable view also prevents clipping at sub-panel boundaries. */
     .info-icon-anchor {
       position: relative;
       display: inline-block;
+    }
+    /* Overrides the global `label { display: block; }` rule above — this
+       label sits inline next to the info icon inside .info-icon-anchor, not
+       stacked above a control like every other label in this file. */
+    .info-icon-anchor label {
+      display: inline;
+      margin-bottom: 0;
     }
     .info-icon {
       position: relative;
@@ -392,8 +522,7 @@
       vertical-align: middle;
       cursor: help;
     }
-    .info-icon:hover,
-    .info-icon:focus-visible {
+    .info-icon[data-tooltip-active="true"] {
       border-color: var(--accent);
       color: var(--accent);
       outline: none;
@@ -401,19 +530,17 @@
     .info-icon.info-icon-warn {
       color: var(--danger);
     }
-    .info-icon.info-icon-warn:hover,
-    .info-icon.info-icon-warn:focus-visible {
+    .info-icon.info-icon-warn[data-tooltip-active="true"] {
       border-color: var(--danger);
       color: var(--danger);
     }
-    .info-icon::after {
-      content: attr(data-tip);
-      position: absolute;
-      top: calc(100% + 8px);
-      left: 50%;
-      z-index: 20;
+    .info-tooltip {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 100;
       width: max-content;
-      max-width: 240px;
+      max-width: 200px;
       padding: 7px 9px;
       border-radius: var(--radius-sm);
       border: 1px solid var(--border);
@@ -426,14 +553,56 @@
       text-align: left;
       white-space: normal;
       opacity: 0;
+      visibility: hidden;
       pointer-events: none;
-      transform: translateX(-50%) translateY(-4px);
-      transition: opacity 0.15s ease, transform 0.15s ease;
+      transition: opacity 0.15s ease, visibility 0s linear 0.15s;
     }
-    .info-icon:hover::after,
-    .info-icon:focus-visible::after {
+    .info-tooltip[data-open="true"] {
       opacity: 1;
-      transform: translateX(-50%) translateY(0);
+      visibility: visible;
+      transition-delay: 0s;
+    }
+    .password-field {
+      position: relative;
+      margin-top: 6px;
+    }
+    .password-field input {
+      margin-top: 0;
+      padding-right: 44px;
+    }
+    .password-toggle {
+      position: absolute;
+      right: 5px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+    }
+    .password-toggle:hover,
+    .password-toggle:focus-visible {
+      background: var(--panel-3);
+      color: var(--text);
+      outline: none;
+    }
+    .password-toggle svg {
+      width: 17px;
+      height: 17px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .password-toggle[aria-pressed="false"] .password-eye-off,
+    .password-toggle[aria-pressed="true"] .password-eye-on {
+      display: none;
     }
     #max-length-caption {
       margin: 0 0 4px;
@@ -566,13 +735,21 @@
       margin: 18px 0 12px;
     }
 
-    /* Scrollable regions stay scrollable (wheel/trackpad/keyboard) but never
-       show a visible track/thumb. */
-    * {
-      scrollbar-width: none;
+    /* A subtle thumb makes tall views discoverable without adding a heavy
+       browser-looking scrollbar to the compact popup. */
+    .view-content,
+    .history-list {
+      scrollbar-color: var(--border) transparent;
+      scrollbar-width: thin;
     }
-    ::-webkit-scrollbar {
-      display: none;
+    .view-content::-webkit-scrollbar,
+    .history-list::-webkit-scrollbar {
+      width: 5px;
+    }
+    .view-content::-webkit-scrollbar-thumb,
+    .history-list::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 999px;
     }
 
     /* Bottom nav — flat icon row, no pill/rounded container, matches the
@@ -634,6 +811,16 @@
     .nav-button[aria-current="page"] {
       color: var(--accent);
     }
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -647,18 +834,29 @@
       </span>
       <span>Extcom</span>
     </div>
-    <div class="header-links">
-      <a href="https://github.com/itsjawreal/extcom-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository" title="GitHub repository">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-      </a>
-      <a href="https://x.com/itsjaw_real" target="_blank" rel="noopener noreferrer" aria-label="X profile" title="X profile">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-      </a>
+    <div class="header-actions">
+      <div class="header-links" id="header-links">
+        <a href="https://github.com/itsjawreal/extcom-ai" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository" title="GitHub repository">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+        </a>
+        <a href="https://x.com/itsjaw_real" target="_blank" rel="noopener noreferrer" aria-label="X profile" title="X profile">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+      </div>
+      <div class="header-connection-feedback" id="header-connection-feedback" data-state="testing" aria-live="polite" hidden>
+        <span class="header-feedback-dot" aria-hidden="true"></span>
+        <span id="header-feedback-text"></span>
+      </div>
     </div>
   </header>
 
-  <div class="view-content">
+  <div class="view-content" data-active-view="home">
   <section id="view-home" data-view-panel="home">
+    <div class="status-card card" id="onboarding-card" hidden>
+      <p class="status-title"><span class="status-dot"></span><span>Set up your backend</span></p>
+      <p class="status-detail">Extcom AI needs a backend URL and access token before it can generate replies.</p>
+      <button type="button" class="save-button" id="onboarding-setup-button">Open Advanced settings</button>
+    </div>
     <div class="status-card card" id="status-card" data-state="unknown">
       <p class="status-title"><span class="status-dot"></span><span id="connection-title">Checking…</span></p>
       <p class="status-detail" id="connection-detail"></p>
@@ -666,11 +864,11 @@
 
     <div class="stats-grid">
       <div class="stat-card card">
-        <span class="stat-value" id="stat-generations">0</span>
+        <span class="stat-value" id="stat-generations">…</span>
         <span class="stat-label">Generated</span>
       </div>
       <div class="stat-card card">
-        <span class="stat-value" id="stat-inserted">0</span>
+        <span class="stat-value" id="stat-inserted">…</span>
         <span class="stat-label">Inserted</span>
       </div>
       <div class="stat-card card">
@@ -683,28 +881,32 @@
       </div>
     </div>
 
+    <div class="data-feedback" id="usage-feedback" aria-live="polite" hidden></div>
+
     <p class="hint">On X, the ✦ AI Reply button only generates drafts using your Tone/Default settings. Posting always stays manual.</p>
   </section>
 
   <section id="view-history" data-view-panel="history" hidden>
     <h1 class="view-title">History</h1>
     <div class="tabs tabs-compact" id="history-tabs" role="tablist">
-      <button type="button" class="tab" data-history-filter="all" role="tab" aria-selected="true">All</button>
-      <button type="button" class="tab" data-history-filter="reply" role="tab" aria-selected="false">Reply</button>
-      <button type="button" class="tab" data-history-filter="quote" role="tab" aria-selected="false">Quote</button>
-      <button type="button" class="tab" data-history-filter="not-inserted" role="tab" aria-selected="false">Not inserted</button>
+      <button type="button" class="tab" id="history-tab-all" data-history-filter="all" role="tab" aria-controls="history-list" aria-selected="true" tabindex="0">All</button>
+      <button type="button" class="tab" id="history-tab-reply" data-history-filter="reply" role="tab" aria-controls="history-list" aria-selected="false" tabindex="-1">Reply</button>
+      <button type="button" class="tab" id="history-tab-quote" data-history-filter="quote" role="tab" aria-controls="history-list" aria-selected="false" tabindex="-1">Quote</button>
+      <button type="button" class="tab" id="history-tab-not-inserted" data-history-filter="not-inserted" role="tab" aria-controls="history-list" aria-selected="false" tabindex="-1">Not inserted</button>
     </div>
-    <div class="history-list" id="history-list"></div>
+    <div class="history-list" id="history-list" role="tabpanel" aria-labelledby="history-tab-all" tabindex="0">
+      <div class="data-feedback" data-state="loading" role="status"><span class="data-feedback-spinner" aria-hidden="true"></span><span>Loading history…</span></div>
+    </div>
   </section>
 
   <section id="view-tone" data-view-panel="tone" hidden>
     <h1 class="view-title">Tone / Default</h1>
     <div class="tabs tabs-compact" id="tone-subtabs" role="tablist">
-      <button type="button" class="tab" data-tone-subtab="tone" role="tab" aria-selected="true">Tone</button>
-      <button type="button" class="tab" data-tone-subtab="defaults" role="tab" aria-selected="false">Reply defaults</button>
+      <button type="button" class="tab" id="tone-tab-tone" data-tone-subtab="tone" role="tab" aria-controls="tone-subpanel-tone" aria-selected="true" tabindex="0">Tone</button>
+      <button type="button" class="tab" id="tone-tab-defaults" data-tone-subtab="defaults" role="tab" aria-controls="tone-subpanel-defaults" aria-selected="false" tabindex="-1">Reply defaults</button>
     </div>
 
-    <div id="tone-subpanel-tone" data-tone-subpanel="tone">
+    <div id="tone-subpanel-tone" data-tone-subpanel="tone" role="tabpanel" aria-labelledby="tone-tab-tone">
       <div class="chip-row" id="quick-tones-row" hidden></div>
       <label>
         Default tone
@@ -721,7 +923,7 @@
       </div>
     </div>
 
-    <div id="tone-subpanel-defaults" data-tone-subpanel="defaults" hidden>
+    <div id="tone-subpanel-defaults" data-tone-subpanel="defaults" role="tabpanel" aria-labelledby="tone-tab-defaults" hidden>
       <label>
         Standing instruction (optional)
         <textarea id="default-instruction" rows="3" placeholder="e.g. never use hashtags"></textarea>
@@ -746,30 +948,30 @@
           <input id="max-length" type="number" inputmode="numeric" min="50" max="25000" step="10" value="220" placeholder="Custom characters" />
         </div>
       </div>
-      <label>
-        Draft options per generation
-        <div class="segmented" id="draft-count" role="group" aria-label="Draft options per generation">
+      <div class="field-block">
+        <span id="draft-count-label">Draft options per generation</span>
+        <div class="segmented" id="draft-count" role="group" aria-labelledby="draft-count-label">
           <button type="button" data-count="1" aria-pressed="false">1</button>
           <button type="button" data-count="2" aria-pressed="false">2</button>
           <button type="button" data-count="3" aria-pressed="true">3</button>
         </div>
-      </label>
-      <label>
-        Use emoji
-        <div class="segmented" id="use-emoji" role="group" aria-label="Use emoji">
+      </div>
+      <div class="field-block">
+        <span id="use-emoji-label">Use emoji</span>
+        <div class="segmented" id="use-emoji" role="group" aria-labelledby="use-emoji-label">
           <button type="button" data-emoji="off" aria-pressed="false">Off</button>
           <button type="button" data-emoji="on" aria-pressed="true">On</button>
         </div>
-      </label>
-      <label>
-        <span class="info-icon-anchor">Read images in posts
+      </div>
+      <div class="field-block">
+        <span class="info-icon-anchor"><span id="read-images-label">Read images in posts</span>
           <button type="button" class="info-icon" aria-label="More info" data-tip="When on, an attached image is sent along with the post text — uses more tokens and takes a bit longer per generate.">i</button>
         </span>
-        <div class="segmented" id="read-images" role="group" aria-label="Read images in posts">
+        <div class="segmented" id="read-images" role="group" aria-labelledby="read-images-label">
           <button type="button" data-images="off" aria-pressed="true">Off</button>
           <button type="button" data-images="on" aria-pressed="false">On</button>
         </div>
-      </label>
+      </div>
     </div>
 
     <p class="status" id="status-tone" aria-live="polite"></p>
@@ -778,25 +980,31 @@
   <section id="view-advanced" data-view-panel="advanced" hidden>
     <h1 class="view-title">Advanced</h1>
     <div class="tabs tabs-compact" id="advanced-subtabs" role="tablist">
-      <button type="button" class="tab" data-advanced-subtab="connection" role="tab" aria-selected="true">Connection</button>
-      <button type="button" class="tab" data-advanced-subtab="model" role="tab" aria-selected="false">AI Model</button>
+      <button type="button" class="tab" id="advanced-tab-connection" data-advanced-subtab="connection" role="tab" aria-controls="advanced-subpanel-connection" aria-selected="true" tabindex="0">Connection</button>
+      <button type="button" class="tab" id="advanced-tab-model" data-advanced-subtab="model" role="tab" aria-controls="advanced-subpanel-model" aria-selected="false" tabindex="-1">AI Model</button>
     </div>
 
-    <div id="advanced-subpanel-connection" data-advanced-subpanel="connection">
+    <div id="advanced-subpanel-connection" data-advanced-subpanel="connection" role="tabpanel" aria-labelledby="advanced-tab-connection">
       <label>
         Backend URL
         <input id="backend-url" type="url" placeholder="https://your-backend.example.com" />
       </label>
-      <label>
-        <span class="info-icon-anchor">Access token
+      <div class="field-block">
+        <span class="info-icon-anchor"><label id="auth-token-label" for="auth-token">Access token</label>
           <button type="button" class="info-icon info-icon-warn" aria-label="Warning" data-tip="Never share this token. It identifies your account and enforces usage limits.">!</button>
         </span>
-        <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" autocorrect="off" />
-      </label>
+        <div class="password-field">
+          <input id="auth-token" type="password" placeholder="eks_..." autocomplete="off" autocorrect="off" spellcheck="false" aria-labelledby="auth-token-label" />
+          <button id="toggle-auth-token" class="password-toggle" type="button" aria-label="Show access token" aria-pressed="false">
+            <svg class="password-eye-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+            <svg class="password-eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18"/><path d="M10.6 6.2A9.9 9.9 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.1 2.7M6.4 6.5C3.9 8.2 2.5 12 2.5 12s3.5 6 9.5 6a9.7 9.7 0 0 0 3-.5"/></svg>
+          </button>
+        </div>
+      </div>
       <button id="test-connection" class="button-ghost" type="button">Test connection</button>
     </div>
 
-    <div id="advanced-subpanel-model" data-advanced-subpanel="model" hidden>
+    <div id="advanced-subpanel-model" data-advanced-subpanel="model" role="tabpanel" aria-labelledby="advanced-tab-model" hidden>
       <div class="field-block">
         <span class="field-row">
           <span>AI model
@@ -854,6 +1062,8 @@
       </svg>
     </button>
   </nav>
+
+  <div class="info-tooltip" id="info-tooltip" role="tooltip" aria-hidden="true"></div>
 
   <script type="module" src="/src/popup/popup.ts"></script>
 </body>

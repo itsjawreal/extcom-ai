@@ -6,38 +6,89 @@
   font: 14px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-/* Custom tooltip (replaces the native title="" tooltip everywhere so icon
-   buttons still explain themselves on hover/focus, styled to match the
-   panel instead of the browser's plain OS tooltip). Usage:
-   <button data-tooltip="Label text">. */
-[data-tooltip] {
-  position: relative;
+:where(.eks-ai-reply-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list) {
+  --eks-bg: rgb(0, 0, 0);
+  --eks-surface: rgb(21, 24, 28);
+  --eks-tooltip-bg: rgb(30, 33, 38);
+  --eks-border: rgb(47, 51, 54);
+  --eks-tooltip-border: rgb(56, 61, 67);
+  --eks-text: rgb(231, 233, 234);
+  --eks-muted: rgb(113, 118, 123);
+  --eks-secondary: rgb(139, 152, 165);
+  --eks-subtle: rgb(83, 100, 113);
+  --eks-field-value: rgb(136, 153, 166);
+  --eks-accent: rgb(29, 155, 240);
+  --eks-accent-hover: rgba(29, 155, 240, 0.1);
+  --eks-accent-soft: rgba(29, 155, 240, 0.18);
+  --eks-accent-softer: rgba(29, 155, 240, 0.12);
+  --eks-danger: rgb(244, 33, 46);
+  --eks-danger-soft: rgba(244, 33, 46, 0.1);
+  --eks-danger-border: rgba(244, 33, 46, 0.4);
+  --eks-on-accent: white;
+  --eks-shadow: rgba(0, 0, 0, 0.24);
+  --eks-tooltip-shadow: rgba(0, 0, 0, 0.3);
+  --eks-skeleton: rgba(120, 120, 120, 0.25);
+  --eks-color-scheme: dark;
 }
 
-[data-tooltip]::after {
-  background: rgb(30, 33, 38);
-  border: 1px solid rgb(56, 61, 67);
+:where(.eks-ai-reply-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list)[data-eks-theme="dim"] {
+  --eks-bg: rgb(21, 32, 43);
+  --eks-surface: rgb(30, 39, 50);
+  --eks-tooltip-bg: rgb(39, 51, 64);
+  --eks-border: rgb(56, 68, 77);
+  --eks-tooltip-border: rgb(83, 100, 113);
+  --eks-text: rgb(247, 249, 249);
+  --eks-muted: rgb(139, 152, 165);
+  --eks-secondary: rgb(139, 152, 165);
+  --eks-subtle: rgb(113, 118, 123);
+  --eks-field-value: rgb(139, 152, 165);
+}
+
+:where(.eks-ai-reply-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list)[data-eks-theme="light"] {
+  --eks-bg: rgb(255, 255, 255);
+  --eks-surface: rgb(247, 249, 249);
+  --eks-tooltip-bg: rgb(255, 255, 255);
+  --eks-border: rgb(207, 217, 222);
+  --eks-tooltip-border: rgb(207, 217, 222);
+  --eks-text: rgb(15, 20, 25);
+  --eks-muted: rgb(83, 100, 113);
+  --eks-secondary: rgb(83, 100, 113);
+  --eks-subtle: rgb(113, 118, 123);
+  --eks-field-value: rgb(83, 100, 113);
+  --eks-shadow: rgba(0, 0, 0, 0.12);
+  --eks-tooltip-shadow: rgba(0, 0, 0, 0.18);
+  --eks-skeleton: rgba(15, 20, 25, 0.12);
+  --eks-color-scheme: light;
+}
+
+/* Single viewport-level tooltip managed by panel.ts. Unlike the old global
+   [data-tooltip] pseudo-element rule, this cannot style X's own DOM and is
+   not clipped by the panel's scroll container. */
+.eks-content-tooltip {
+  background: var(--eks-tooltip-bg);
+  border: 1px solid var(--eks-tooltip-border);
   border-radius: 6px;
-  bottom: calc(100% + 6px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  color: rgb(231, 233, 234);
-  content: attr(data-tooltip);
+  box-shadow: 0 4px 12px var(--eks-tooltip-shadow);
+  box-sizing: border-box;
+  color: var(--eks-text);
   font: 500 11px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  left: 50%;
+  left: 0;
+  max-width: min(240px, calc(100vw - 16px));
   opacity: 0;
   padding: 4px 8px;
   pointer-events: none;
-  position: absolute;
-  transform: translateX(-50%) translateY(4px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
-  white-space: nowrap;
-  z-index: 10;
+  position: fixed;
+  top: 0;
+  transition: opacity 0.15s ease, visibility 0s linear 0.15s;
+  visibility: hidden;
+  white-space: normal;
+  z-index: 2147483647;
 }
 
-[data-tooltip]:hover::after,
-[data-tooltip]:focus-visible::after {
+.eks-content-tooltip[data-open="true"] {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transition-delay: 0s;
+  visibility: visible;
 }
 
 .eks-ai-reply-button {
@@ -45,7 +96,7 @@
   background: transparent;
   border: 0;
   border-radius: 9999px;
-  color: rgb(29, 155, 240);
+  color: var(--eks-accent);
   cursor: pointer;
   display: inline-flex;
   font-weight: 600;
@@ -56,7 +107,7 @@
 
 .eks-ai-reply-button:hover,
 .eks-ai-reply-button:focus-visible {
-  background: rgba(29, 155, 240, 0.1);
+  background: var(--eks-accent-hover);
   outline: none;
 }
 
@@ -66,14 +117,14 @@
 /* height auto-fits content up to max-height (animated by JS via
    animatePanelHeight — see panel.ts), then the body scrolls internally. */
 .eks-reply-panel {
-  background: rgb(0, 0, 0);
-  border: 1px solid rgb(47, 51, 54);
+  background: var(--eks-bg);
+  border: 1px solid var(--eks-border);
   border-radius: 16px;
   bottom: 88px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 8px 28px var(--eks-shadow);
   box-sizing: border-box;
-  color: rgb(231, 233, 234);
-  color-scheme: dark;
+  color: var(--eks-text);
+  color-scheme: var(--eks-color-scheme);
   display: flex;
   flex-direction: column;
   max-height: min(729px, calc(100vh - 112px));
@@ -89,8 +140,8 @@
    underneath it, instead of scrolling away with the rest of the content. */
 .eks-reply-panel header {
   align-items: center;
-  background: rgb(0, 0, 0);
-  border-bottom: 1px solid rgb(47, 51, 54);
+  background: var(--eks-bg);
+  border-bottom: 1px solid var(--eks-border);
   display: flex;
   flex: none;
   font: 700 18px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -113,8 +164,8 @@
    docked right. */
 .eks-panel-footer {
   align-items: center;
-  background: rgb(0, 0, 0);
-  border-top: 1px solid rgb(47, 51, 54);
+  background: var(--eks-bg);
+  border-top: 1px solid var(--eks-border);
   display: flex;
   flex: none;
   justify-content: space-between;
@@ -123,10 +174,10 @@
 }
 
 .eks-generate-fab {
-  background: rgb(29, 155, 240);
-  border: 1px solid rgb(29, 155, 240);
+  background: var(--eks-accent);
+  border: 1px solid var(--eks-accent);
   border-radius: 9999px;
-  color: white;
+  color: var(--eks-on-accent);
   cursor: pointer;
   flex-shrink: 0;
   font-weight: 600;
@@ -152,8 +203,8 @@
    together", so the fields inside can sit closer than the 12px rhythm
    used between top-level panel sections. */
 .eks-settings-card {
-  background: rgb(21, 24, 28);
-  border: 1px solid rgb(47, 51, 54);
+  background: var(--eks-surface);
+  border: 1px solid var(--eks-border);
   border-radius: 12px;
   margin-bottom: 12px;
   padding: 14px;
@@ -182,9 +233,9 @@
 
 .eks-quick-tones button {
   background: transparent;
-  border: 1px solid rgb(47, 51, 54);
+  border: 1px solid var(--eks-border);
   border-radius: 9999px;
-  color: rgb(139, 152, 165);
+  color: var(--eks-secondary);
   cursor: pointer;
   font-size: 10.5px;
   font-weight: 600;
@@ -192,9 +243,9 @@
 }
 
 .eks-quick-tones button[aria-pressed="true"] {
-  background: rgb(29, 155, 240);
-  border-color: rgb(29, 155, 240);
-  color: white;
+  background: var(--eks-accent);
+  border-color: var(--eks-accent);
+  color: var(--eks-on-accent);
 }
 
 .eks-panel-config {
@@ -210,6 +261,36 @@
   gap: 6px;
 }
 
+.eks-image-label-heading {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.eks-tooltip-info {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--eks-subtle);
+  border-radius: 50%;
+  color: var(--eks-secondary);
+  cursor: help;
+  display: inline-flex;
+  font: 700 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  height: 16px;
+  justify-content: center;
+  padding: 0;
+  width: 16px;
+}
+
+.eks-tooltip-info[data-tooltip-active="true"] {
+  border-color: var(--eks-accent);
+  color: var(--eks-accent);
+}
+
+.eks-tooltip-info[hidden] {
+  display: none;
+}
+
 .eks-count-group {
   display: flex;
   gap: 4px;
@@ -217,7 +298,7 @@
 
 .eks-count-group button {
   background: transparent;
-  border: 1px solid rgb(47, 51, 54);
+  border: 1px solid var(--eks-border);
   border-radius: 8px;
   color: inherit;
   cursor: pointer;
@@ -226,9 +307,9 @@
 }
 
 .eks-count-group button[aria-pressed="true"] {
-  background: rgb(29, 155, 240);
-  border-color: rgb(29, 155, 240);
-  color: white;
+  background: var(--eks-accent);
+  border-color: var(--eks-accent);
+  color: var(--eks-on-accent);
 }
 
 .eks-context {
@@ -239,17 +320,17 @@
 /* A distinct card so "which post this is for" reads as its own block
    instead of floating text directly under the header. */
 .eks-context-card {
-  background: rgb(21, 24, 28);
-  border: 1px solid rgb(47, 51, 54);
+  background: var(--eks-surface);
+  border: 1px solid var(--eks-border);
   border-radius: 12px;
   padding: 10px 12px;
 }
 
 .eks-context-error {
-  background: rgba(244, 33, 46, 0.1);
-  border: 1px solid rgba(244, 33, 46, 0.4);
+  background: var(--eks-danger-soft);
+  border: 1px solid var(--eks-danger-border);
   border-radius: 10px;
-  color: rgb(244, 33, 46);
+  color: var(--eks-danger);
   padding: 10px;
 }
 
@@ -261,13 +342,13 @@
 }
 
 .eks-context-author {
-  color: rgb(29, 155, 240);
+  color: var(--eks-accent);
   flex-shrink: 0;
   font-weight: 700;
 }
 
 .eks-context-text {
-  color: rgb(139, 152, 165);
+  color: var(--eks-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -285,7 +366,7 @@
   background: transparent;
   border: 0;
   border-radius: 6px;
-  color: rgb(29, 155, 240);
+  color: var(--eks-accent);
   cursor: pointer;
   display: inline-flex;
   flex-shrink: 0;
@@ -303,7 +384,7 @@
 }
 
 .eks-context-jump:hover {
-  background: rgba(29, 155, 240, 0.12);
+  background: var(--eks-accent-softer);
 }
 
 /* When collapsed this sits on the same line as the jump button (both fit
@@ -317,13 +398,13 @@
 }
 
 .eks-context-details summary {
-  color: rgb(29, 155, 240);
+  color: var(--eks-accent);
   cursor: pointer;
   font-weight: 600;
 }
 
 .eks-context-details dl {
-  border-left: 2px solid rgb(47, 51, 54);
+  border-left: 2px solid var(--eks-border);
   margin: 8px 0 0;
   max-height: 150px;
   overflow: auto;
@@ -331,7 +412,7 @@
 }
 
 .eks-context-details dt {
-  color: rgb(83, 100, 113);
+  color: var(--eks-muted);
   font-size: 11px;
   font-weight: 600;
   margin-top: 6px;
@@ -351,7 +432,7 @@
 .eks-select-trigger {
   align-items: center;
   background: transparent;
-  border: 1px solid rgb(47, 51, 54);
+  border: 1px solid var(--eks-border);
   border-radius: 8px;
   color: inherit;
   cursor: pointer;
@@ -364,7 +445,7 @@
 
 .eks-select-trigger:hover,
 .eks-select-trigger:focus-visible {
-  border-color: rgb(29, 155, 240);
+  border-color: var(--eks-accent);
   outline: none;
 }
 
@@ -374,18 +455,18 @@
 }
 
 .eks-select-caret {
-  color: rgb(83, 100, 113);
+  color: var(--eks-subtle);
   font-size: 11px;
   margin-left: 8px;
 }
 
 .eks-select-list {
-  background: rgb(21, 24, 28);
-  border: 1px solid rgb(47, 51, 54);
+  background: var(--eks-surface);
+  border: 1px solid var(--eks-border);
   border-radius: 10px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 8px 28px var(--eks-shadow);
   box-sizing: border-box;
-  color: rgb(231, 233, 234);
+  color: var(--eks-text);
   font: 14px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   list-style: none;
   margin: 0;
@@ -402,19 +483,25 @@
 }
 
 .eks-select-list li:hover,
+.eks-select-list li:focus-visible,
 .eks-select-list li[aria-selected="true"] {
-  background: rgba(29, 155, 240, 0.18);
+  background: var(--eks-accent-soft);
+}
+
+.eks-select-list li:focus-visible {
+  outline: 2px solid var(--eks-accent);
+  outline-offset: -2px;
 }
 
 .eks-select-list li[aria-selected="true"] {
-  color: rgb(29, 155, 240);
+  color: var(--eks-accent);
   font-weight: 600;
 }
 
 .eks-tone-label input,
 .eks-tone-label textarea {
   background: transparent;
-  border: 1px solid rgb(47, 51, 54);
+  border: 1px solid var(--eks-border);
   border-radius: 8px;
   color: inherit;
   padding: 8px;
@@ -433,7 +520,7 @@
 }
 
 .eks-field-row-value {
-  color: rgb(136, 153, 166);
+  color: var(--eks-field-value);
   font-weight: 400;
 }
 
@@ -451,14 +538,14 @@
 }
 
 .eks-extra-details summary {
-  color: rgb(29, 155, 240);
+  color: var(--eks-accent);
   cursor: pointer;
   font-weight: 600;
 }
 
 .eks-extra-details textarea {
   background: transparent;
-  border: 1px solid rgb(47, 51, 54);
+  border: 1px solid var(--eks-border);
   border-radius: 8px;
   box-sizing: border-box;
   color: inherit;
@@ -478,12 +565,12 @@
 }
 
 .eks-panel-usage {
-  color: rgb(83, 100, 113);
+  color: var(--eks-muted);
   font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .eks-reply-option {
-  border: 1px solid rgb(47, 51, 54);
+  border: 1px solid var(--eks-border);
   border-radius: 12px;
   margin: 8px 0;
   padding: 10px;
@@ -495,7 +582,7 @@
 }
 
 .eks-reply-char-count {
-  color: rgb(83, 100, 113);
+  color: var(--eks-muted);
   font: 11px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: -6px 0 10px;
   text-align: right;
@@ -508,17 +595,17 @@
 
 .eks-reply-actions button {
   background: transparent;
-  border: 1px solid rgb(29, 155, 240);
+  border: 1px solid var(--eks-accent);
   border-radius: 9999px;
-  color: rgb(29, 155, 240);
+  color: var(--eks-accent);
   cursor: pointer;
   font-weight: 600;
   padding: 5px 12px;
 }
 
 .eks-reply-actions button:last-child {
-  background: rgb(29, 155, 240);
-  color: white;
+  background: var(--eks-accent);
+  color: var(--eks-on-accent);
 }
 
 /* Copy/Regenerate are icon-only (a symbol is unambiguous here and a
@@ -551,7 +638,7 @@
 
 .eks-skeleton-line {
   animation: eks-skeleton-pulse 1.2s ease-in-out infinite;
-  background: rgba(120, 120, 120, 0.25);
+  background: var(--eks-skeleton);
   border-radius: 6px;
   height: 12px;
   margin-bottom: 8px;
@@ -569,14 +656,18 @@
 
 .eks-panel-note,
 .eks-panel-status {
-  color: rgb(83, 100, 113);
+  color: var(--eks-muted);
   font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   margin: 10px 0 0;
 }
 
 .eks-panel-status {
-  color: rgb(29, 155, 240);
+  color: var(--eks-accent);
   min-height: 17px;
+}
+
+.eks-panel-status[data-state="error"] {
+  color: var(--eks-danger);
 }
 
 /* Brief flash on the original post when "Jump to post" is clicked — the
@@ -587,7 +678,7 @@
 }
 
 @keyframes eks-jump-flash {
-  0% { background-color: rgba(29, 155, 240, 0.18); }
+  0% { background-color: var(--eks-accent-soft, rgba(29, 155, 240, 0.18)); }
   100% { background-color: transparent; }
 }
 
@@ -602,4 +693,19 @@
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-6px); }
   75% { transform: translateX(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eks-ai-reply-button,
+  .eks-reply-panel,
+  .eks-reply-panel *,
+  .eks-content-tooltip,
+  .eks-select-list,
+  .eks-select-list *,
+  .eks-jump-highlight {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

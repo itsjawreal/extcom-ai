@@ -11,12 +11,90 @@ type PanelInput =
   | { context: ExtractedPostContext }
   | { error: string };
 
+type XTheme = "light" | "dim" | "dark";
+
 let activePanel: HTMLElement | null = null;
 let activeAnchor: HTMLButtonElement | null = null;
 let activePost: HTMLElement | null = null;
 let activePostKey: string | null = null;
 let positionQueued = false;
 let activeToneList: HTMLElement | null = null;
+let activeTooltipSource: HTMLElement | null = null;
+let tooltipKeyboardNavigation = false;
+let themeSyncQueued = false;
+
+const TOOLTIP_ID = "eks-content-tooltip";
+const TOOLTIP_GAP = 6;
+const TOOLTIP_VIEWPORT_MARGIN = 8;
+
+function parseRgb(color: string): [number, number, number] | null {
+  const match = color.match(/rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*([\d.]+))?\s*\)/i);
+  if (!match || (match[4] !== undefined && Number(match[4]) === 0)) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function detectXTheme(): XTheme {
+  const candidates: Array<Element | null> = [
+    document.querySelector('[data-testid="primaryColumn"]'),
+    document.querySelector("main"),
+    document.body,
+    document.documentElement,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const rgb = parseRgb(window.getComputedStyle(candidate).backgroundColor);
+    if (!rgb) continue;
+    const [red, green, blue] = rgb;
+    if (red >= 210 && green >= 210 && blue >= 210) return "light";
+    if (red <= 8 && green <= 8 && blue <= 8) return "dark";
+    return "dim";
+  }
+  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+function applyXTheme(element: HTMLElement, theme: XTheme): void {
+  element.dataset.eksTheme = theme;
+}
+
+function applyCurrentXTheme(element: HTMLElement): XTheme {
+  const theme = detectXTheme();
+  applyXTheme(element, theme);
+  return theme;
+}
+
+export function syncPanelTheme(): void {
+  const theme = detectXTheme();
+  if (activePanel) applyXTheme(activePanel, theme);
+  if (activeToneList) applyXTheme(activeToneList, theme);
+  const tooltip = document.getElementById(TOOLTIP_ID);
+  if (tooltip) applyXTheme(tooltip, theme);
+  document.querySelectorAll<HTMLElement>(".eks-ai-reply-button").forEach((button) => {
+    applyXTheme(button, theme);
+  });
+}
+
+function queueThemeSync(): void {
+  if (themeSyncQueued) return;
+  themeSyncQueued = true;
+  window.requestAnimationFrame(() => {
+    themeSyncQueued = false;
+    syncPanelTheme();
+  });
+}
+
+const xThemeObserver = new MutationObserver(queueThemeSync);
+xThemeObserver.observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ["class", "style", "data-theme"],
+});
+if (document.body) {
+  xThemeObserver.observe(document.body, {
+    attributes: true,
+    attributeFilter: ["class", "style", "data-theme"],
+  });
+}
+window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", queueThemeSync);
+syncPanelTheme();
 
 // Tracks the in-flight transitionend listener per panel so a new call to
 // animatePanelHeight() can remove the previous one — without this, rapidly
@@ -30,6 +108,69 @@ const pendingHeightListeners = new WeakMap<HTMLElement, (event: TransitionEvent)
 // stale responses if the user regenerates the same slot again before the
 // previous response arrives. Key is the card's DOM node.
 const pendingSlotRequestIds = new WeakMap<HTMLElement, string>();
+
+function getContentTooltip(): HTMLElement {
+  const existing = document.getElementById(TOOLTIP_ID);
+  if (existing) {
+    applyCurrentXTheme(existing);
+    return existing;
+  }
+  const tooltip = document.createElement("div");
+  tooltip.id = TOOLTIP_ID;
+  tooltip.className = "eks-content-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.setAttribute("aria-hidden", "true");
+  applyCurrentXTheme(tooltip);
+  document.body.append(tooltip);
+  return tooltip;
+}
+
+function positionContentTooltip(source: HTMLElement, tooltip: HTMLElement): void {
+  const sourceRect = source.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
+  const spaceAbove = sourceRect.top - TOOLTIP_GAP - TOOLTIP_VIEWPORT_MARGIN;
+  const top = spaceAbove >= tooltipRect.height
+    ? sourceRect.top - tooltipRect.height - TOOLTIP_GAP
+    : Math.min(
+      sourceRect.bottom + TOOLTIP_GAP,
+      viewportHeight - tooltipRect.height - TOOLTIP_VIEWPORT_MARGIN,
+    );
+  const centeredLeft = sourceRect.left + (sourceRect.width - tooltipRect.width) / 2;
+  const left = Math.max(
+    TOOLTIP_VIEWPORT_MARGIN,
+    Math.min(centeredLeft, viewportWidth - tooltipRect.width - TOOLTIP_VIEWPORT_MARGIN),
+  );
+  tooltip.style.left = `${Math.round(left)}px`;
+  tooltip.style.top = `${Math.round(Math.max(TOOLTIP_VIEWPORT_MARGIN, top))}px`;
+}
+
+function openContentTooltip(source: HTMLElement): void {
+  if (!source.isConnected || source.offsetParent === null) return;
+  if (activeTooltipSource !== source) {
+    activeTooltipSource?.removeAttribute("aria-describedby");
+    activeTooltipSource?.removeAttribute("data-tooltip-active");
+  }
+  const tooltip = getContentTooltip();
+  activeTooltipSource = source;
+  tooltip.textContent = source.dataset.tooltip || "";
+  tooltip.dataset.open = "true";
+  tooltip.setAttribute("aria-hidden", "false");
+  source.setAttribute("aria-describedby", TOOLTIP_ID);
+  source.dataset.tooltipActive = "true";
+  positionContentTooltip(source, tooltip);
+}
+
+function closeContentTooltip(): void {
+  activeTooltipSource?.removeAttribute("aria-describedby");
+  activeTooltipSource?.removeAttribute("data-tooltip-active");
+  activeTooltipSource = null;
+  const tooltip = document.getElementById(TOOLTIP_ID);
+  if (!tooltip) return;
+  tooltip.dataset.open = "false";
+  tooltip.setAttribute("aria-hidden", "true");
+}
 
 function getPostKey(post: HTMLElement): string | null {
   const timeLink = post.querySelector("time")?.closest("a");
@@ -139,13 +280,22 @@ function animatePanelHeight(panel: HTMLElement, mutate: () => void): void {
   const timeoutId = window.setTimeout(cleanup, 3000);
 }
 
-function showStatus(panel: HTMLElement, message: string): void {
+const panelStatusTimers = new WeakMap<HTMLElement, number>();
+
+function showStatus(panel: HTMLElement, message: string, state: "info" | "error" = "info"): void {
   const status = panel.querySelector<HTMLElement>("[data-panel-status]");
   if (!status) return;
+  const existingTimer = panelStatusTimers.get(status);
+  if (existingTimer) window.clearTimeout(existingTimer);
   status.textContent = message;
-  window.setTimeout(() => {
+  status.dataset.state = state;
+  if (state === "error") return;
+  const timer = window.setTimeout(() => {
     if (status.textContent === message) status.textContent = "";
-  }, 2200);
+    status.removeAttribute("data-state");
+    panelStatusTimers.delete(status);
+  }, 3500);
+  panelStatusTimers.set(status, timer);
 }
 
 function setControlsDisabled(panel: HTMLElement, disabled: boolean): void {
@@ -243,18 +393,20 @@ async function performInsert(
         showStatus(
           panel,
           "Composer opened, but X blocked auto-insert. Reply copied. Paste with Ctrl+V.",
+          "error",
         );
         return;
       } catch {
         showStatus(
           panel,
           "Composer opened, but X blocked auto-insert and clipboard copy failed.",
+          "error",
         );
         return;
       }
     }
 
-    showStatus(panel, message);
+    showStatus(panel, message, "error");
   }
 }
 
@@ -267,6 +419,10 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
   // listeners below) so a stray click on the page can't silently discard
   // drafts the user hasn't inserted or explicitly dismissed yet.
   panel.dataset.hasDrafts = String(items.length > 0);
+  panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.setAttribute(
+    "aria-label",
+    items.length > 0 ? "Close and discard drafts" : "Close",
+  );
 
   const maxLength = readMaxLength(panel) ?? 220;
 
@@ -296,7 +452,7 @@ function renderReplies(panel: HTMLElement, items: PanelReply[], context?: Extrac
         await navigator.clipboard.writeText(reply.text);
         showStatus(panel, "Reply copied.");
       } catch {
-        showStatus(panel, "Copy failed. Check browser permission.");
+        showStatus(panel, "Copy failed. Check browser permission.", "error");
       }
     });
 
@@ -380,7 +536,7 @@ async function regenerateSlot(
     // Only show error if this is still the latest request for this slot.
     if (pendingSlotRequestIds.get(card) === requestId) {
       card.classList.remove("eks-reply-option-loading");
-      showStatus(panel, error instanceof Error ? error.message : "Regenerate failed.");
+      showStatus(panel, error instanceof Error ? error.message : "Regenerate failed.", "error");
     }
   } finally {
     setControlsDisabled(panel, false);
@@ -388,12 +544,17 @@ async function regenerateSlot(
 }
 
 export function closePanel(): void {
+  const panel = activePanel;
+  const anchor = activeAnchor;
+  const restoreFocus = Boolean(panel?.contains(document.activeElement));
+  closeContentTooltip();
   closeToneList();
-  activePanel?.remove();
+  panel?.remove();
   activePanel = null;
   activeAnchor = null;
   activePost = null;
   activePostKey = null;
+  if (restoreFocus && anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
 
 // Outside clicks, Escape, and re-clicking the same post's AI Reply button
@@ -401,8 +562,7 @@ export function closePanel(): void {
 // stray click elsewhere on the page can't silently discard drafts the user
 // hasn't inserted or explicitly dismissed — the × button is the only way
 // out while panel.dataset.hasDrafts is true (see renderReplies). Opening a
-// *different* post's panel still closes this one unconditionally — that's
-// a deliberate exception, not an oversight.
+// different post is guarded separately in openPanel for the same reason.
 function attemptClosePanel(): void {
   if (activePanel?.dataset.hasDrafts === "true") {
     shakePanel(activePanel);
@@ -443,13 +603,16 @@ function jumpToActivePost(): void {
   if (!activePost || !activePost.isConnected) {
     const target = findReanchorTarget();
     if (!target) {
-      if (activePanel) showStatus(activePanel, "Could not find the original post — it may have scrolled out of the timeline.");
+      if (activePanel) {
+        showStatus(activePanel, "Could not find the original post — it may have scrolled out of the timeline.", "error");
+      }
       return;
     }
     activeAnchor = target.anchor;
     activePost = target.post;
   }
-  activePost.scrollIntoView({ behavior: "smooth", block: "center" });
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  activePost.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
   activePost.classList.add("eks-jump-highlight");
   window.setTimeout(() => activePost?.classList.remove("eks-jump-highlight"), 1200);
 }
@@ -602,10 +765,13 @@ function renderQuickTones(panel: HTMLElement, favoriteTones: Tone[]): void {
   }
 }
 
-function closeToneList(): void {
+function closeToneList({ restoreFocus = false }: { restoreFocus?: boolean } = {}): void {
   activeToneList?.remove();
   activeToneList = null;
-  activePanel?.querySelector<HTMLButtonElement>("[data-tone-trigger]")?.setAttribute("aria-expanded", "false");
+  const trigger = activePanel?.querySelector<HTMLButtonElement>("[data-tone-trigger]");
+  trigger?.setAttribute("aria-expanded", "false");
+  trigger?.removeAttribute("aria-controls");
+  if (restoreFocus) trigger?.focus({ preventScroll: true });
 }
 
 function positionToneList(list: HTMLElement, trigger: HTMLElement): void {
@@ -630,10 +796,13 @@ function openToneList(panel: HTMLElement, trigger: HTMLButtonElement, select: HT
   closeToneList();
   const list = document.createElement("ul");
   list.className = "eks-select-list";
+  applyCurrentXTheme(list);
+  list.id = "eks-tone-listbox";
   list.setAttribute("role", "listbox");
 
   const autoItem = document.createElement("li");
   autoItem.setAttribute("role", "option");
+  autoItem.tabIndex = -1;
   autoItem.dataset.value = "auto";
   autoItem.textContent = TONE_AUTO_LABEL;
   if (select.value === "auto") autoItem.setAttribute("aria-selected", "true");
@@ -642,26 +811,68 @@ function openToneList(panel: HTMLElement, trigger: HTMLButtonElement, select: HT
   for (const [value, label] of Object.entries(TONE_LABELS)) {
     const item = document.createElement("li");
     item.setAttribute("role", "option");
+    item.tabIndex = -1;
     item.dataset.value = value;
     item.textContent = label;
     if (value === select.value) item.setAttribute("aria-selected", "true");
     list.append(item);
   }
 
-  list.addEventListener("click", (event) => {
-    const item = (event.target as HTMLElement).closest<HTMLLIElement>("li[data-value]");
-    if (!item?.dataset.value) return;
+  const selectItem = (item: HTMLLIElement): void => {
+    if (!item.dataset.value) return;
     select.value = item.dataset.value;
     panel.dataset.controlsTouched = "true";
     syncToneTrigger(panel);
-    closeToneList();
-    trigger.focus();
+    closeToneList({ restoreFocus: true });
+  };
+
+  list.addEventListener("click", (event) => {
+    const item = (event.target as HTMLElement).closest<HTMLLIElement>("li[data-value]");
+    if (item) selectItem(item);
+  });
+
+  list.addEventListener("keydown", (event) => {
+    const items = Array.from(list.querySelectorAll<HTMLLIElement>('li[role="option"]'));
+    const focusedIndex = items.indexOf(document.activeElement as HTMLLIElement);
+    const currentIndex = focusedIndex >= 0 ? focusedIndex : 0;
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowDown") nextIndex = (currentIndex + 1) % items.length;
+    if (event.key === "ArrowUp") nextIndex = (currentIndex - 1 + items.length) % items.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = items.length - 1;
+    if (nextIndex !== null) {
+      event.preventDefault();
+      items[nextIndex]?.focus({ preventScroll: true });
+      items[nextIndex]?.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      const item = document.activeElement instanceof HTMLLIElement ? document.activeElement : null;
+      if (item?.dataset.value) {
+        event.preventDefault();
+        selectItem(item);
+      }
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeToneList({ restoreFocus: true });
+    }
+  });
+
+  list.addEventListener("focusout", () => {
+    window.setTimeout(() => {
+      if (activeToneList === list && !list.contains(document.activeElement)) closeToneList();
+    }, 0);
   });
 
   document.body.append(list);
   positionToneList(list, trigger);
   trigger.setAttribute("aria-expanded", "true");
+  trigger.setAttribute("aria-controls", list.id);
   activeToneList = list;
+  (list.querySelector<HTMLLIElement>('li[aria-selected="true"]') || autoItem).focus({ preventScroll: true });
 }
 
 function setDraftCountGroup(panel: HTMLElement, count: number): void {
@@ -832,7 +1043,7 @@ async function generateRepliesForPanel(
     showStatus(panel, "Replies generated.");
   } catch (error) {
     animatePanelHeight(panel, () => renderReplies(panel, [], context));
-    showStatus(panel, error instanceof Error ? error.message : "Reply generation failed.");
+    showStatus(panel, error instanceof Error ? error.message : "Reply generation failed.", "error");
   } finally {
     setPanelLoading(panel, false);
   }
@@ -844,14 +1055,23 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     return;
   }
 
+  // Treat drafts from another post the same as drafts in the current panel:
+  // require an explicit close before replacing them. Previously, clicking a
+  // different post's AI Reply button discarded the current drafts instantly.
+  if (activePanel?.dataset.hasDrafts === "true") {
+    shakePanel(activePanel);
+    showStatus(activePanel, "Close the current drafts before opening another post.");
+    return;
+  }
   closePanel();
   const panel = document.createElement("section");
   panel.className = "eks-reply-panel";
+  applyCurrentXTheme(panel);
   panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-label", "AI reply drafts");
+  panel.setAttribute("aria-labelledby", "eks-panel-title");
   panel.innerHTML = `
     <header>
-      <strong>AI Reply</strong>
+      <strong id="eks-panel-title">AI Reply</strong>
       <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close">×</button>
     </header>
     <div class="eks-panel-body">
@@ -900,7 +1120,10 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
             </div>
           </div>
           <div class="eks-count-label" data-images-label hidden>
-            <span data-images-label-text>Image</span>
+            <span class="eks-image-label-heading">
+              <span data-images-label-text>Image</span>
+              <button type="button" class="eks-tooltip-info" data-images-info aria-label="Why image reading is required" hidden>i</button>
+            </span>
             <div class="eks-count-group" data-images-group role="group" aria-label="Read images in this post">
               <button type="button" data-images="off" aria-pressed="true">Off</button>
               <button type="button" data-images="on" aria-pressed="false">On</button>
@@ -924,7 +1147,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   `;
 
   renderContext(panel, input);
-  panel.querySelector(".eks-panel-close")?.addEventListener("click", closePanel);
+  panel.querySelector(".eks-panel-close")?.addEventListener("click", () => closePanel());
 
   const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
   const toneTrigger = panel.querySelector<HTMLButtonElement>("[data-tone-trigger]");
@@ -937,6 +1160,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       } else {
         openToneList(panel, toneTrigger, toneSelect);
       }
+    });
+    toneTrigger.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      event.preventDefault();
+      if (!activeToneList) openToneList(panel, toneTrigger, toneSelect);
+      const items = Array.from(activeToneList?.querySelectorAll<HTMLLIElement>('li[role="option"]') ?? []);
+      if (event.key === "ArrowUp") items.at(-1)?.focus({ preventScroll: true });
     });
     panel.querySelector("[data-quick-tones]")?.addEventListener("click", (event) => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tone]");
@@ -1013,10 +1243,11 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       panel.querySelectorAll<HTMLButtonElement>("[data-images-group] button").forEach((button) => {
         button.disabled = true;
       });
-      panel.querySelector<HTMLElement>("[data-images-label]")?.setAttribute(
-        "data-tooltip",
-        "This post has no caption text, so reading the image is required to generate a reply.",
-      );
+      const infoButton = panel.querySelector<HTMLButtonElement>("[data-images-info]");
+      if (infoButton) {
+        infoButton.hidden = false;
+        infoButton.dataset.tooltip = "This post has no caption text, so reading the image is required to generate a reply.";
+      }
     }
   }
 
@@ -1047,6 +1278,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   activePost = post;
   activePostKey = getPostKey(post);
   renderUsage(panel);
+  panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.focus({ preventScroll: true });
 
   if (!("error" in input)) {
     panel.querySelector<HTMLButtonElement>("[data-generate-button]")?.addEventListener("click", () => {
@@ -1056,12 +1288,14 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
 }
 
 window.addEventListener("resize", () => {
+  closeContentTooltip();
   closeToneList();
   queuePanelPosition();
 });
 window.addEventListener(
   "scroll",
   (event) => {
+    closeContentTooltip();
     // Scroll doesn't bubble, but capture-phase listeners on window still fire
     // for scrolling inside any descendant — including the tone list's own
     // overflow-y:auto. Without this check, scrolling (or clicking its
@@ -1077,17 +1311,23 @@ window.addEventListener(
 );
 
 document.addEventListener("keydown", (event) => {
+  tooltipKeyboardNavigation = true;
   if (event.key !== "Escape") return;
+  closeContentTooltip();
   if (activeToneList) {
-    closeToneList();
+    closeToneList({ restoreFocus: true });
     return;
   }
   attemptClosePanel();
 });
 
 document.addEventListener("pointerdown", (event) => {
+  tooltipKeyboardNavigation = false;
   const target = event.target;
   if (!(target instanceof Node)) return;
+  if (!(target instanceof Element) || !target.closest(".eks-reply-panel [data-tooltip]")) {
+    closeContentTooltip();
+  }
 
   const insideToneList = activeToneList?.contains(target) ?? false;
 
@@ -1104,4 +1344,48 @@ document.addEventListener("pointerdown", (event) => {
 
   if (!activePanel || !activeAnchor) return;
   if (!activePanel.contains(target) && !activeAnchor.contains(target)) attemptClosePanel();
+});
+
+document.addEventListener("pointermove", (event) => {
+  if (event.pointerType !== "mouse") return;
+  const source = event.target instanceof Element
+    ? event.target.closest<HTMLElement>(".eks-reply-panel [data-tooltip]")
+    : null;
+  if (source) {
+    const rect = source.getBoundingClientRect();
+    const directlyInside = event.clientX >= rect.left
+      && event.clientX <= rect.right
+      && event.clientY >= rect.top
+      && event.clientY <= rect.bottom;
+    if (directlyInside) {
+      openContentTooltip(source);
+      return;
+    }
+  }
+  closeContentTooltip();
+});
+
+// pointermove only fires while the cursor stays inside the document, so a
+// mouse leaving the page (off the browser viewport) without another move
+// event never reaches the handler above and the tooltip would stay open
+// forever. relatedTarget is null exactly when the pointer exits the
+// document, which pointerout still reports.
+document.addEventListener("pointerout", (event) => {
+  if (event.pointerType === "mouse" && event.relatedTarget === null) closeContentTooltip();
+});
+
+document.addEventListener("focusin", (event) => {
+  if (!tooltipKeyboardNavigation || !(event.target instanceof Element)) return;
+  const source = event.target.closest<HTMLElement>(".eks-reply-panel [data-tooltip]");
+  if (source) openContentTooltip(source);
+});
+
+document.addEventListener("focusout", (event) => {
+  if (event.target === activeTooltipSource) closeContentTooltip();
+});
+
+document.addEventListener("click", (event) => {
+  if (!(event.target instanceof Element)) return;
+  const infoButton = event.target.closest<HTMLElement>(".eks-tooltip-info[data-tooltip]");
+  if (infoButton) openContentTooltip(infoButton);
 });

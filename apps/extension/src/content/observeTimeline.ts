@@ -1,6 +1,6 @@
 import { injectReplyButton, PROCESSED_ATTRIBUTE } from "./injectButton";
 import { extractPost } from "./extractPost";
-import { openPanel, syncPanelPosition } from "./panel";
+import { openPanel, syncPanelPosition, syncPanelTheme } from "./panel";
 
 const POST_SELECTOR = "article";
 const DEBUG_PREFIX = "[Extcom AI]";
@@ -36,6 +36,8 @@ function scanPosts(root: ParentNode = document): void {
     });
     if (injected) injectedCount += 1;
   });
+
+  if (injectedCount > 0) syncPanelTheme();
 
   scanCount += 1;
   if (scanCount <= 5 || injectedCount > 0) {
@@ -81,6 +83,7 @@ export function observeTimeline(): () => void {
       });
     scanPosts();
     syncPanelPosition();
+    syncPanelTheme();
   }, 3000);
 
   return () => {

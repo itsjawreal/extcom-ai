@@ -9,6 +9,15 @@ test("SYSTEM_PROMPT does not bias every reply toward being short", () => {
   assert.doesNotMatch(SYSTEM_PROMPT, /Generate short/);
 });
 
+test("SYSTEM_PROMPT tells the model to match the original post's language by default", () => {
+  // Previously there was no language instruction at all, so a non-English
+  // post (e.g. Indonesian) could still get an English reply — tone guidance
+  // and examples in this file are all written in English, with nothing
+  // steering the model toward matching the post's own language instead.
+  assert.match(SYSTEM_PROMPT, /same language the original post is written in/);
+  assert.match(SYSTEM_PROMPT, /unless the extra user instruction explicitly asks for a different language/);
+});
+
 test("short-form maxLength does not add the long-form paragraph instruction", () => {
   const prompt = buildUserPrompt({
     postText: "Post",

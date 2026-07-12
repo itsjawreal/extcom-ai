@@ -1,4 +1,4 @@
-import { clampReplyLength, TONE_AUTO_LABEL, TONE_LABELS } from "../shared/constants";
+import { clampReplyLength, DEFAULT_SETTINGS_PARTIAL, TONE_AUTO_LABEL, TONE_LABELS } from "../shared/constants";
 import type {
   ConnectionStatus,
   ExtensionSettings,
@@ -28,6 +28,7 @@ const viewPanels = {
   advanced: document.getElementById("view-advanced") as HTMLElement,
 } satisfies Record<View, HTMLElement>;
 const bottomNav = document.getElementById("bottom-nav") as HTMLElement;
+const viewContent = document.querySelector<HTMLElement>(".view-content")!;
 const navButtons = Array.from(bottomNav.querySelectorAll<HTMLButtonElement>(".nav-button"));
 
 const clearHistoryButton = document.getElementById("clear-history") as HTMLButtonElement;
@@ -35,15 +36,22 @@ const statGenerations = document.getElementById("stat-generations") as HTMLEleme
 const statInserted = document.getElementById("stat-inserted") as HTMLElement;
 const statTokens = document.getElementById("stat-tokens") as HTMLElement;
 const statCost = document.getElementById("stat-cost") as HTMLElement;
+const usageFeedback = document.getElementById("usage-feedback") as HTMLElement;
 const historyList = document.getElementById("history-list") as HTMLElement;
 const historyTabs = document.getElementById("history-tabs") as HTMLElement;
 
+const onboardingCard = document.getElementById("onboarding-card") as HTMLElement;
+const onboardingSetupButton = document.getElementById("onboarding-setup-button") as HTMLButtonElement;
 const statusCard = document.getElementById("status-card") as HTMLElement;
 const connectionTitle = document.getElementById("connection-title") as HTMLElement;
 const connectionDetail = document.getElementById("connection-detail") as HTMLElement;
 const testButton = document.getElementById("test-connection") as HTMLButtonElement;
+const headerLinks = document.getElementById("header-links") as HTMLElement;
+const headerConnectionFeedback = document.getElementById("header-connection-feedback") as HTMLElement;
+const headerFeedbackText = document.getElementById("header-feedback-text") as HTMLElement;
 const backendUrlInput = document.getElementById("backend-url") as HTMLInputElement;
 const authTokenInput = document.getElementById("auth-token") as HTMLInputElement;
+const authTokenToggle = document.getElementById("toggle-auth-token") as HTMLButtonElement;
 const toneSelect = document.getElementById("tone-default") as HTMLSelectElement;
 const instructionInput = document.getElementById("default-instruction") as HTMLTextAreaElement;
 const maxLengthInput = document.getElementById("max-length") as HTMLInputElement;
@@ -80,10 +88,15 @@ const advancedSubpanels = {
   connection: document.getElementById("advanced-subpanel-connection") as HTMLElement,
   model: document.getElementById("advanced-subpanel-model") as HTMLElement,
 };
+const infoTooltip = document.getElementById("info-tooltip") as HTMLElement;
+const infoIcons = Array.from(document.querySelectorAll<HTMLButtonElement>(".info-icon[data-tip]"));
 
 const MAX_FAVORITE_TONES = 5;
 
 let connectionCheckId = 0;
+let headerFeedbackTimer: number | undefined;
+let usageLoadId = 0;
+let settingsLoadId = 0;
 let draftCount = 3;
 let useEmoji = true;
 let readImages = false;
@@ -103,7 +116,120 @@ let modelsLoaded = false;
 // the user's configured backend/token.
 let settingsLoaded = false;
 
+const TOOLTIP_GAP = 8;
+const TOOLTIP_VIEWPORT_MARGIN = 8;
+let activeTooltipIcon: HTMLButtonElement | null = null;
+let keyboardNavigation = false;
+
+function positionInfoTooltip(icon: HTMLButtonElement): void {
+  const iconRect = icon.getBoundingClientRect();
+  const tooltipRect = infoTooltip.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
+
+  // Prefer above so a field's tooltip does not cover the control directly
+  // below its label. Fall back below when the tooltip would hit the top.
+  const spaceAbove = iconRect.top - TOOLTIP_GAP - TOOLTIP_VIEWPORT_MARGIN;
+  const top = spaceAbove >= tooltipRect.height
+    ? iconRect.top - tooltipRect.height - TOOLTIP_GAP
+    : Math.min(
+      iconRect.bottom + TOOLTIP_GAP,
+      viewportHeight - tooltipRect.height - TOOLTIP_VIEWPORT_MARGIN,
+    );
+  const centeredLeft = iconRect.left + (iconRect.width - tooltipRect.width) / 2;
+  const left = Math.max(
+    TOOLTIP_VIEWPORT_MARGIN,
+    Math.min(centeredLeft, viewportWidth - tooltipRect.width - TOOLTIP_VIEWPORT_MARGIN),
+  );
+
+  infoTooltip.style.left = `${Math.round(left)}px`;
+  infoTooltip.style.top = `${Math.round(Math.max(TOOLTIP_VIEWPORT_MARGIN, top))}px`;
+}
+
+function openInfoTooltip(icon: HTMLButtonElement): void {
+  if (!icon.isConnected || icon.offsetParent === null) return;
+  if (activeTooltipIcon !== icon) {
+    activeTooltipIcon?.removeAttribute("aria-describedby");
+    activeTooltipIcon?.removeAttribute("data-tooltip-active");
+  }
+  activeTooltipIcon = icon;
+  infoTooltip.textContent = icon.dataset.tip || "";
+  infoTooltip.dataset.open = "true";
+  infoTooltip.setAttribute("aria-hidden", "false");
+  icon.setAttribute("aria-describedby", "info-tooltip");
+  icon.dataset.tooltipActive = "true";
+  positionInfoTooltip(icon);
+}
+
+function closeInfoTooltip(): void {
+  activeTooltipIcon?.removeAttribute("aria-describedby");
+  activeTooltipIcon?.removeAttribute("data-tooltip-active");
+  activeTooltipIcon = null;
+  infoTooltip.dataset.open = "false";
+  infoTooltip.setAttribute("aria-hidden", "true");
+}
+
+// CSS :hover can become active when a view is revealed under a stationary
+// cursor, which made the warning appear before the user touched its icon.
+// A real pointermove whose coordinates are inside the icon is required for
+// mouse hover instead. Listening at document level also guarantees that
+// moving from the icon into a label's input closes the tooltip immediately.
+for (const icon of infoIcons) {
+  icon.addEventListener("click", () => openInfoTooltip(icon));
+  icon.addEventListener("focus", () => {
+    if (keyboardNavigation) openInfoTooltip(icon);
+  });
+  icon.addEventListener("blur", () => {
+    if (activeTooltipIcon === icon) closeInfoTooltip();
+  });
+}
+
+document.addEventListener("pointermove", (event) => {
+  if (event.pointerType !== "mouse") return;
+  const target = event.target instanceof Element
+    ? event.target.closest<HTMLButtonElement>(".info-icon[data-tip]")
+    : null;
+  if (target) {
+    const rect = target.getBoundingClientRect();
+    const directlyInside = event.clientX >= rect.left
+      && event.clientX <= rect.right
+      && event.clientY >= rect.top
+      && event.clientY <= rect.bottom;
+    if (directlyInside) {
+      openInfoTooltip(target);
+      return;
+    }
+  }
+  closeInfoTooltip();
+});
+
+// pointermove only fires while the cursor stays inside the document, so a
+// mouse leaving the popup's viewport entirely (its own small window) without
+// another move event never reaches the handler above and the tooltip would
+// stay open forever. relatedTarget is null exactly when the pointer exits
+// the document, which pointerout still reports.
+document.addEventListener("pointerout", (event) => {
+  if (event.pointerType === "mouse" && event.relatedTarget === null) closeInfoTooltip();
+});
+
+document.addEventListener("keydown", (event) => {
+  keyboardNavigation = true;
+  if (event.key === "Escape") closeInfoTooltip();
+});
+document.addEventListener("pointerdown", (event) => {
+  keyboardNavigation = false;
+  if (!(event.target as Element).closest(".info-icon")) closeInfoTooltip();
+});
+document.addEventListener("scroll", () => {
+  if (activeTooltipIcon) positionInfoTooltip(activeTooltipIcon);
+}, true);
+window.addEventListener("resize", () => {
+  if (activeTooltipIcon) positionInfoTooltip(activeTooltipIcon);
+});
+
 function switchView(view: View): void {
+  if (view !== "advanced") setAuthTokenVisible(false);
+  viewContent.dataset.activeView = view;
   for (const [name, panel] of Object.entries(viewPanels) as [View, HTMLElement][]) {
     panel.hidden = name !== view;
   }
@@ -112,12 +238,14 @@ function switchView(view: View): void {
   }
   if (view === "home") {
     void checkConnection();
-    void loadUsageStats();
+    void loadUsageStats("home");
   } else if (view === "history") {
-    void loadUsageStats();
-  } else if (view === "tone" || view === "advanced") {
-    void loadSettings();
-    if (view === "advanced") void loadModelOptions();
+    void loadUsageStats("history");
+  } else if (view === "tone") {
+    void loadSettings(statusToneNode);
+  } else if (view === "advanced") {
+    void loadSettings(statusAdvancedNode);
+    void loadModelOptions();
   }
 }
 
@@ -151,6 +279,7 @@ function wireSubTabs(
     if (!button || !target || !(target in panels)) return;
     tabs.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) => {
       tab.setAttribute("aria-selected", String(tab === button));
+      tab.tabIndex = tab === button ? 0 : -1;
     });
     for (const [name, panel] of Object.entries(panels)) {
       panel.hidden = name !== target;
@@ -160,6 +289,43 @@ function wireSubTabs(
 
 wireSubTabs(toneSubtabs, toneSubpanels, (button) => button.dataset.toneSubtab);
 wireSubTabs(advancedSubtabs, advancedSubpanels, (button) => button.dataset.advancedSubtab);
+
+function setAuthTokenVisible(visible: boolean): void {
+  authTokenInput.type = visible ? "text" : "password";
+  authTokenToggle.setAttribute("aria-pressed", String(visible));
+  authTokenToggle.setAttribute("aria-label", visible ? "Hide access token" : "Show access token");
+}
+
+authTokenToggle.addEventListener("click", () => {
+  setAuthTokenVisible(authTokenInput.type === "password");
+});
+
+advancedSubtabs.addEventListener("click", (event) => {
+  const tab = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-advanced-subtab]");
+  if (tab?.dataset.advancedSubtab === "model") setAuthTokenVisible(false);
+});
+
+function wireTabKeyboard(tabs: HTMLElement): void {
+  tabs.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const buttons = Array.from(tabs.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const current = (event.target as HTMLElement).closest<HTMLButtonElement>('[role="tab"]');
+    if (!current || buttons.length === 0) return;
+    event.preventDefault();
+    const currentIndex = Math.max(0, buttons.indexOf(current));
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % buttons.length;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = buttons.length - 1;
+    buttons[nextIndex]?.click();
+    buttons[nextIndex]?.focus();
+  });
+}
+
+wireTabKeyboard(historyTabs);
+wireTabKeyboard(toneSubtabs);
+wireTabKeyboard(advancedSubtabs);
 
 function setDraftCount(count: number): void {
   draftCount = count;
@@ -366,10 +532,12 @@ function syncAiModelUi(): void {
 
 async function loadModelOptions(): Promise<void> {
   if (modelsLoaded) return;
+  const loadingMessage = "Loading models…";
+  showStatus(statusAiModelNode, loadingMessage, "loading");
   try {
     const response = await chrome.runtime.sendMessage({ type: "GET_MODELS" }) as RuntimeResponse;
     if (!response.ok || !response.models) {
-      showStatus(statusAiModelNode, response.error || "Could not load model list.");
+      showStatus(statusAiModelNode, response.error || "Could not load model list.", "error");
       return;
     }
     modelOptions = response.models.models;
@@ -377,8 +545,9 @@ async function loadModelOptions(): Promise<void> {
     modelsLoaded = true;
     renderModelSelect(modelOptions, allowCustomModel);
     syncAiModelUi();
+    if (statusAiModelNode.textContent === loadingMessage) clearStatus(statusAiModelNode);
   } catch (error) {
-    showStatus(statusAiModelNode, error instanceof Error ? error.message : "Could not load model list.");
+    showStatus(statusAiModelNode, error instanceof Error ? error.message : "Could not load model list.", "error");
   }
 }
 
@@ -399,16 +568,20 @@ aiModelCustomInput.addEventListener("input", () => {
 async function testAiModel(): Promise<void> {
   const model = aiModelCustomInput.value.trim();
   if (!model) {
-    showStatus(statusAiModelNode, "Type a model ID to test.");
+    showStatus(statusAiModelNode, "Type a model ID to test.", "error");
     return;
   }
   aiModelTestButton.disabled = true;
-  showStatus(statusAiModelNode, "Testing…");
+  showStatus(statusAiModelNode, "Testing…", "loading");
   try {
     const response = await chrome.runtime.sendMessage({ type: "TEST_MODEL", model }) as RuntimeResponse;
-    showStatus(statusAiModelNode, response.ok ? "✓ Model works." : response.error || "Test failed.");
+    showStatus(
+      statusAiModelNode,
+      response.ok ? "✓ Model works." : response.error || "Test failed.",
+      response.ok ? "info" : "error",
+    );
   } catch (error) {
-    showStatus(statusAiModelNode, error instanceof Error ? error.message : "Test failed.");
+    showStatus(statusAiModelNode, error instanceof Error ? error.message : "Test failed.", "error");
   } finally {
     aiModelTestButton.disabled = false;
   }
@@ -422,21 +595,67 @@ historyTabs.addEventListener("click", (event) => {
   historyFilter = (button.dataset.historyFilter as HistoryFilter) || "all";
   historyTabs.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) => {
     tab.setAttribute("aria-selected", String(tab === button));
+    tab.tabIndex = tab === button ? 0 : -1;
   });
+  historyList.setAttribute("aria-labelledby", button.id);
   renderHistoryList(latestUsageStats.history);
 });
 
-function showStatus(node: HTMLElement, message: string): void {
+const statusTimers = new WeakMap<HTMLElement, number>();
+
+function showStatus(
+  node: HTMLElement,
+  message: string,
+  state: "info" | "error" | "loading" = "info",
+): void {
+  const existingTimer = statusTimers.get(node);
+  if (existingTimer) window.clearTimeout(existingTimer);
   node.textContent = message;
-  window.setTimeout(() => {
+  node.dataset.state = state;
+  if (state === "error" || state === "loading") return;
+  const timer = window.setTimeout(() => {
     if (node.textContent === message) node.textContent = "";
-  }, 2400);
+    node.removeAttribute("data-state");
+    statusTimers.delete(node);
+  }, 3500);
+  statusTimers.set(node, timer);
+}
+
+function clearStatus(node: HTMLElement): void {
+  const existingTimer = statusTimers.get(node);
+  if (existingTimer) window.clearTimeout(existingTimer);
+  statusTimers.delete(node);
+  node.textContent = "";
+  node.removeAttribute("data-state");
 }
 
 function renderConnection(state: "unknown" | "connected" | "error", title: string, detail = ""): void {
   statusCard.dataset.state = state;
   connectionTitle.textContent = title;
   connectionDetail.textContent = detail;
+}
+
+function hideHeaderConnectionFeedback(): void {
+  window.clearTimeout(headerFeedbackTimer);
+  headerFeedbackTimer = undefined;
+  headerConnectionFeedback.hidden = true;
+  headerConnectionFeedback.removeAttribute("title");
+  headerLinks.hidden = false;
+}
+
+function showHeaderConnectionFeedback(
+  state: "testing" | "connected" | "error",
+  text: string,
+  { duration, detail }: { duration?: number; detail?: string } = {},
+): void {
+  window.clearTimeout(headerFeedbackTimer);
+  headerLinks.hidden = true;
+  headerConnectionFeedback.hidden = false;
+  headerConnectionFeedback.dataset.state = state;
+  headerFeedbackText.textContent = text;
+  if (detail) headerConnectionFeedback.title = detail;
+  else headerConnectionFeedback.removeAttribute("title");
+  if (duration) headerFeedbackTimer = window.setTimeout(hideHeaderConnectionFeedback, duration);
 }
 
 const autoToneOption = document.createElement("option");
@@ -451,9 +670,39 @@ for (const [value, label] of Object.entries(TONE_LABELS)) {
   toneSelect.append(option);
 }
 
-async function checkConnection(): Promise<void> {
+// Comparing against the shipped dev placeholders (localhost + a fake token)
+// is only a SECONDARY signal, checked after a real connection attempt has
+// already failed — it can't be trusted on its own to mean "never configured".
+// README.md documents that exact pair as a legitimate, working zero-config
+// local-dev setup ("just works" against a locally-run backend), so treating
+// it as "unconfigured" unconditionally would leave the onboarding card
+// stuck on-screen forever for anyone using that documented setup verbatim.
+function isBackendConfigured(settings: ExtensionSettings): boolean {
+  return settings.backendBaseUrl.trim() !== DEFAULT_SETTINGS_PARTIAL.backendBaseUrl
+    || settings.authToken.trim() !== DEFAULT_SETTINGS_PARTIAL.authToken;
+}
+
+function renderOnboardingCard(show: boolean): void {
+  onboardingCard.hidden = !show;
+  statusCard.hidden = show;
+}
+
+onboardingSetupButton.addEventListener("click", () => {
+  document.querySelector<HTMLButtonElement>("#advanced-tab-connection")?.click();
+  switchView("advanced");
+  window.setTimeout(() => backendUrlInput.focus(), 0);
+});
+
+async function checkConnection(
+  { showHeaderFeedback = false }: { showHeaderFeedback?: boolean } = {},
+): Promise<void> {
   const checkId = ++connectionCheckId;
   testButton.disabled = true;
+  if (showHeaderFeedback) {
+    testButton.textContent = "Testing…";
+    showHeaderConnectionFeedback("testing", "Testing…");
+  }
+  renderOnboardingCard(false);
   renderConnection("unknown", "Checking…");
   try {
     const response = await chrome.runtime.sendMessage({ type: "CHECK_CONNECTION" }) as RuntimeResponse;
@@ -466,22 +715,61 @@ async function checkConnection(): Promise<void> {
       "Connected",
       `Plan ${response.connection.plan} • ${response.connection.remainingToday} replies left today`,
     );
+    if (showHeaderFeedback) showHeaderConnectionFeedback("connected", "Connected", { duration: 2500 });
   } catch (error) {
     if (checkId !== connectionCheckId) return;
+    // A manual "Test connection" click always shows the real error — the
+    // user deliberately asked for this specific test. Passive checks (popup
+    // open, switching to Home) instead check whether this looks like a
+    // truly untouched install before showing a confusing generic fetch
+    // error, since the connection attempt above already ruled out the
+    // documented zero-config local-dev setup actually working.
+    if (!showHeaderFeedback) {
+      const settingsResponse = await chrome.runtime.sendMessage({ type: "GET_SETTINGS" }) as RuntimeResponse;
+      if (checkId !== connectionCheckId) return;
+      if (settingsResponse.ok && settingsResponse.settings && !isBackendConfigured(settingsResponse.settings)) {
+        renderOnboardingCard(true);
+        return;
+      }
+    }
+    const message = error instanceof Error ? error.message : "Connection failed.";
     renderConnection(
       "error",
       "Not connected",
-      error instanceof Error ? error.message : "Connection failed.",
+      message,
     );
+    if (showHeaderFeedback) {
+      showHeaderConnectionFeedback("error", "Failed", { duration: 5000, detail: message });
+    }
   } finally {
-    if (checkId === connectionCheckId) testButton.disabled = false;
+    // A stale call's finally must not touch UI state a newer, still-running
+    // call owns — otherwise it can reset the button text or hide the header
+    // feedback banner while the newer check is still in flight.
+    if (checkId === connectionCheckId) {
+      testButton.disabled = false;
+      if (showHeaderFeedback) testButton.textContent = "Test connection";
+    }
   }
 }
 
-async function loadSettings(): Promise<void> {
-  const response = await chrome.runtime.sendMessage({ type: "GET_SETTINGS" }) as RuntimeResponse;
+async function loadSettings(statusNode: HTMLElement): Promise<void> {
+  const loadId = ++settingsLoadId;
+  const loadingMessage = "Loading settings…";
+  if (!settingsLoaded) showStatus(statusNode, loadingMessage, "loading");
+  let response: RuntimeResponse;
+  try {
+    response = await chrome.runtime.sendMessage({ type: "GET_SETTINGS" }) as RuntimeResponse;
+  } catch (error) {
+    if (loadId !== settingsLoadId) return;
+    showStatus(statusNode, error instanceof Error ? error.message : "Could not load settings.", "error");
+    return;
+  }
+  // A stale response (an older call resolving after a newer one already
+  // populated the inputs, or after the user started editing them) must not
+  // overwrite what's currently in the form.
+  if (loadId !== settingsLoadId) return;
   if (!response.ok || !response.settings) {
-    showStatus(statusAdvancedNode, response.error || "Could not load settings.");
+    showStatus(statusNode, response.error || "Could not load settings.", "error");
     return;
   }
   settingsLoaded = true;
@@ -506,6 +794,7 @@ async function loadSettings(): Promise<void> {
   renderQuickTones();
   pendingAiModelValue = response.settings.aiModel;
   syncAiModelUi();
+  if (statusNode.textContent === loadingMessage) clearStatus(statusNode);
 }
 
 async function requestBackendPermission(backendBaseUrl: string): Promise<void> {
@@ -558,7 +847,11 @@ async function saveSettings(
     if (checkConnectionAfter && settings.backendBaseUrl) {
       await requestBackendPermission(settings.backendBaseUrl);
     }
-    showStatus(statusNode, response.ok ? "Settings saved." : response.error || "Save failed.");
+    showStatus(
+      statusNode,
+      response.ok ? "Settings saved." : response.error || "Save failed.",
+      response.ok ? "info" : "error",
+    );
     if (response.ok && checkConnectionAfter) {
       void checkConnection();
       // The model list is fetched from whatever backend URL/token was
@@ -569,7 +862,7 @@ async function saveSettings(
       void loadModelOptions();
     }
   } catch (error) {
-    showStatus(statusNode, error instanceof Error ? error.message : "Save failed.");
+    showStatus(statusNode, error instanceof Error ? error.message : "Save failed.", "error");
   } finally {
     if (triggerButton) triggerButton.disabled = false;
   }
@@ -674,6 +967,8 @@ function formatCostUsd(value: number): string {
 }
 
 function renderUsageStats(stats: UsageStats): void {
+  usageFeedback.hidden = true;
+  usageFeedback.replaceChildren();
   latestUsageStats = stats;
   statGenerations.textContent = String(stats.totalGenerations);
   statInserted.textContent = String(stats.totalInserted);
@@ -692,10 +987,73 @@ function renderUsageStats(stats: UsageStats): void {
   renderHistoryList(stats.history);
 }
 
-async function loadUsageStats(): Promise<void> {
-  const response = await chrome.runtime.sendMessage({ type: "GET_USAGE_STATS" }) as RuntimeResponse;
-  if (!response.ok || !response.usageStats) return;
-  renderUsageStats(response.usageStats);
+type UsageLoadSurface = "home" | "history";
+
+function renderDataFeedback(
+  container: HTMLElement,
+  state: "loading" | "error",
+  message: string,
+  retry?: () => void,
+): void {
+  container.replaceChildren();
+  container.hidden = false;
+  const feedback = container === usageFeedback ? container : document.createElement("div");
+  feedback.className = "data-feedback";
+  feedback.dataset.state = state;
+  feedback.setAttribute("role", state === "error" ? "alert" : "status");
+  if (state === "loading") {
+    const spinner = document.createElement("span");
+    spinner.className = "data-feedback-spinner";
+    spinner.setAttribute("aria-hidden", "true");
+    feedback.append(spinner);
+  }
+  const text = document.createElement("span");
+  text.textContent = message;
+  feedback.append(text);
+  if (retry) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Retry";
+    button.addEventListener("click", retry);
+    feedback.append(button);
+  }
+  if (feedback !== container) container.append(feedback);
+}
+
+async function loadUsageStats(surface: UsageLoadSurface): Promise<void> {
+  const loadId = ++usageLoadId;
+  const feedbackContainer = surface === "home" ? usageFeedback : historyList;
+  renderDataFeedback(
+    feedbackContainer,
+    "loading",
+    surface === "home" ? "Loading usage…" : "Loading history…",
+  );
+  if (surface === "home") {
+    statGenerations.textContent = "…";
+    statInserted.textContent = "…";
+    statTokens.textContent = "…";
+    statCost.textContent = "…";
+  }
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "GET_USAGE_STATS" }) as RuntimeResponse;
+    if (!response.ok || !response.usageStats) throw new Error(response.error || "Could not load usage data.");
+    if (loadId !== usageLoadId) return;
+    renderUsageStats(response.usageStats);
+  } catch (error) {
+    if (loadId !== usageLoadId) return;
+    if (surface === "home") {
+      statGenerations.textContent = "—";
+      statInserted.textContent = "—";
+      statTokens.textContent = "—";
+      statCost.textContent = "—";
+    }
+    renderDataFeedback(
+      feedbackContainer,
+      "error",
+      error instanceof Error ? error.message : "Could not load usage data.",
+      () => void loadUsageStats(surface),
+    );
+  }
 }
 
 async function clearHistory(): Promise<void> {
@@ -703,20 +1061,44 @@ async function clearHistory(): Promise<void> {
   try {
     const response = await chrome.runtime.sendMessage({ type: "CLEAR_USAGE_STATS" }) as RuntimeResponse;
     if (response.ok && response.usageStats) renderUsageStats(response.usageStats);
-    showStatus(statusAdvancedNode, response.ok ? "History cleared." : response.error || "Clear failed.");
+    showStatus(
+      statusAdvancedNode,
+      response.ok ? "History cleared." : response.error || "Clear failed.",
+      response.ok ? "info" : "error",
+    );
+  } catch (error) {
+    showStatus(statusAdvancedNode, error instanceof Error ? error.message : "Clear failed.", "error");
   } finally {
     clearHistoryButton.disabled = false;
   }
 }
 
-clearHistoryButton.addEventListener("click", () => void clearHistory());
+let clearHistoryArmed = false;
+let clearHistoryConfirmTimer: number | undefined;
+
+function resetClearHistoryConfirmation(): void {
+  clearHistoryArmed = false;
+  window.clearTimeout(clearHistoryConfirmTimer);
+  clearHistoryButton.textContent = "Clear history";
+}
+
+clearHistoryButton.addEventListener("click", () => {
+  if (!clearHistoryArmed) {
+    clearHistoryArmed = true;
+    clearHistoryButton.textContent = "Click again to clear";
+    showStatus(statusAdvancedNode, "This permanently clears local generation history.");
+    clearHistoryConfirmTimer = window.setTimeout(resetClearHistoryConfirmation, 5000);
+    return;
+  }
+  resetClearHistoryConfirmation();
+  void clearHistory();
+});
 saveAdvancedButton.addEventListener("click", () => void saveSettings(statusAdvancedNode, saveAdvancedButton));
-testButton.addEventListener("click", () => void checkConnection());
+testButton.addEventListener("click", () => void checkConnection({ showHeaderFeedback: true }));
 
 async function initializePopup(): Promise<void> {
   try {
-    await checkConnection();
-    await loadUsageStats();
+    await Promise.all([checkConnection(), loadUsageStats("home")]);
   } catch (error) {
     renderConnection(
       "error",
