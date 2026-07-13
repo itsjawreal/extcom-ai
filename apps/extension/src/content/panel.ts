@@ -177,6 +177,23 @@ function closeContentTooltip(): void {
   tooltip.setAttribute("aria-hidden", "true");
 }
 
+// X can stop pointer/click bubbling inside its React event layer. Bind the
+// small info controls directly as well as keeping the document delegation
+// below for dynamically-created action buttons.
+function bindContentTooltip(source: HTMLElement): void {
+  source.addEventListener("pointerenter", (event) => {
+    if (event.pointerType === "mouse" || event.pointerType === "pen") openContentTooltip(source);
+  });
+  source.addEventListener("pointerleave", () => {
+    if (activeTooltipSource === source) closeContentTooltip();
+  });
+  source.addEventListener("focus", () => openContentTooltip(source));
+  source.addEventListener("blur", () => {
+    if (activeTooltipSource === source) closeContentTooltip();
+  });
+  source.addEventListener("click", () => openContentTooltip(source));
+}
+
 function getPostKey(post: HTMLElement): string | null {
   const timeLink = post.querySelector("time")?.closest("a");
   const match = timeLink?.getAttribute("href")?.match(/\/status\/(\d+)/);
@@ -1183,6 +1200,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
 
   renderContext(panel, input);
   panel.querySelector(".eks-panel-close")?.addEventListener("click", () => closePanel());
+  panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
 
   const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
   const toneTrigger = panel.querySelector<HTMLButtonElement>("[data-tone-trigger]");
