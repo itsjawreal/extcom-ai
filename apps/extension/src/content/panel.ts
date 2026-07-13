@@ -22,6 +22,10 @@ let activeToneList: HTMLElement | null = null;
 let activeTooltipSource: HTMLElement | null = null;
 let tooltipKeyboardNavigation = false;
 let themeSyncQueued = false;
+// Content scripts have one module instance per tab. Keeping the last manual
+// choice here makes tone sticky across panels and X's SPA navigation, while a
+// tab refresh naturally resets it back to the saved Settings default.
+let sessionTone: Tone | "auto" | null = null;
 
 const TOOLTIP_ID = "eks-content-tooltip";
 const TOOLTIP_GAP = 6;
@@ -822,6 +826,7 @@ function openToneList(panel: HTMLElement, trigger: HTMLButtonElement, select: HT
   const selectItem = (item: HTMLLIElement): void => {
     if (!item.dataset.value) return;
     select.value = item.dataset.value;
+    sessionTone = item.dataset.value as Tone | "auto";
     panel.dataset.controlsTouched = "true";
     syncToneTrigger(panel);
     closeToneList({ restoreFocus: true });
@@ -1007,8 +1012,8 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
     // made.
     if (panel.dataset.controlsTouched !== "true") {
       const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
-      if (toneSelect && response.settings.toneDefault) {
-        toneSelect.value = response.settings.toneDefault;
+      if (toneSelect && (sessionTone || response.settings.toneDefault)) {
+        toneSelect.value = sessionTone ?? response.settings.toneDefault ?? "auto";
         syncToneTrigger(panel);
       }
       if (response.settings.draftCount) {
@@ -1183,6 +1188,9 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   const toneTrigger = panel.querySelector<HTMLButtonElement>("[data-tone-trigger]");
   if (toneSelect && toneTrigger) {
     populateToneSelect(toneSelect);
+    // Apply the tab-session choice immediately so opening the next panel
+    // never flashes Auto/default while GET_SETTINGS wakes the service worker.
+    if (sessionTone) toneSelect.value = sessionTone;
     syncToneTrigger(panel);
     toneTrigger.addEventListener("click", () => {
       if (activeToneList) {
@@ -1202,6 +1210,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tone]");
       if (!button?.dataset.tone) return;
       toneSelect.value = button.dataset.tone;
+      sessionTone = button.dataset.tone as Tone;
       panel.dataset.controlsTouched = "true";
       syncToneTrigger(panel);
     });
