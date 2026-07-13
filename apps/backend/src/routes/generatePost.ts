@@ -25,9 +25,10 @@ type GenerateFn = (input: GeneratePostRequest) => Promise<{
 
 const PRICING_LOOKUP_TIMEOUT_MS = 3_000;
 
-function optionalString(value: unknown, maxLength: number): string | undefined {
+function optionalString(value: unknown, maxLength: number, field: string): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string" || value.length > maxLength) return undefined;
+  if (typeof value !== "string") throw new Error(`${field} must be a string.`);
+  if (value.length > maxLength) throw new Error(`${field} must contain at most ${maxLength} characters.`);
   return value.trim() || undefined;
 }
 
@@ -39,7 +40,12 @@ function parseBlockedTerms(value: unknown): string[] | undefined {
   const seen = new Set<string>();
   const terms: string[] = [];
   for (const item of value) {
-    const term = optionalString(item, 80);
+    let term: string | undefined;
+    try {
+      term = optionalString(item, 80, "blockedTerms item");
+    } catch {
+      throw new Error("Each blockedTerms item must be a non-empty string of at most 80 characters.");
+    }
     if (!term) throw new Error("Each blockedTerms item must be a non-empty string of at most 80 characters.");
     const key = term.normalize("NFKC").toLowerCase();
     if (seen.has(key)) continue;
@@ -52,8 +58,8 @@ function parseBlockedTerms(value: unknown): string[] | undefined {
 export function validateGeneratePostRequest(value: unknown): GeneratePostRequest {
   if (!value || typeof value !== "object") throw new Error("Request body must be an object.");
   const body = value as Record<string, unknown>;
-  const brief = optionalString(body.brief, 5_000);
-  const existingDraft = optionalString(body.existingDraft, 25_000);
+  const brief = optionalString(body.brief, 5_000, "brief");
+  const existingDraft = optionalString(body.existingDraft, 25_000, "existingDraft");
 
   if (body.mode !== "fresh" && body.mode !== "rewrite" && body.mode !== "continue") {
     throw new Error('mode must be "fresh", "rewrite", or "continue".');
@@ -98,9 +104,9 @@ export function validateGeneratePostRequest(value: unknown): GeneratePostRequest
     count: Number(count),
     maxLength: maxLength === "auto" ? "auto" : Number(maxLength),
     useEmoji,
-    extraInstruction: optionalString(body.extraInstruction, 500),
+    extraInstruction: optionalString(body.extraInstruction, 500, "extraInstruction"),
     blockedTerms: parseBlockedTerms(body.blockedTerms),
-    model: optionalString(body.model, 200),
+    model: optionalString(body.model, 200, "model"),
   };
 }
 

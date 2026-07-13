@@ -66,6 +66,36 @@ test("validates language, count, max length, and emoji preference", () => {
   );
 });
 
+test("rejects malformed or oversized optional text instead of silently dropping it", () => {
+  assert.throws(
+    () => validateGeneratePostRequest({
+      brief: "x".repeat(5_001),
+      existingDraft: "valid fallback",
+      mode: "fresh",
+      tone: "smart",
+    }),
+    /brief must contain at most 5000 characters/,
+  );
+  assert.throws(
+    () => validateGeneratePostRequest({
+      brief: "topic",
+      existingDraft: 123,
+      mode: "fresh",
+      tone: "smart",
+    }),
+    /existingDraft must be a string/,
+  );
+  assert.throws(
+    () => validateGeneratePostRequest({
+      brief: "topic",
+      mode: "fresh",
+      tone: "smart",
+      extraInstruction: "x".repeat(501),
+    }),
+    /extraInstruction must contain at most 500 characters/,
+  );
+});
+
 test("deduplicates Never mention rules case-insensitively", () => {
   const input = validateGeneratePostRequest({
     brief: "topic",

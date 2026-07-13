@@ -252,7 +252,6 @@ async function saveUsageStats(stats: UsageStats): Promise<void> {
 async function recordGeneration(
   input: GenerateInput,
   data: GenerateReplyResponse,
-  settings: ExtensionSettings,
 ): Promise<string> {
   const historyId = crypto.randomUUID();
   const entry: HistoryEntry = {
@@ -380,8 +379,8 @@ function truncateReply(text: string, maxLength: number | "auto"): string {
 
   // Reserve 1 char for the ellipsis so the marked result still fits limit.
   const cut = text.slice(0, limit - 1);
-  const lastSpace = cut.lastIndexOf(" ");
-  const trimmed = lastSpace > limit * 0.5 ? cut.slice(0, lastSpace) : cut;
+  const lastBoundary = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("\n"));
+  const trimmed = lastBoundary > limit * 0.5 ? cut.slice(0, lastBoundary) : cut;
   return `${trimmed.trimEnd()}…`;
 }
 
@@ -522,6 +521,9 @@ async function generatePost(
   };
 
   if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("This backend does not support AI Post yet. Deploy the current backend build, then try again.");
+    }
     throw new Error(body.error?.message || `Backend request failed with HTTP ${response.status}.`);
   }
   if (!Array.isArray(body.posts) || !body.usage) {
@@ -573,7 +575,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         // compromised page cannot redirect the token to an arbitrary backend.
         const settings = await getSettings();
         const data = await generateReply(message.input, settings);
-        const historyId = await recordGeneration(message.input, data, settings);
+        const historyId = await recordGeneration(message.input, data);
         sendResponse({ ok: true, data, historyId } satisfies RuntimeResponse);
         return;
       }

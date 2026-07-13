@@ -34,8 +34,8 @@ function truncateToLimit(text: string, limit: number): string {
   const sentenceEnd = lastSentenceEnd(text.slice(0, limit));
   if (sentenceEnd !== null) return text.slice(0, sentenceEnd + 1).trimEnd();
   const cut = text.slice(0, Math.max(0, limit - 1));
-  const lastSpace = cut.lastIndexOf(" ");
-  const trimmed = lastSpace > limit * 0.5 ? cut.slice(0, lastSpace) : cut;
+  const lastBoundary = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("\n"));
+  const trimmed = lastBoundary > limit * 0.5 ? cut.slice(0, lastBoundary) : cut;
   return `${trimmed.trimEnd()}…`;
 }
 
@@ -48,7 +48,12 @@ export function sanitizeReply(text: string, maxLength: number): string {
   const cleaned = text
     .replace(EXCESS_HASHTAGS, "")
     .replace(EXCESS_EMOJI, "$1")
-    .replace(/\s+/g, " ")
+    .replace(/\r\n?/g, "\n")
+    // Normalize horizontal whitespace without destroying intentional X post
+    // paragraphs. More than one blank line adds height but rarely meaning.
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
   return truncateToLimit(cleaned, maxLength);
 }

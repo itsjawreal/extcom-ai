@@ -110,7 +110,7 @@ function findQuoteMenuItem(): HTMLElement | null {
   return candidates.length >= 2 ? candidates[1] || null : null;
 }
 
-function resolveEditableTarget(composer: HTMLElement): HTMLElement {
+export function resolveEditableTarget(composer: HTMLElement): HTMLElement {
   if (composer.matches('[contenteditable="true"]')) return composer;
 
   const focused = document.activeElement;
@@ -163,8 +163,20 @@ function primeComposer(editable: HTMLElement): void {
   editable.click();
 }
 
-function getComposerText(editable: HTMLElement): string {
-  return editable.textContent?.replace(/\u00a0/g, " ").trim() || "";
+export function getComposerText(editable: HTMLElement): string {
+  if (editable instanceof HTMLTextAreaElement || editable instanceof HTMLInputElement) {
+    return editable.value.replace(/\u00a0/g, " ").replace(/\r\n?/g, "\n").trim();
+  }
+
+  // X visually paints "What's happening?" inside an empty contenteditable.
+  // In Chromium that placeholder can leak into innerText even though there is
+  // no authored text node. textContent is therefore the emptiness gate;
+  // innerText is only used after real content exists, to preserve <br>/block
+  // line breaks in multiline drafts.
+  const authoredText = editable.textContent?.replace(/\u00a0/g, " ").trim() || "";
+  if (!authoredText) return "";
+  const text = editable.innerText || authoredText;
+  return text.replace(/\u00a0/g, " ").replace(/\r\n?/g, "\n").trim();
 }
 
 function composerContainsText(editable: HTMLElement, text: string): boolean {
@@ -200,7 +212,7 @@ async function tryPasteIntoComposer(editable: HTMLElement, text: string): Promis
   }
 }
 
-async function insertTextIntoComposer(composer: HTMLElement, text: string): Promise<boolean> {
+export async function insertTextIntoComposer(composer: HTMLElement, text: string): Promise<boolean> {
   if (!composer.isConnected) return false;
 
   if (composer instanceof HTMLTextAreaElement || composer instanceof HTMLInputElement) {
