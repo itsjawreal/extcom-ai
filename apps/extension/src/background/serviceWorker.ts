@@ -12,6 +12,7 @@ import type {
   GenerateReplyResponse,
   HistoryEntry,
   ModelsResponse,
+  ReadImagesMode,
   Tone,
   UsageStats,
 } from "../shared/types";
@@ -24,7 +25,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   maxReplyLength: 220,
   draftCount: 3,
   useEmoji: true,
-  readImages: false,
+  readImages: "auto",
   favoriteTones: [],
   blockedTerms: [],
   aiModel: "",
@@ -69,6 +70,12 @@ function normalizeFavoriteTones(value: unknown): Tone[] {
   return deduped.slice(0, MAX_FAVORITE_TONES);
 }
 
+function normalizeReadImagesMode(value: unknown, fallback: ReadImagesMode): ReadImagesMode {
+  if (value === true) return "on";
+  if (value === false) return "off";
+  return value === "auto" || value === "off" || value === "on" ? value : fallback;
+}
+
 // "model" is deliberately excluded — it's a popup-level (Advanced tab)
 // setting only, not something the on-page panel can override per-generation.
 type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji" | "model" | "blockedTerms"> & {
@@ -76,7 +83,9 @@ type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" |
   count?: number;
   maxLength?: number | "auto";
   useEmoji?: boolean;
-  readImages?: boolean;
+  // boolean keeps stale content scripts from the previous extension build
+  // compatible until the X tab is refreshed.
+  readImages?: ReadImagesMode | boolean;
 };
 
 type RuntimeMessage =
@@ -112,7 +121,8 @@ async function getSettings(): Promise<ExtensionSettings> {
     maxReplyLength: normalizeMaxLength(stored.maxReplyLength, DEFAULT_SETTINGS.maxReplyLength),
     draftCount: clampInt(stored.draftCount, DEFAULT_SETTINGS.draftCount, MIN_DRAFT_COUNT, MAX_DRAFT_COUNT),
     useEmoji: typeof stored.useEmoji === "boolean" ? stored.useEmoji : DEFAULT_SETTINGS.useEmoji,
-    readImages: typeof stored.readImages === "boolean" ? stored.readImages : DEFAULT_SETTINGS.readImages,
+    // Migrate the old boolean setting in place: true = On, false = Off.
+    readImages: normalizeReadImagesMode(stored.readImages, DEFAULT_SETTINGS.readImages),
     favoriteTones: normalizeFavoriteTones(stored.favoriteTones),
     blockedTerms: normalizeBlockedTerms(stored.blockedTerms),
     aiModel: String(stored.aiModel ?? DEFAULT_SETTINGS.aiModel),
@@ -195,6 +205,7 @@ async function testModel(model: string, settings: ExtensionSettings): Promise<vo
 
 async function saveSettings(settings: Partial<ExtensionSettings>): Promise<ExtensionSettings> {
   const next = { ...(await getSettings()), ...settings };
+  next.readImages = normalizeReadImagesMode(next.readImages, DEFAULT_SETTINGS.readImages);
   next.blockedTerms = normalizeBlockedTerms(next.blockedTerms);
   await chrome.storage.local.set(next);
   return next;
@@ -337,17 +348,21 @@ async function generateReply(
     .join(" ")
     .slice(0, MAX_INSTRUCTION_LENGTH);
 
-  // readImages gates whether the already-extracted imageUrls (if any) are
-  // ever sent to the backend at all — off by default, since sending images
-  // adds real token cost/latency (linear per image) the user should opt
-  // into, not discover later. Exception: a post with no caption text has
-  // nothing else to generate a reply from, so images are forced on
-  // regardless of the setting (the panel UI mirrors this by locking the
-  // toggle in that case — this is the same rule enforced again here in case
-  // a caller bypasses the panel).
-  const readImages = !rawInput.postText?.trim() && rawInput.imageUrls?.length
-    ? true
-    : rawInput.readImages ?? settings.readImages;
+  const imageMode = normalizeReadImagesMode(rawInput.readImages, settings.readImages);
+  const postText = rawInput.postText?.trim() ?? "";
+  const hasImages = Boolean(rawInput.imageUrls?.length);
+  if (hasImages && !postText && imageMode === "off") {
+    throw new Error("This post has no caption. Set Read images to Auto or On to generate a relevant reply.");
+  }
+  // Auto stays local and free: images are included when they are the only
+  // content, the caption is short enough that media likely carries context,
+  // or the caption explicitly points at visual/media content.
+  const autoNeedsImages = hasImages && (
+    !postText ||
+    postText.length <= 120 ||
+    /\b(?:image|images|photo|picture|pic|screenshot|screen shot|chart|graph|meme|video|visual|gambar|foto|tangkapan layar|grafik|bagan|imagen|foto|captura|gr[aá]fico|photo|capture|graphique|bild|foto|screenshot|diagramm|immagine|schermata|grafico|imagem|captura|gr[aá]fico)\b/iu.test(postText)
+  );
+  const readImages = imageMode === "on" || (imageMode === "auto" && autoNeedsImages);
 
   // The panel's max-length field is a free-typed number input (no native
   // min/max enforcement like a range slider), so a manually picked value

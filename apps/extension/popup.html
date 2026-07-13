@@ -966,10 +966,11 @@
       </div>
       <div class="field-block">
         <span class="info-icon-anchor"><span id="read-images-label">Read images in posts</span>
-          <button type="button" class="info-icon" aria-label="More info" data-tip="When on, an attached image is sent along with the post text — uses more tokens and takes a bit longer per generate.">i</button>
+          <button type="button" class="info-icon" aria-label="More info" data-tip="Auto reads images for image-only posts, short captions, or captions that refer to visual content. On always reads attached images; Off never sends them.">i</button>
         </span>
         <div class="segmented" id="read-images" role="group" aria-labelledby="read-images-label">
-          <button type="button" data-images="off" aria-pressed="true">Off</button>
+          <button type="button" data-images="auto" aria-pressed="true">Auto</button>
+          <button type="button" data-images="off" aria-pressed="false">Off</button>
           <button type="button" data-images="on" aria-pressed="false">On</button>
         </div>
       </div>

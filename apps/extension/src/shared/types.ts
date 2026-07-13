@@ -24,6 +24,8 @@ export type Tone =
   | "philosophical"
   | "coach_motivational";
 
+export type ReadImagesMode = "auto" | "off" | "on";
+
 export type GeneratedReply = {
   id: string;
   text: string;
@@ -101,7 +103,7 @@ export type ExtensionSettings = {
   maxReplyLength: number | "auto";
   draftCount: number;
   useEmoji: boolean;
-  readImages: boolean;
+  readImages: ReadImagesMode;
   // Pinned tones shown as quick-pick chips in the popup and the on-page
   // panel, on top of the full tone dropdown. Capped at 5, "auto" excluded
   // (it's already always the first dropdown option).
