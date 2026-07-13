@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Extcom AI Reply",
-  "description": "Draft human-reviewed replies for X/Twitter posts.",
-  "version": "0.1.0",
+  "name": "Extcom AI",
+  "description": "Draft human-reviewed replies, quotes, and standalone posts for X/Twitter with your self-hosted AI backend.",
+  "version": "0.2.0",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://x.com/*",
@@ -19,7 +19,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Extcom AI Reply settings",
+    "default_title": "Extcom AI settings",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

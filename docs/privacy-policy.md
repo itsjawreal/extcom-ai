@@ -1,14 +1,14 @@
-# Privacy Policy — Extcom AI Reply
+# Privacy Policy — Extcom AI
 
 Effective date: 2026-07-13
 
-Extcom AI Reply is a self-hosted browser extension. There is no company
+Extcom AI is a self-hosted browser extension. There is no company
 server, no account system, and no telemetry. This page describes exactly
 what data the extension touches and where it goes.
 
 ## What the extension does
 
-Extcom AI Reply adds "AI Reply" to posts and "AI Post" to X/Twitter's
+Extcom AI adds "AI Reply" to posts and "AI Post" to X/Twitter's
 standalone composer. When you click AI Reply, the extension reads the visible content of that specific post
 (and, where detected, its immediate reply-chain context) and sends it to a
 backend server that you deploy and control, along with the generation

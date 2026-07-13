@@ -542,7 +542,7 @@ async function generatePost(
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.info("Extcom AI Reply installed");
+  console.info("Extcom AI installed");
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
