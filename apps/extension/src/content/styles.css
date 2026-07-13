@@ -587,9 +587,11 @@
   accent-color: var(--eks-accent);
   background: transparent;
   border: 0;
-  flex: 1;
+  box-sizing: border-box;
+  display: block;
   min-width: 0;
   padding: 0;
+  width: 100%;
 }
 
 .eks-tone-label input[data-max-length-input] {
