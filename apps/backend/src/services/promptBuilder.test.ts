@@ -234,6 +234,22 @@ test("buildPostPrompt creates standalone fresh-post instructions", () => {
   assert.doesNotMatch(prompt, /Original post:/);
 });
 
+test("fresh mode uses X composer text when the separate brief is empty", () => {
+  const prompt = buildPostPrompt({
+    brief: "",
+    existingDraft: "Robotics hardware is converging; software is the moat.",
+    mode: "fresh",
+    language: "brief",
+    tone: "smart",
+    count: 1,
+    maxLength: 280,
+    useEmoji: false,
+  });
+  assert.match(prompt, /Brief \/ topic:\nNone — use the existing draft as source material\./);
+  assert.match(prompt, /Existing composer draft:\nRobotics hardware is converging; software is the moat\./);
+  assert.match(prompt, /Writing mode:\nFresh post/);
+});
+
 test("rewrite preserves source claims and supports English override", () => {
   const prompt = buildPostPrompt({
     brief: "Make this cleaner",

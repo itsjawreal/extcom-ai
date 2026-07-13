@@ -14,9 +14,9 @@ standalone composer. When you click AI Reply, the extension reads the visible co
 backend server that you deploy and control, along with the generation
 settings you've chosen (tone, reply length, and similar). That backend
 calls an AI provider (OpenRouter or OpenAI) using an API key you supply,
-and returns draft replies. When you click AI Post, the brief you type and
-any existing text in that composer are sent through the same self-hosted
-backend to generate standalone post drafts. You review and manually insert
+and returns draft replies. When you click AI Post, the text you typed in that
+specific X composer is sent through the same self-hosted backend to generate
+standalone post drafts. You review and manually insert
 every draft — the extension never clicks X's final Reply/Post button.
 
 ## Data the extension reads
@@ -25,8 +25,8 @@ every draft — the extension never clicks X's final Reply/Post button.
   specific post you click "AI Reply" on. This only happens when you click
   the button — the extension does not scan your timeline in the
   background.
-- The brief entered in the AI Post panel and existing text in that specific
-  standalone composer, only after you click AI Post and request generation.
+- The text in that specific standalone X composer, only after you click AI
+  Post and request generation.
 - Nothing outside the currently active X/Twitter tab. The extension has no
   access to any other tab, any other website, your browsing history, or
   your X/Twitter login credentials.

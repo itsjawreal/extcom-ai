@@ -2,11 +2,12 @@ import { insertQuoteIntoComposer, insertReplyIntoComposer } from "./replyCompose
 import {
   insertPostIntoComposer,
   readStandaloneComposerSnapshot,
-  readStandaloneComposerText,
 } from "./postComposer";
 import { POST_COMPOSER_SESSION_ATTRIBUTE, type StandaloneComposer } from "./postComposerObserver";
 import {
   clampReplyLength,
+  MAX_REPLY_LENGTH,
+  MIN_REPLY_LENGTH,
   REPLY_LENGTH_PRESETS,
   REPLY_LENGTH_SLIDER_MAX,
   replyLengthToSliderPosition,
@@ -30,6 +31,8 @@ type PanelInput =
   | { error: string };
 
 type XTheme = "light" | "dim" | "dark";
+
+const AUTO_POST_LENGTH_CEILING = REPLY_LENGTH_PRESETS[0];
 
 let activePanel: HTMLElement | null = null;
 let activeAnchor: HTMLButtonElement | null = null;
@@ -233,9 +236,14 @@ function findReanchorTarget(): { anchor: HTMLButtonElement; post: HTMLElement } 
 
 async function sendRuntimeMessage<T>(message: unknown): Promise<T> {
   type Response = { ok: boolean; data?: GenerateReplyResponse; historyId?: string; error?: string };
+  const unavailableMessage =
+    "Extension connection is unavailable. Reload Extcom AI in chrome://extensions, then refresh this X tab (F5).";
+  const runtime = getRuntimeMessenger();
+  if (!runtime) throw new Error(unavailableMessage);
+
   let response: Response;
   try {
-    response = await chrome.runtime.sendMessage(message) as Response;
+    response = await runtime.sendMessage(message) as Response;
   } catch (error) {
     // Thrown (not returned as { ok: false }) when this content script is a
     // stale leftover from before the extension was reloaded/updated in
@@ -245,13 +253,37 @@ async function sendRuntimeMessage<T>(message: unknown): Promise<T> {
     // ("Extension context invalidated.") gives no hint that a page refresh
     // is the actual fix, so callers would otherwise show that cryptic
     // string verbatim in the panel status.
-    if (error instanceof Error && /context invalidated/i.test(error.message)) {
-      throw new Error("Extension was reloaded or updated — refresh this page (F5) and try again.");
+    if (
+      error instanceof Error &&
+      /context invalidated|extension context|receiving end does not exist|reading ['"]?sendMessage/i.test(error.message)
+    ) {
+      throw new Error(unavailableMessage);
     }
     throw error;
   }
   if (!response.ok) throw new Error(response.error || "Extension request failed.");
   return response as T;
+}
+
+function getRuntimeMessenger(): typeof chrome.runtime | null {
+  try {
+    if (
+      typeof chrome === "undefined" ||
+      !chrome.runtime ||
+      typeof chrome.runtime.sendMessage !== "function"
+    ) {
+      return null;
+    }
+    return chrome.runtime;
+  } catch {
+    return null;
+  }
+}
+
+function sendRuntimeMessageQuietly(message: unknown): void {
+  const runtime = getRuntimeMessenger();
+  if (!runtime) return;
+  void runtime.sendMessage(message).catch(() => {});
 }
 
 // Same cap as .eks-reply-panel's CSS max-height (min(729px, 100vh - 112px))
@@ -423,7 +455,7 @@ async function performInsert(
       // catch is just to avoid an unhandled-rejection console warning if
       // the extension context went stale (see sendRuntimeMessage) — losing
       // one history record in that case isn't worth surfacing to the user.
-      void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId, kind }).catch(() => {});
+      sendRuntimeMessageQuietly({ type: "RECORD_INSERT", historyId, kind });
     }
     closePanel();
   } catch (error) {
@@ -1053,7 +1085,7 @@ function readExtraInstruction(panel: HTMLElement): string | undefined {
 // the user actively touches a control here — this only fetches, never writes.
 async function initPanelSettings(panel: HTMLElement): Promise<void> {
   try {
-    const response = await chrome.runtime.sendMessage({ type: "GET_SETTINGS" }) as {
+    const response = await sendRuntimeMessage<{
       ok: boolean;
       settings?: {
         toneDefault?: Tone | "auto";
@@ -1063,7 +1095,7 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
         readImages?: ReadImagesMode;
         favoriteTones?: Tone[];
       };
-    };
+    }>({ type: "GET_SETTINGS" });
     if (!response.ok || !response.settings) return;
 
     // A fast user can click tone/draft-count/emoji/length/images before this
@@ -1421,35 +1453,62 @@ function readPostLanguage(panel: HTMLElement): "brief" | "en" {
   return active?.dataset.postLanguage === "en" ? "en" : "brief";
 }
 
+function assertContinueHasLengthRoom(
+  mode: GeneratePostMode,
+  existingDraft: string,
+  maxLength: number | "auto" | undefined,
+): void {
+  if (mode !== "continue" || !existingDraft || maxLength === undefined) return;
+  const requiredLength = existingDraft.length + MIN_REPLY_LENGTH;
+  if (requiredLength > MAX_REPLY_LENGTH) {
+    throw new Error(
+      `Continue cannot extend this ${existingDraft.length}-char draft within the ${MAX_REPLY_LENGTH.toLocaleString()}-char maximum.`,
+    );
+  }
+  const effectiveLimit = maxLength === "auto" ? AUTO_POST_LENGTH_CEILING : maxLength;
+  if (effectiveLimit >= requiredLength) return;
+
+  if (maxLength === "auto") {
+    throw new Error(
+      `Continue needs at least ${requiredLength} total chars for this ${existingDraft.length}-char draft. Auto stops at ${AUTO_POST_LENGTH_CEILING}; choose Manual.`,
+    );
+  }
+  const autoAlternative = requiredLength <= AUTO_POST_LENGTH_CEILING ? " or choose Auto" : "";
+  throw new Error(
+    `Continue needs at least ${requiredLength} total chars for this ${existingDraft.length}-char draft. Raise Max length to ${requiredLength}${autoAlternative}.`,
+  );
+}
+
 async function requestPostDrafts(
   panel: HTMLElement,
   composerRoot: HTMLElement,
   countOverride?: number,
 ): Promise<{ items: PostPanelDraft[]; response: GeneratePostResponse; requestedTone?: Tone | "auto" }> {
-  const brief = panel.querySelector<HTMLTextAreaElement>("[data-post-brief]")?.value.trim() ?? "";
   const mode = readPostMode(panel);
   const composerSnapshot = readStandaloneComposerSnapshot(composerRoot);
   if (!composerSnapshot.available) throw new Error("Post composer is no longer open. Open a new composer and try again.");
   const existingDraft = composerSnapshot.text;
-  if (!brief && !existingDraft) throw new Error("Describe what the post should say first.");
-  if ((mode === "rewrite" || mode === "continue") && !existingDraft) {
-    throw new Error(
-      `${mode === "rewrite" ? "Rewrite" : "Continue"} needs text typed in X's composer, not only in the brief field.`,
-    );
+  if (!existingDraft) {
+    throw new Error(`Type a topic or draft in X's "What's happening?" composer first.`);
   }
+  const maxLength = readMaxLength(panel);
+  assertContinueHasLengthRoom(mode, existingDraft, maxLength);
 
   const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
   const tone = (toneSelect?.value || undefined) as Tone | "auto" | undefined;
   const response = await sendRuntimeMessage<{ ok: true; data: GeneratePostResponse; historyId?: string }>({
     type: "GENERATE_POST",
     input: {
-      brief,
-      existingDraft: existingDraft || undefined,
+      // X's composer is the only source field. Keep it in existingDraft for
+      // every mode so Premium long-form source text retains the 25k limit;
+      // Fresh still treats it only as source material in the backend prompt.
+      brief: "",
+      existingDraft,
       mode,
       language: readPostLanguage(panel),
       tone,
       count: countOverride ?? readDraftCount(panel),
-      maxLength: readMaxLength(panel),
+      maxLength,
       useEmoji: readUseEmoji(panel),
       extraInstruction: readExtraInstruction(panel),
     },
@@ -1468,11 +1527,15 @@ async function requestPostDrafts(
 
 async function insertPostDraft(panel: HTMLElement, composerRoot: HTMLElement, item: PostPanelDraft): Promise<void> {
   try {
-    await insertPostIntoComposer(composerRoot, item.expectedComposerText, item.post.text);
+    const liveComposerRoot = await insertPostIntoComposer(composerRoot, item.expectedComposerText, item.post.text);
     if (item.historyId) {
-      void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId: item.historyId, kind: "post" }).catch(() => {});
+      sendRuntimeMessageQuietly({ type: "RECORD_INSERT", historyId: item.historyId, kind: "post" });
     }
-    closePanel();
+    activePostComposerRoot = liveComposerRoot;
+    const liveAnchor = liveComposerRoot.querySelector<HTMLButtonElement>(".eks-ai-post-button");
+    if (liveAnchor) activeAnchor = liveAnchor;
+    animatePanelHeight(panel, () => renderPostDrafts(panel, liveComposerRoot, []));
+    showStatus(panel, "Inserted into X. Choose another mode to generate again.");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Post insertion failed.";
     try {
@@ -1697,7 +1760,6 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
   }
   closePanel();
 
-  const existingDraft = readStandaloneComposerText(composer.root);
   const panel = document.createElement("section");
   panel.className = "eks-reply-panel eks-post-panel";
   panel.setAttribute("role", "dialog");
@@ -1709,18 +1771,14 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
     </header>
     <div class="eks-panel-body">
       <div class="eks-settings-card">
-        <label class="eks-tone-label eks-post-brief-label">
-          What should this post say?
-          <textarea data-post-brief rows="3" maxlength="5000" placeholder="Topic, key point, facts, or angle…"></textarea>
-        </label>
-        <div class="eks-count-label" data-post-mode-row ${existingDraft ? "" : "hidden"}>
+        <div class="eks-count-label" data-post-mode-row>
           Mode
           <div class="eks-count-group eks-post-mode-group" data-post-mode-group role="group" aria-label="Post generation mode">
-            <button type="button" data-post-mode="fresh" aria-pressed="false">Fresh</button>
-            <button type="button" data-post-mode="rewrite" aria-pressed="true">Rewrite</button>
+            <button type="button" data-post-mode="fresh" aria-pressed="true">Fresh</button>
+            <button type="button" data-post-mode="rewrite" aria-pressed="false">Rewrite</button>
             <button type="button" data-post-mode="continue" aria-pressed="false">Continue</button>
           </div>
-          <span class="eks-control-hint">Uses text already typed in X's composer.</span>
+          <span class="eks-control-hint">Fresh uses the composer as an idea; Rewrite and Continue treat it as a draft.</span>
         </div>
         <div class="eks-tone-label">
           Tone
@@ -1754,7 +1812,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
           <div class="eks-count-label">
             Language
             <div class="eks-count-group" data-post-language-group role="group" aria-label="Post language">
-              <button type="button" data-post-language="brief" aria-pressed="true">Brief language</button>
+              <button type="button" data-post-language="brief" aria-pressed="true">Composer language</button>
               <button type="button" data-post-language="en" aria-pressed="false">English</button>
             </div>
           </div>
@@ -1789,7 +1847,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
     </footer>
   `;
 
-  if (!existingDraft) setPostMode(panel, "fresh");
+  setPostMode(panel, "fresh");
   bindPostPanelControls(panel);
   panel.querySelector("[data-panel-close]")?.addEventListener("click", () => closePanel());
   document.body.append(panel);
@@ -1801,9 +1859,9 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
   syncPanelTheme();
   void initPanelSettings(panel);
   panel.querySelector<HTMLButtonElement>("[data-generate-button]")?.addEventListener("click", () => {
-    void generatePostsForPanel(panel, composer.root);
+    void generatePostsForPanel(panel, activePostComposerRoot ?? composer.root);
   });
-  panel.querySelector<HTMLTextAreaElement>("[data-post-brief]")?.focus({ preventScroll: true });
+  panel.querySelector<HTMLButtonElement>('[data-post-mode="fresh"]')?.focus({ preventScroll: true });
 }
 
 window.addEventListener("resize", () => {
@@ -1862,7 +1920,8 @@ document.addEventListener("pointerdown", (event) => {
   if (insideToneList) return;
 
   if (!activePanel || !activeAnchor) return;
-  if (!activePanel.contains(target) && !activeAnchor.contains(target)) attemptClosePanel();
+  const insideActiveComposer = activePanelKind === "post" && activePostComposerRoot?.contains(target);
+  if (!activePanel.contains(target) && !activeAnchor.contains(target) && !insideActiveComposer) attemptClosePanel();
 });
 
 document.addEventListener("pointermove", (event) => {

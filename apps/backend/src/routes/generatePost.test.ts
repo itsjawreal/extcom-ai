@@ -17,14 +17,16 @@ test("validates and normalizes a fresh post request", () => {
   assert.equal(input.language, "brief");
 });
 
-test("allows an existing draft to supply context for fresh mode", () => {
+test("allows a long composer-only source to supply context for fresh mode", () => {
+  const composerText = `rough thought ${"x".repeat(5_000)}`;
   const input = validateGeneratePostRequest({
-    existingDraft: "rough thought",
+    brief: "",
+    existingDraft: composerText,
     mode: "fresh",
     tone: "funny",
   });
   assert.equal(input.brief, "");
-  assert.equal(input.existingDraft, "rough thought");
+  assert.equal(input.existingDraft, composerText);
 });
 
 test("rewrite and continue require an existing draft", () => {
@@ -34,6 +36,50 @@ test("rewrite and continue require an existing draft", () => {
       new RegExp(`${mode} mode requires existingDraft`),
     );
   }
+});
+
+test("continue requires enough total length for the existing draft plus new text", () => {
+  const existingDraft = "x".repeat(224);
+  assert.throws(
+    () => validateGeneratePostRequest({
+      existingDraft,
+      mode: "continue",
+      tone: "auto",
+      count: 3,
+      maxLength: 50,
+    }),
+    /existing 224-character draft.*at least 274, or use "auto"/,
+  );
+
+  const automatic = validateGeneratePostRequest({
+    existingDraft,
+    mode: "continue",
+    tone: "auto",
+    count: 3,
+    maxLength: "auto",
+  });
+  assert.equal(automatic.maxLength, "auto");
+
+  const manual = validateGeneratePostRequest({
+    existingDraft,
+    mode: "continue",
+    tone: "auto",
+    count: 3,
+    maxLength: 274,
+  });
+  assert.equal(manual.maxLength, 274);
+});
+
+test("continue explains when auto mode leaves too little room", () => {
+  assert.throws(
+    () => validateGeneratePostRequest({
+      existingDraft: "x".repeat(250),
+      mode: "continue",
+      tone: "auto",
+      maxLength: "auto",
+    }),
+    /existing 250-character draft.*at least 300/,
+  );
 });
 
 test("rejects missing source material and unsupported modes", () => {

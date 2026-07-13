@@ -1,7 +1,8 @@
 export const PROCESSED_ATTRIBUTE = "data-ai-reply-processed";
 
 const ACTION_GROUP_SELECTOR = '[role="group"]';
-const ACTION_ITEM_SELECTOR = '[data-testid="reply"], [data-testid="retweet"], [data-testid="like"]';
+const ACTION_ITEM_SELECTOR =
+  '[data-testid="reply"], [data-testid="retweet"], [data-testid="unretweet"], [data-testid="like"]';
 const DEBUG_PREFIX = "[Extcom AI]";
 
 type InsertionTarget =

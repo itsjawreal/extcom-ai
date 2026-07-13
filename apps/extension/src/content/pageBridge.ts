@@ -31,7 +31,7 @@ export async function insertViaPageBridge(
       const timeout = window.setTimeout(() => {
         cleanup();
         resolve({ id: requestId, ok: false, reason: "timeout" });
-      }, 1200);
+      }, 2_000);
 
       const onResponse = (event: Event) => {
         const customEvent = event as CustomEvent<InsertResponse>;
@@ -55,6 +55,9 @@ export async function insertViaPageBridge(
       }));
     });
 
+    if (!response.ok) {
+      console.warn(`[Extcom AI] Page-context composer insertion stopped: ${response.reason || "unknown reason"}`);
+    }
     return response.ok;
   } finally {
     editable.removeAttribute(TARGET_ATTRIBUTE);
