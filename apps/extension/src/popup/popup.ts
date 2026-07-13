@@ -97,6 +97,7 @@ let connectionCheckId = 0;
 let headerFeedbackTimer: number | undefined;
 let usageLoadId = 0;
 let settingsLoadId = 0;
+let modelLoadId = 0;
 let draftCount = 3;
 let useEmoji = true;
 let readImages = false;
@@ -532,10 +533,15 @@ function syncAiModelUi(): void {
 
 async function loadModelOptions(): Promise<void> {
   if (modelsLoaded) return;
+  const loadId = ++modelLoadId;
   const loadingMessage = "Loading models…";
   showStatus(statusAiModelNode, loadingMessage, "loading");
   try {
     const response = await chrome.runtime.sendMessage({ type: "GET_MODELS" }) as RuntimeResponse;
+    // A newer request was started after the backend URL/token changed (or a
+    // second load superseded this one). Never let the old backend overwrite
+    // the newer catalog, selection, or status message.
+    if (loadId !== modelLoadId) return;
     if (!response.ok || !response.models) {
       showStatus(statusAiModelNode, response.error || "Could not load model list.", "error");
       return;
@@ -547,6 +553,7 @@ async function loadModelOptions(): Promise<void> {
     syncAiModelUi();
     if (statusAiModelNode.textContent === loadingMessage) clearStatus(statusAiModelNode);
   } catch (error) {
+    if (loadId !== modelLoadId) return;
     showStatus(statusAiModelNode, error instanceof Error ? error.message : "Could not load model list.", "error");
   }
 }
