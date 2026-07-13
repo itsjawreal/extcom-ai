@@ -1,14 +1,16 @@
 # What Gets Sent to the AI
 
 This documents the exact prompt the backend sends to the AI provider
-(OpenRouter or OpenAI) for every `/v1/generate-reply` call. It's here for
+(OpenRouter or OpenAI) for every `/v1/generate-reply` and
+`/v1/generate-post` call. It's here for
 transparency — the extension has no setting for any of this. The rules below
 are fixed in the backend source (`apps/backend/src/services/promptBuilder.ts`)
 and cannot be changed from the popup, the panel, or the API request itself.
 
-The only per-request inputs a caller controls are: `tone`, `maxLength`,
-`useEmoji`, `extraInstruction`, and the post/thread/images content being
-replied to (see [API.md](API.md) for the request shape). Everything else —
+The shared per-request controls are `tone`, `maxLength`, `useEmoji`, and
+`extraInstruction`. Reply calls add post/thread/image context; standalone
+post calls add a brief, optional existing draft, mode, and language (see
+[API.md](API.md) for both shapes). Everything else —
 the system rules and the 24 tone descriptions — is the same for every user
 and every request.
 
@@ -150,6 +152,55 @@ If `imageUrls` is set, each image (up to 4, X's own per-post max) is
 attached as a separate low-detail image input alongside this text (requires
 a vision-capable `AI_DEFAULT_MODEL`).
 
+## Standalone post prompt
+
+`/v1/generate-post` uses a separate system prompt so a generated post never
+sounds like a reply or depends on hidden conversation context. Its fixed
+rules require natural X-native writing; exact Fresh/Rewrite/Continue
+semantics; preservation of supplied facts; no invented quotes, statistics,
+links, news, or personal experiences; no unsolicited hashtags; safety;
+hard character/emoji/Never mention/language constraints; persona + tone;
+distinct hooks and structures; JSON-only output; and no auto-publishing.
+
+The user message shape is:
+
+```text
+[Persona — who is writing:
+<contents of PERSONA.md>
+
+— omitted entirely when PERSONA.md has no voice text]
+
+Brief / topic:
+<brief, or "None — use the existing draft as source material.">
+
+Existing composer draft:
+<existingDraft or "None">
+
+Writing mode:
+<Fresh / Rewrite / Continue guidance>
+
+Selected tone:
+<tone guidance, or Auto selection instruction>
+
+Required post language:
+<same language as brief/draft, or English>
+
+Extra user instruction:
+<extraInstruction or "None">
+
+Never mention (absolute output ban):
+<one JSON-quoted term per line, or "None">
+
+Character limit per post:
+<hard numeric limit guidance, or Auto capped at 280>
+
+Emoji preference:
+<at least one relevant emoji in every draft, or no emoji>
+
+Generate <count> complete standalone posts. Make each draft genuinely
+distinct in hook, structure, and angle—not a synonym rewrite. Return JSON only.
+```
+
 ## Tone guidance table
 
 Each tone maps to one line of guidance appended to the "Selected tone"
@@ -186,8 +237,8 @@ section above:
 ## Persona
 
 `apps/backend/PERSONA.md` lets the operator running this backend give every
-reply (and quote) a consistent voice/identity, layered above the per-reply
-tone — persona is who's talking, tone is the energy of this specific reply.
+reply, quote, and standalone post a consistent voice/identity, layered above
+the selected tone — persona is who's talking, tone is the draft's energy.
 
 - **Not a session or memory.** `services/persona.ts` re-reads the file fresh
   on every single generation, deliberately uncached — editing it takes
@@ -205,8 +256,8 @@ tone — persona is who's talking, tone is the energy of this specific reply.
 - **Not a per-request field.** There is no `persona` field in the
   `/v1/generate-reply` request body — this is entirely server-side
   configuration, the same for every caller of a given backend instance.
-- **Applies to both providers** (OpenAI and OpenRouter), since both call
-  the same `buildUserPrompt()`.
+- **Applies to both providers and both generation routes** (OpenAI and
+  OpenRouter), through the shared generation prompt dispatcher.
 
 ## Keeping this in sync
 

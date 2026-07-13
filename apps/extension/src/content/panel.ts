@@ -1,5 +1,11 @@
 import { insertQuoteIntoComposer, insertReplyIntoComposer } from "./replyComposer";
 import {
+  insertPostIntoComposer,
+  readStandaloneComposerSnapshot,
+  readStandaloneComposerText,
+} from "./postComposer";
+import { POST_COMPOSER_SESSION_ATTRIBUTE, type StandaloneComposer } from "./postComposerObserver";
+import {
   clampReplyLength,
   REPLY_LENGTH_PRESETS,
   REPLY_LENGTH_SLIDER_MAX,
@@ -11,6 +17,8 @@ import {
 } from "../shared/constants";
 import type {
   ExtractedPostContext,
+  GeneratePostMode,
+  GeneratePostResponse,
   GenerateReplyResponse,
   GeneratedReply,
   ReadImagesMode,
@@ -27,6 +35,8 @@ let activePanel: HTMLElement | null = null;
 let activeAnchor: HTMLButtonElement | null = null;
 let activePost: HTMLElement | null = null;
 let activePostKey: string | null = null;
+let activePanelKind: "reply" | "post" | null = null;
+let activePostComposerRoot: HTMLElement | null = null;
 let positionQueued = false;
 let activeToneList: HTMLElement | null = null;
 let activeTooltipSource: HTMLElement | null = null;
@@ -82,7 +92,7 @@ export function syncPanelTheme(): void {
   if (activeToneList) applyXTheme(activeToneList, theme);
   const tooltip = document.getElementById(TOOLTIP_ID);
   if (tooltip) applyXTheme(tooltip, theme);
-  document.querySelectorAll<HTMLElement>(".eks-ai-reply-button").forEach((button) => {
+  document.querySelectorAll<HTMLElement>(".eks-ai-reply-button, .eks-ai-post-button, .eks-post-panel").forEach((button) => {
     applyXTheme(button, theme);
   });
 }
@@ -122,6 +132,7 @@ const pendingHeightListeners = new WeakMap<HTMLElement, (event: TransitionEvent)
 // stale responses if the user regenerates the same slot again before the
 // previous response arrives. Key is the card's DOM node.
 const pendingSlotRequestIds = new WeakMap<HTMLElement, string>();
+const postPanelDrafts = new WeakMap<HTMLElement, PostPanelDraft[]>();
 
 function getContentTooltip(): HTMLElement {
   const existing = document.getElementById(TOOLTIP_ID);
@@ -586,6 +597,8 @@ export function closePanel(): void {
   activeAnchor = null;
   activePost = null;
   activePostKey = null;
+  activePanelKind = null;
+  activePostComposerRoot = null;
   if (restoreFocus && anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
 
@@ -620,6 +633,21 @@ function shakePanel(panel: HTMLElement): void {
 // detached reference would silently break them without this.
 export function syncPanelPosition(): void {
   if (!activePanel || !activeAnchor) return;
+  if (activePanelKind === "post") {
+    if (activeAnchor.isConnected) return;
+    const sessionId = activePostComposerRoot?.getAttribute(POST_COMPOSER_SESSION_ATTRIBUTE);
+    const root = activePostComposerRoot?.isConnected
+      ? activePostComposerRoot
+      : sessionId
+        ? document.querySelector<HTMLElement>(`[${POST_COMPOSER_SESSION_ATTRIBUTE}="${CSS.escape(sessionId)}"]`)
+        : null;
+    const anchor = root?.querySelector<HTMLButtonElement>(".eks-ai-post-button");
+    if (root && anchor) {
+      activePostComposerRoot = root;
+      activeAnchor = anchor;
+    }
+    return;
+  }
   if (!activeAnchor.isConnected) {
     const target = findReanchorTarget();
     if (!target) {
@@ -1350,6 +1378,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   activeAnchor = anchor;
   activePost = post;
   activePostKey = getPostKey(post);
+  activePanelKind = "reply";
   renderUsage(panel);
   panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.focus({ preventScroll: true });
 
@@ -1358,6 +1387,423 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       void generateRepliesForPanel(panel, input.context);
     });
   }
+}
+
+type PostPanelDraft = {
+  post: GeneratedReply;
+  historyId?: string;
+  expectedComposerText: string;
+};
+
+function setPostMode(panel: HTMLElement, mode: GeneratePostMode): void {
+  panel.querySelectorAll<HTMLButtonElement>("[data-post-mode]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.postMode === mode));
+  });
+}
+
+function readPostMode(panel: HTMLElement): GeneratePostMode {
+  const active = panel.querySelector<HTMLButtonElement>('[data-post-mode][aria-pressed="true"]');
+  return active?.dataset.postMode === "rewrite"
+    ? "rewrite"
+    : active?.dataset.postMode === "continue"
+      ? "continue"
+      : "fresh";
+}
+
+function setPostLanguage(panel: HTMLElement, language: "brief" | "en"): void {
+  panel.querySelectorAll<HTMLButtonElement>("[data-post-language]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.postLanguage === language));
+  });
+}
+
+function readPostLanguage(panel: HTMLElement): "brief" | "en" {
+  const active = panel.querySelector<HTMLButtonElement>('[data-post-language][aria-pressed="true"]');
+  return active?.dataset.postLanguage === "en" ? "en" : "brief";
+}
+
+async function requestPostDrafts(
+  panel: HTMLElement,
+  composerRoot: HTMLElement,
+  countOverride?: number,
+): Promise<{ items: PostPanelDraft[]; response: GeneratePostResponse; requestedTone?: Tone | "auto" }> {
+  const brief = panel.querySelector<HTMLTextAreaElement>("[data-post-brief]")?.value.trim() ?? "";
+  const mode = readPostMode(panel);
+  const composerSnapshot = readStandaloneComposerSnapshot(composerRoot);
+  if (!composerSnapshot.available) throw new Error("Post composer is no longer open. Open a new composer and try again.");
+  const existingDraft = composerSnapshot.text;
+  if (!brief && !existingDraft) throw new Error("Describe what the post should say first.");
+  if ((mode === "rewrite" || mode === "continue") && !existingDraft) {
+    throw new Error(
+      `${mode === "rewrite" ? "Rewrite" : "Continue"} needs text typed in X's composer, not only in the brief field.`,
+    );
+  }
+
+  const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
+  const tone = (toneSelect?.value || undefined) as Tone | "auto" | undefined;
+  const response = await sendRuntimeMessage<{ ok: true; data: GeneratePostResponse; historyId?: string }>({
+    type: "GENERATE_POST",
+    input: {
+      brief,
+      existingDraft: existingDraft || undefined,
+      mode,
+      language: readPostLanguage(panel),
+      tone,
+      count: countOverride ?? readDraftCount(panel),
+      maxLength: readMaxLength(panel),
+      useEmoji: readUseEmoji(panel),
+      extraInstruction: readExtraInstruction(panel),
+    },
+  });
+
+  return {
+    items: response.data.posts.map((post) => ({
+      post,
+      historyId: response.historyId,
+      expectedComposerText: existingDraft,
+    })),
+    response: response.data,
+    requestedTone: tone,
+  };
+}
+
+async function insertPostDraft(panel: HTMLElement, composerRoot: HTMLElement, item: PostPanelDraft): Promise<void> {
+  try {
+    await insertPostIntoComposer(composerRoot, item.expectedComposerText, item.post.text);
+    if (item.historyId) {
+      void chrome.runtime.sendMessage({ type: "RECORD_INSERT", historyId: item.historyId, kind: "post" }).catch(() => {});
+    }
+    closePanel();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Post insertion failed.";
+    try {
+      await navigator.clipboard.writeText(item.post.text);
+      const copyMessage = /could not be (?:filled|verified)/i.test(message)
+        ? "X blocked auto-insert. Post copied; paste it with Ctrl+V."
+        : `${message} Post draft copied as a fallback.`;
+      showStatus(panel, copyMessage, "error");
+    } catch {
+      showStatus(panel, `${message} Clipboard copy also failed.`, "error");
+    }
+  }
+}
+
+function renderPostDrafts(panel: HTMLElement, composerRoot: HTMLElement, items: PostPanelDraft[]): void {
+  const list = panel.querySelector<HTMLElement>("[data-reply-list]");
+  if (!list) return;
+  list.replaceChildren();
+  postPanelDrafts.set(panel, items);
+  panel.dataset.hasDrafts = String(items.length > 0);
+  panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.setAttribute(
+    "aria-label",
+    items.length > 0 ? "Close and discard drafts" : "Close",
+  );
+  const maxLength = readMaxLength(panel) ?? 220;
+
+  items.forEach((item, index) => {
+    const card = document.createElement("article");
+    card.className = "eks-reply-option";
+    const text = document.createElement("p");
+    text.textContent = item.post.text;
+    const charCount = document.createElement("p");
+    charCount.className = "eks-reply-char-count";
+    charCount.textContent = maxLength === "auto"
+      ? `${item.post.text.length} chars`
+      : `${item.post.text.length}/${maxLength}`;
+    const actions = document.createElement("div");
+    actions.className = "eks-reply-actions";
+
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "eks-icon-action";
+    copy.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>';
+    copy.setAttribute("aria-label", "Copy this post draft");
+    copy.setAttribute("data-tooltip", "Copy");
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(item.post.text);
+        showStatus(panel, "Post copied.");
+      } catch {
+        showStatus(panel, "Copy failed. Check browser permission.", "error");
+      }
+    });
+
+    const regenerate = document.createElement("button");
+    regenerate.type = "button";
+    regenerate.className = "eks-icon-action";
+    regenerate.textContent = "↻";
+    regenerate.setAttribute("aria-label", "Regenerate this post draft");
+    regenerate.setAttribute("data-tooltip", "Regenerate");
+    regenerate.addEventListener("click", async () => {
+      card.classList.add("eks-reply-option-loading");
+      setControlsDisabled(panel, true);
+      try {
+        const generated = await requestPostDrafts(panel, composerRoot, 1);
+        const replacement = generated.items[0];
+        if (!replacement) throw new Error("No draft returned.");
+        const updated = items.slice();
+        updated[index] = replacement;
+        animatePanelHeight(panel, () => renderPostDrafts(panel, composerRoot, updated));
+        renderUsage(
+          panel,
+          generated.response.usage,
+          generated.requestedTone === "auto" ? replacement.post.tone : undefined,
+        );
+        showStatus(panel, "Post draft regenerated.");
+      } catch (error) {
+        card.classList.remove("eks-reply-option-loading");
+        showStatus(panel, error instanceof Error ? error.message : "Regenerate failed.", "error");
+      } finally {
+        setControlsDisabled(panel, false);
+      }
+    });
+
+    const insert = document.createElement("button");
+    insert.type = "button";
+    insert.textContent = "Insert";
+    let replaceArmed = false;
+    let replaceTimer: number | undefined;
+    insert.addEventListener("click", () => {
+      if (item.expectedComposerText && !replaceArmed) {
+        replaceArmed = true;
+        insert.textContent = "Replace draft?";
+        insert.setAttribute("aria-label", "Confirm replacing the existing composer draft");
+        showStatus(panel, "This will replace your existing composer text. Click Replace draft? again to confirm.");
+        window.clearTimeout(replaceTimer);
+        replaceTimer = window.setTimeout(() => {
+          replaceArmed = false;
+          insert.textContent = "Insert";
+          insert.removeAttribute("aria-label");
+        }, 6_000);
+        return;
+      }
+      window.clearTimeout(replaceTimer);
+      replaceArmed = false;
+      insert.textContent = "Insert";
+      insert.removeAttribute("aria-label");
+      void insertPostDraft(panel, composerRoot, item);
+    });
+    actions.append(copy, regenerate, insert);
+    card.append(text, charCount, actions);
+    list.append(card);
+  });
+}
+
+async function generatePostsForPanel(panel: HTMLElement, composerRoot: HTMLElement): Promise<void> {
+  const previousItems = postPanelDrafts.get(panel) ?? [];
+  setPanelLoading(panel, true);
+  animatePanelHeight(panel, () => renderSkeleton(panel, readDraftCount(panel) ?? 3));
+  try {
+    const generated = await requestPostDrafts(panel, composerRoot);
+    animatePanelHeight(panel, () => renderPostDrafts(panel, composerRoot, generated.items));
+    renderUsage(
+      panel,
+      generated.response.usage,
+      generated.requestedTone === "auto" ? generated.items[0]?.post.tone : undefined,
+    );
+    showStatus(panel, "Post drafts generated.");
+  } catch (error) {
+    // A retrying user should not lose already-good drafts just because the
+    // next provider call failed or timed out.
+    animatePanelHeight(panel, () => renderPostDrafts(panel, composerRoot, previousItems));
+    showStatus(panel, error instanceof Error ? error.message : "Post generation failed.", "error");
+  } finally {
+    setPanelLoading(panel, false);
+  }
+}
+
+function bindPostPanelControls(panel: HTMLElement): void {
+  const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
+  const toneTrigger = panel.querySelector<HTMLButtonElement>("[data-tone-trigger]");
+  if (toneSelect && toneTrigger) {
+    populateToneSelect(toneSelect);
+    if (sessionTone) toneSelect.value = sessionTone;
+    syncToneTrigger(panel);
+    toneTrigger.addEventListener("click", () => {
+      if (activeToneList) closeToneList();
+      else openToneList(panel, toneTrigger, toneSelect);
+    });
+    panel.querySelector("[data-quick-tones]")?.addEventListener("click", (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tone]");
+      if (!button?.dataset.tone) return;
+      toneSelect.value = button.dataset.tone;
+      sessionTone = button.dataset.tone as Tone;
+      panel.dataset.controlsTouched = "true";
+      syncToneTrigger(panel);
+    });
+  }
+
+  const lengthInput = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
+  const lengthSlider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
+  lengthInput?.addEventListener("input", () => {
+    panel.dataset.controlsTouched = "true";
+    syncMaxLengthSlider(panel);
+  });
+  lengthInput?.addEventListener("change", () => {
+    lengthInput.value = String(clampReplyLength(Number(lengthInput.value)));
+    syncMaxLengthSlider(panel);
+  });
+  lengthSlider?.addEventListener("input", () => {
+    panel.dataset.controlsTouched = "true";
+    const length = sliderPositionToReplyLength(Number(lengthSlider.value));
+    if (lengthInput) lengthInput.value = String(length);
+    syncMaxLengthSlider(panel, length);
+  });
+  panel.querySelector("[data-length-mode-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-length-mode]");
+    if (!button) return;
+    panel.dataset.controlsTouched = "true";
+    animatePanelHeight(panel, () => setLengthMode(panel, button.dataset.lengthMode === "auto" ? "auto" : "manual"));
+  });
+  panel.querySelector("[data-count-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-count]");
+    if (!button) return;
+    panel.dataset.controlsTouched = "true";
+    setDraftCountGroup(panel, Number(button.dataset.count));
+  });
+  panel.querySelector("[data-emoji-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-emoji]");
+    if (!button) return;
+    panel.dataset.controlsTouched = "true";
+    setUseEmojiGroup(panel, button.dataset.emoji === "on");
+  });
+  panel.querySelector("[data-post-mode-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-post-mode]");
+    if (!button) return;
+    setPostMode(panel, button.dataset.postMode as GeneratePostMode);
+  });
+  panel.querySelector("[data-post-language-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-post-language]");
+    if (!button) return;
+    setPostLanguage(panel, button.dataset.postLanguage === "en" ? "en" : "brief");
+  });
+  const details = panel.querySelector<HTMLDetailsElement>(".eks-extra-details");
+  details?.querySelector("summary")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    animatePanelHeight(panel, () => {
+      details.open = !details.open;
+    });
+  });
+}
+
+export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneComposer): void {
+  if (activePanelKind === "post" && activeAnchor === anchor && activePanel) {
+    attemptClosePanel();
+    return;
+  }
+  if (activePanel?.dataset.hasDrafts === "true") {
+    shakePanel(activePanel);
+    showStatus(activePanel, "Close the current drafts before opening another composer.");
+    return;
+  }
+  closePanel();
+
+  const existingDraft = readStandaloneComposerText(composer.root);
+  const panel = document.createElement("section");
+  panel.className = "eks-reply-panel eks-post-panel";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-labelledby", "eks-post-panel-title");
+  panel.innerHTML = `
+    <header>
+      <strong id="eks-post-panel-title">AI Post</strong>
+      <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close">×</button>
+    </header>
+    <div class="eks-panel-body">
+      <div class="eks-settings-card">
+        <label class="eks-tone-label eks-post-brief-label">
+          What should this post say?
+          <textarea data-post-brief rows="3" maxlength="5000" placeholder="Topic, key point, facts, or angle…"></textarea>
+        </label>
+        <div class="eks-count-label" data-post-mode-row ${existingDraft ? "" : "hidden"}>
+          Mode
+          <div class="eks-count-group eks-post-mode-group" data-post-mode-group role="group" aria-label="Post generation mode">
+            <button type="button" data-post-mode="fresh" aria-pressed="false">Fresh</button>
+            <button type="button" data-post-mode="rewrite" aria-pressed="true">Rewrite</button>
+            <button type="button" data-post-mode="continue" aria-pressed="false">Continue</button>
+          </div>
+          <span class="eks-control-hint">Uses text already typed in X's composer.</span>
+        </div>
+        <div class="eks-tone-label">
+          Tone
+          <div class="eks-quick-tones" data-quick-tones hidden></div>
+          <select data-tone-select hidden aria-hidden="true" tabindex="-1"></select>
+          <button type="button" class="eks-select-trigger" data-tone-trigger aria-haspopup="listbox" aria-expanded="false">
+            <span data-tone-trigger-label></span><span class="eks-select-caret" aria-hidden="true">▾</span>
+          </button>
+        </div>
+        <div class="eks-tone-label">
+          <span class="eks-field-row">
+            <span>Max length</span>
+            <div class="eks-count-group" data-length-mode-group role="group" aria-label="Post length mode">
+              <button type="button" data-length-mode="manual" aria-pressed="true">Manual</button>
+              <button type="button" data-length-mode="auto" aria-pressed="false">Auto</button>
+            </div>
+          </span>
+          <div data-max-length-manual-row>
+            <div class="eks-max-length-control-row">
+              <div class="eks-max-length-slider-column">
+                <div class="eks-max-length-marks" aria-hidden="true">
+                  ${REPLY_LENGTH_PRESETS.map((preset) => `<span data-length-mark="${preset}" style="left:${replyLengthToSliderPosition(preset) / REPLY_LENGTH_SLIDER_MAX * 100}%">${preset.toLocaleString()}</span>`).join("")}
+                </div>
+                <input type="range" data-max-length-slider min="0" max="${REPLY_LENGTH_SLIDER_MAX}" step="1" value="${replyLengthToSliderPosition(220)}" aria-label="Post length slider" />
+              </div>
+              <input type="number" inputmode="numeric" data-max-length-input min="50" max="25000" step="10" value="220" aria-label="Post length in characters" />
+            </div>
+          </div>
+        </div>
+        <div class="eks-panel-config eks-post-config">
+          <div class="eks-count-label">
+            Language
+            <div class="eks-count-group" data-post-language-group role="group" aria-label="Post language">
+              <button type="button" data-post-language="brief" aria-pressed="true">Brief language</button>
+              <button type="button" data-post-language="en" aria-pressed="false">English</button>
+            </div>
+          </div>
+          <div class="eks-count-label">
+            Drafts
+            <div class="eks-count-group" data-count-group role="group" aria-label="Number of drafts">
+              <button type="button" data-count="1" aria-pressed="false">1</button>
+              <button type="button" data-count="2" aria-pressed="false">2</button>
+              <button type="button" data-count="3" aria-pressed="true">3</button>
+            </div>
+          </div>
+          <div class="eks-count-label">
+            Emoji
+            <div class="eks-count-group" data-emoji-group role="group" aria-label="Use emoji">
+              <button type="button" data-emoji="off" aria-pressed="false">Off</button>
+              <button type="button" data-emoji="on" aria-pressed="true">On</button>
+            </div>
+          </div>
+        </div>
+        <details class="eks-extra-details">
+          <summary>Add instruction for this post</summary>
+          <textarea data-extra-instruction rows="2" maxlength="500" placeholder="e.g. end with a question"></textarea>
+        </details>
+      </div>
+      <div data-reply-list></div>
+      <p class="eks-panel-note">Posting stays manual. Extension never clicks X/Twitter's final Post button.</p>
+      <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
+    </div>
+    <footer class="eks-panel-footer">
+      <span class="eks-panel-usage" data-usage></span>
+      <button type="button" class="eks-generate-fab" data-generate-button>Generate</button>
+    </footer>
+  `;
+
+  if (!existingDraft) setPostMode(panel, "fresh");
+  bindPostPanelControls(panel);
+  panel.querySelector("[data-panel-close]")?.addEventListener("click", () => closePanel());
+  document.body.append(panel);
+  activePanel = panel;
+  activeAnchor = anchor;
+  activePanelKind = "post";
+  activePostComposerRoot = composer.root;
+  renderUsage(panel);
+  syncPanelTheme();
+  void initPanelSettings(panel);
+  panel.querySelector<HTMLButtonElement>("[data-generate-button]")?.addEventListener("click", () => {
+    void generatePostsForPanel(panel, composer.root);
+  });
+  panel.querySelector<HTMLTextAreaElement>("[data-post-brief]")?.focus({ preventScroll: true });
 }
 
 window.addEventListener("resize", () => {

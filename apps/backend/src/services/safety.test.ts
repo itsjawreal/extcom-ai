@@ -32,6 +32,19 @@ test("sanitizeReply collapses whitespace and strips excess hashtags/emoji", () =
   assert.equal(sanitizeReply("fire 🔥🔥🔥🔥", 220), "fire 🔥");
 });
 
+test("sanitizeReply preserves intentional paragraphs and caps excess blank lines", () => {
+  assert.equal(
+    sanitizeReply("first line  \r\n\r\n\r\n second   line", 220),
+    "first line\n\nsecond line",
+  );
+});
+
+test("sanitizeReply can truncate on a line boundary when no sentence fits", () => {
+  const result = sanitizeReply("opening without punctuation\ncontinuationthatcannotfit", 30);
+  assert.equal(result, "opening without punctuation…");
+  assert.ok(result.length <= 30);
+});
+
 test("sanitizeReply preserves normal relevant emoji usage", () => {
   assert.equal(sanitizeReply("clean setup 🔥", 220), "clean setup 🔥");
   assert.equal(sanitizeReply("strong move 🚀 worth watching 👀", 220), "strong move 🚀 worth watching 👀");

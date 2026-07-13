@@ -939,13 +939,14 @@
 
     <div class="data-feedback" id="usage-feedback" aria-live="polite" hidden></div>
 
-    <p class="hint">On X, the ✦ AI Reply button only generates drafts using your Tone/Default settings. Posting always stays manual.</p>
+    <p class="hint">On X, ✦ AI Reply and ✦ AI Post only generate drafts using these defaults. Publishing always stays manual.</p>
   </section>
 
   <section id="view-history" data-view-panel="history" hidden>
     <h1 class="view-title">History</h1>
     <div class="tabs tabs-compact" id="history-tabs" role="tablist">
       <button type="button" class="tab" id="history-tab-all" data-history-filter="all" role="tab" aria-controls="history-list" aria-selected="true" tabindex="0">All</button>
+      <button type="button" class="tab" id="history-tab-post" data-history-filter="post" role="tab" aria-controls="history-list" aria-selected="false" tabindex="-1">Post</button>
       <button type="button" class="tab" id="history-tab-reply" data-history-filter="reply" role="tab" aria-controls="history-list" aria-selected="false" tabindex="-1">Reply</button>
       <button type="button" class="tab" id="history-tab-quote" data-history-filter="quote" role="tab" aria-controls="history-list" aria-selected="false" tabindex="-1">Quote</button>
       <button type="button" class="tab" id="history-tab-not-inserted" data-history-filter="not-inserted" role="tab" aria-controls="history-list" aria-selected="false" tabindex="-1">Not inserted</button>
@@ -987,7 +988,7 @@
       </label>
       <div class="field-block">
         <span class="field-row">
-          <span>Default reply length
+          <span>Default max length
             <button type="button" class="info-icon" aria-label="More info" data-tip="280/4,000/25,000 match X's own Free/Premium/Premium+ post limits — pick whichever matches your account, or type an exact custom value.">i</button>
           </span>
           <div class="segmented segmented-inline" id="max-length-mode" role="group" aria-label="Reply length mode">
@@ -1003,9 +1004,9 @@
                 <span class="max-length-mark" data-length-mark="4000">4,000</span>
                 <span class="max-length-mark" data-length-mark="25000">25,000</span>
               </div>
-              <input id="max-length-slider" type="range" min="0" max="10000" step="1" value="2384" aria-label="Default reply length slider" />
+              <input id="max-length-slider" type="range" min="0" max="10000" step="1" value="2384" aria-label="Default maximum length slider" />
             </div>
-            <input id="max-length" type="number" inputmode="numeric" min="50" max="25000" step="10" value="220" aria-label="Default reply length in characters" />
+            <input id="max-length" type="number" inputmode="numeric" min="50" max="25000" step="10" value="220" aria-label="Default maximum length in characters" />
           </div>
         </div>
       </div>

@@ -2,8 +2,8 @@
 
 See [PROMPT.md](PROMPT.md) for the exact system prompt, user prompt
 template, and tone guidance the backend sends to the AI provider on every
-`/v1/generate-reply` call — including `PERSONA.md`, an operator-editable
-file that gives every reply a consistent voice/identity (see PROMPT.md's
+`/v1/generate-reply` and `/v1/generate-post` calls — including `PERSONA.md`, an operator-editable
+file that gives every draft a consistent voice/identity (see PROMPT.md's
 Persona section). It's server-side configuration, not a request field.
 
 ## `GET /health`
@@ -137,7 +137,43 @@ Authentication and rate-limit behavior:
   - `power`: 60/minute, 1000/day
 
 Failed provider requests release their reserved quota. Successful generations
-consume one request regardless of the requested reply count.
+consume one request regardless of the requested draft count.
+
+## `POST /v1/generate-post`
+
+Generates complete standalone X posts rather than replies.
+
+```json
+{
+  "brief": "Why shipping small improvements compounds",
+  "existingDraft": "optional text already in X's composer",
+  "mode": "fresh",
+  "language": "brief",
+  "tone": "auto",
+  "extraInstruction": "End with a useful question",
+  "blockedTerms": ["game-changer"],
+  "count": 3,
+  "maxLength": 280,
+  "useEmoji": false,
+  "model": "google/gemini-2.5-flash"
+}
+```
+
+`mode` is `fresh`, `rewrite`, or `continue`; rewrite/continue require a
+non-empty `existingDraft`. `language` is `brief` (follow the brief/draft) or
+`en`. `brief` accepts up to 5,000 characters, `existingDraft` up to 25,000,
+and at least one must be non-empty. Tone, count, length, emoji, model,
+authentication, quota, token usage, and cost behave exactly like
+`/v1/generate-reply`.
+
+```json
+{
+  "posts": [{ "id": "post_1", "text": "...", "tone": "smart" }],
+  "usage": { "remainingToday": 199, "plan": "pro" },
+  "model": "google/gemini-2.5-flash",
+  "tokenUsage": { "promptTokens": 420, "completionTokens": 110, "estimatedCostUsd": 0.00031 }
+}
+```
 
 ## `GET /v1/me`
 

@@ -1,8 +1,13 @@
 import { modelSupportsParameter } from "./modelCatalog.js";
 import { getPersonaVoice } from "./persona.js";
-import { buildUserPrompt, SYSTEM_PROMPT } from "./promptBuilder.js";
+import { buildGenerationPrompt, systemPromptForRequest } from "./promptBuilder.js";
 import { sanitizeReply } from "./safety.js";
-import { TONES, type GenerateReplyRequest, type Tone } from "../types/index.js";
+import {
+  TONES,
+  isGeneratePostRequest,
+  type GenerationRequest,
+  type Tone,
+} from "../types/index.js";
 
 type TokenUsage = { promptTokens: number; completionTokens: number };
 
@@ -100,7 +105,7 @@ const MIN_TOKENS_FLOOR = 800;
 // boundary-aware truncation instead of a raw schema cutoff.
 const SCHEMA_LENGTH_BUFFER = 150;
 
-function computeMaxTokens(input: GenerateReplyRequest): number {
+function computeMaxTokens(input: GenerationRequest): number {
   const perReplyChars = input.maxLength === "auto" ? 280 : input.maxLength;
   const estimated = Math.ceil((perReplyChars * input.count) / 2.2) + 300;
   return Math.min(MAX_TOKENS_CEILING, Math.max(MIN_TOKENS_FLOOR, estimated));
@@ -124,8 +129,8 @@ const AUTO_MAX_LENGTH_CEILING = 280;
 function parseReplies(
   raw: string,
   expectedCount: number,
-  requestedTone: GenerateReplyRequest["tone"],
-  maxLength: GenerateReplyRequest["maxLength"],
+  requestedTone: GenerationRequest["tone"],
+  maxLength: GenerationRequest["maxLength"],
 ): ParsedReplies {
   const lengthLimit = maxLength === "auto" ? AUTO_MAX_LENGTH_CEILING : maxLength;
   let parsed: unknown;
@@ -172,7 +177,7 @@ function parseReplies(
 }
 
 export async function generateWithOpenAI(
-  input: GenerateReplyRequest,
+  input: GenerationRequest,
 ): Promise<GenerateResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -185,19 +190,20 @@ export async function generateWithOpenAI(
     "",
   );
   const personaVoice = await getPersonaVoice();
+  const imageUrls = isGeneratePostRequest(input) ? undefined : input.imageUrls;
   // Low detail keeps image cost/latency small (~85 flat tokens per image vs.
   // several hundred at high detail) — enough for a reply to reference what
   // an image shows without needing pixel-level precision. Cost scales
   // linearly with image count (up to 4, X's own per-post max). Requires a
   // vision-capable AI_DEFAULT_MODEL; if the configured model can't see
   // images, providers typically just ignore the block rather than erroring.
-  const requestInput = input.imageUrls?.length
+  const requestInput = imageUrls?.length
     ? [
         {
           role: "user" as const,
           content: [
-            { type: "input_text" as const, text: buildUserPrompt(input, personaVoice) },
-            ...input.imageUrls.map((url) => ({
+            { type: "input_text" as const, text: buildGenerationPrompt(input, personaVoice) },
+            ...imageUrls.map((url) => ({
               type: "input_image" as const,
               image_url: url,
               detail: "low" as const,
@@ -205,7 +211,7 @@ export async function generateWithOpenAI(
           ],
         },
       ]
-    : buildUserPrompt(input, personaVoice);
+    : buildGenerationPrompt(input, personaVoice);
 
   const response = await fetch(`${baseUrl}/responses`, {
     method: "POST",
@@ -215,7 +221,7 @@ export async function generateWithOpenAI(
     },
     body: JSON.stringify({
       model,
-      instructions: SYSTEM_PROMPT,
+      instructions: systemPromptForRequest(input),
       input: requestInput,
       max_output_tokens: computeMaxTokens(input),
       reasoning: { effort: "none" },
@@ -236,7 +242,7 @@ export async function generateWithOpenAI(
 }
 
 export async function generateWithOpenRouter(
-  input: GenerateReplyRequest,
+  input: GenerationRequest,
 ): Promise<GenerateResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
@@ -254,6 +260,7 @@ export async function generateWithOpenRouter(
   if (process.env.APP_URL) headers["HTTP-Referer"] = process.env.APP_URL;
 
   const personaVoice = await getPersonaVoice();
+  const imageUrls = isGeneratePostRequest(input) ? undefined : input.imageUrls;
   const model = input.model || process.env.AI_DEFAULT_MODEL || "openrouter/auto";
   // Without this, a reasoning-capable model (e.g. google/gemini-2.5-pro) can
   // spend most of max_tokens on invisible internal reasoning before ever
@@ -275,15 +282,15 @@ export async function generateWithOpenRouter(
   // linearly with image count (up to 4, X's own per-post max). Requires a
   // vision-capable AI_DEFAULT_MODEL; if the configured model can't see
   // images, providers typically just ignore the block rather than erroring.
-  const userContent = input.imageUrls?.length
+  const userContent = imageUrls?.length
     ? [
-        { type: "text" as const, text: buildUserPrompt(input, personaVoice) },
-        ...input.imageUrls.map((url) => ({
+        { type: "text" as const, text: buildGenerationPrompt(input, personaVoice) },
+        ...imageUrls.map((url) => ({
           type: "image_url" as const,
           image_url: { url, detail: "low" as const },
         })),
       ]
-    : buildUserPrompt(input, personaVoice);
+    : buildGenerationPrompt(input, personaVoice);
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
@@ -291,7 +298,7 @@ export async function generateWithOpenRouter(
     body: JSON.stringify({
       model,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPromptForRequest(input) },
         { role: "user", content: userContent },
       ],
       max_tokens: computeMaxTokens(input),
@@ -359,14 +366,14 @@ export async function generateWithOpenRouter(
   return { ...parsed, model, usage };
 }
 
-async function generateOnce(input: GenerateReplyRequest): Promise<GenerateResult> {
+async function generateOnce(input: GenerationRequest): Promise<GenerateResult> {
   const provider = process.env.AI_DEFAULT_PROVIDER || "openrouter";
   if (provider === "openrouter") return generateWithOpenRouter(input);
   if (provider === "openai") return generateWithOpenAI(input);
   throw new ProviderError(`Unsupported AI provider: ${provider}.`, 503);
 }
 
-export async function generateReplies(input: GenerateReplyRequest): Promise<GenerateResult> {
+export async function generateReplies(input: GenerationRequest): Promise<GenerateResult> {
   const attempts = input.blockedTerms?.length ? 2 : 1;
   let accumulatedUsage: TokenUsage | null = null;
   let violation: string | undefined;

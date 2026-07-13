@@ -31,7 +31,7 @@ type RuntimeResponse = {
 };
 
 type View = "home" | "history" | "tone" | "advanced";
-type HistoryFilter = "all" | "reply" | "quote" | "not-inserted";
+type HistoryFilter = "all" | "post" | "reply" | "quote" | "not-inserted";
 
 const viewPanels = {
   home: document.getElementById("view-home") as HTMLElement,
@@ -937,6 +937,8 @@ function relativeTime(iso: string): string {
 
 function filterHistory(history: HistoryEntry[], filter: HistoryFilter): HistoryEntry[] {
   switch (filter) {
+    case "post":
+      return history.filter((entry) => entry.inserted && entry.insertKind === "post");
     case "reply":
       return history.filter((entry) => entry.inserted && entry.insertKind === "reply");
     case "quote":
@@ -949,6 +951,7 @@ function filterHistory(history: HistoryEntry[], filter: HistoryFilter): HistoryE
 }
 
 function insertedLabel(entry: HistoryEntry): string {
+  if (entry.insertKind === "post") return "✓ Inserted as Post";
   if (entry.insertKind === "quote") return "✓ Inserted as Quote";
   if (entry.insertKind === "reply") return "✓ Inserted as Reply";
   return "✓ Inserted";
@@ -970,7 +973,7 @@ function renderHistoryList(history: HistoryEntry[]): void {
     item.className = "history-item";
 
     const text = document.createElement("p");
-    text.textContent = `"${truncate(entry.postText, 80)}"`;
+    text.textContent = `"${truncate(entry.sourceText ?? entry.postText, 80)}"`;
 
     const meta = document.createElement("div");
     meta.className = "history-meta";

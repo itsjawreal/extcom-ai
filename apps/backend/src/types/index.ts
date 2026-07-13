@@ -58,6 +58,31 @@ export type GenerateReplyRequest = {
   model?: string;
 };
 
+export type GeneratePostMode = "fresh" | "rewrite" | "continue";
+
+export type GeneratePostRequest = {
+  // A topic/instruction supplied by the user. It may be empty only when an
+  // existing composer draft supplies the source material.
+  brief: string;
+  existingDraft?: string;
+  mode: GeneratePostMode;
+  // "brief" means infer the output language from brief/existingDraft.
+  language: "brief" | "en";
+  tone: Tone | "auto";
+  extraInstruction?: string;
+  blockedTerms?: string[];
+  count: number;
+  maxLength: number | "auto";
+  useEmoji: boolean;
+  model?: string;
+};
+
+export type GenerationRequest = GenerateReplyRequest | GeneratePostRequest;
+
+export function isGeneratePostRequest(input: GenerationRequest): input is GeneratePostRequest {
+  return "brief" in input;
+}
+
 export type GeneratedReply = {
   id: string;
   text: string;
@@ -84,6 +109,12 @@ export type GenerateReplyResponse = {
     completionTokens: number;
     estimatedCostUsd?: number;
   };
+};
+
+export type GeneratedPost = GeneratedReply;
+
+export type GeneratePostResponse = Omit<GenerateReplyResponse, "replies"> & {
+  posts: GeneratedPost[];
 };
 
 export type ApiErrorCode =
