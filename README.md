@@ -1,9 +1,13 @@
 # Extcom AI
 
-A self-hosted, human-in-the-loop AI writing copilot for X/Twitter. A Chrome
-extension adds **✦ AI Reply** to posts and **✦ AI Post** to X's standalone
-composer; your own backend generates drafts with the AI provider key **you**
-control; you choose and insert a draft, and **you always press Post yourself**.
+A self-hosted AI writing copilot for replies, quotes, and standalone posts on
+X/Twitter. The Chrome extension adds two human-in-the-loop workflows:
+
+- **✦ AI Reply** drafts replies and quote-post comments from a post's context.
+- **✦ AI Post** creates, rewrites, or continues text in X's standalone composer.
+
+Your own backend generates every draft with the AI provider key **you** control.
+You choose what to insert, can edit it in X, and **you always press Post yourself**.
 
 - No SaaS, no signup, no telemetry: deploy the backend on your own VPS/PaaS.
 - Your AI API key (OpenRouter or OpenAI) never leaves your server.
@@ -24,12 +28,13 @@ Chrome extension ──(your access token)──▶ your backend ──(your API
   editing it means commit + redeploy like any code change (VPS with a live
   checkout can just edit + rebuild locally). See
   [docs/PROMPT.md](docs/PROMPT.md#persona).
-- **Extension popup (Settings → Default):** default tone, standing
-  instruction, default max length, draft count, use emoji, read images.
-- **Extension popup (Settings → Advanced):** public backend URL, one backend
-  access token, optional AI model override (picked from a live-fetched
-  dropdown or typed as custom, falls back to the backend's own
-  `AI_DEFAULT_MODEL` when left unset).
+- **Extension popup (Tone):** default tone, generation defaults (maximum
+  length, draft count, emoji, image reading), standing instruction, and
+  blocked terms.
+- **Extension popup (Advanced):** public backend URL, one backend access token,
+  and an optional AI model override (picked from a live-fetched dropdown or
+  typed as custom; it falls back to the backend's `AI_DEFAULT_MODEL` when
+  left unset).
 
 Never put an AI-provider API key or admin secret in the extension. Anything
 stored by a browser extension must be treated as user-visible. The backend
@@ -131,7 +136,15 @@ even when explicitly asked to write longer. Bumping one tier to
 length guidance far more reliably in testing. If you plan to use long
 replies regularly, budget for that tier rather than the lite one.
 
-## 2. Build & install the extension
+## 2. Install the extension
+
+### Chrome Web Store (public releases)
+
+Public releases are distributed through the Chrome Web Store. The listing URL
+will be added here after the first version is approved. Until then, or for
+development and self-hosted QA, build from source below.
+
+### Build from source
 
 ```bash
 npm ci
@@ -143,6 +156,15 @@ Arc, …; they share the same extension engine, so this works unmodified):
 
 1. Open `chrome://extensions`, enable **Developer mode**.
 2. **Load unpacked** → select `apps/extension/dist`.
+
+To create the versioned ZIP used for Chrome Web Store submission:
+
+```bash
+npm run package:extension
+```
+
+The audited package is written to `release/extcom-ai-v<version>.zip`.
+Developer-mode users should still load `apps/extension/dist`, not the ZIP.
 
 ### Browser support
 
@@ -170,34 +192,34 @@ extension folder at all.
    inserted. A bottom nav switches between **Home**, **History**, **Tone**,
    and **Advanced**.
 2. **History** tab: every generation, filterable by All / Post / Reply / Quote /
-   Not inserted, each entry with a ↗ link back to the post it was inserted
-   into.
+   Not inserted. Entries with a captured X URL include a ↗ link back to their
+   source.
 3. **Tone** tab: default tone (24 available, from `degen` to `roast` to
    `philosophical`, plus **Auto** which lets the AI pick whichever tone
    best fits each post — see `docs/API.md` for the full list, pin up to 5
-   as quick-pick chips), standing instruction, default maximum length (a
-   fixed character count, or **Auto** to let the AI pick a natural length
-   capped at 280 chars), draft count, and whether to use emoji / read
-   images by default. See `docs/PROMPT.md` for exactly what's sent to the
-   AI on every generation — none of it is configurable from the extension.
-4. **Advanced** tab: enter your backend URL (e.g.
+   as quick-pick chips). Its **Defaults** subtab controls maximum length (a
+   manual limit from 50 to 25,000 characters, or **Auto** for a natural length
+   capped at 280), draft count, emoji, and image reading. **Rules** contains
+   the standing instruction and blocked terms. See `docs/PROMPT.md` for the
+   non-configurable prompt contract sent on every generation.
+4. **Advanced** tab: under **Connection**, enter your backend URL (e.g.
    `https://extcom.example.com`) and the access token you put in
    `AUTH_TOKENS`, then **Save**. Chrome will ask to allow access to your
-   backend's domain — accept it. Also has **Test connection** and
-   **Clear history**.
+   backend's domain — accept it. This tab also has **Test connection**,
+   **Clear history**, and an **AI Model** subtab.
 
-<img src="docs/assets/extentions.png" alt="The four popup tabs: Home (connection status and totals), History (filterable by All/Reply/Quote/Not inserted), Tone (default tone, length, draft count, emoji, read images), and Advanced (backend URL, access token, test connection, clear history)" width="900">
+<img src="docs/assets/extentions.png" alt="The four popup tabs: Home (connection status and totals), History (filterable by All/Post/Reply/Quote/Not inserted), Tone (default tone, length, draft count, emoji, read images), and Advanced (backend URL, access token, test connection, clear history)" width="900">
 
-5. Open [x.com](https://x.com), find a post, click **✦ AI Reply**. Tone,
-   draft count, reply length, emoji, and a one-off instruction just for this
-   reply (added on top of your standing instruction, not a replacement) can
-   all be overridden per-generation right in the on-page panel — it just
-   falls back to your popup defaults when left untouched. If tone is Auto,
-   the panel shows which tone the AI actually picked next to the usage line.
-   Each draft has **Copy**, **↻** (regenerate just that draft), **Quote**
-   (opens Repost → Quote and fills that comment box), and **Insert** (fills
-   the reply composer). Edit the draft if you like, then press Post
-   yourself.
+### Reply to a post
+
+Open [x.com](https://x.com), find a post, and click **✦ AI Reply**. Tone,
+draft count, reply length, emoji, image reading, language, and a one-off
+instruction for that reply can all be overridden in the on-page panel. The
+one-off instruction is added to your standing instruction, not used as a
+replacement. If tone is Auto, the result shows which tone the AI picked.
+Each draft has **Copy**, **↻** (regenerate that draft), **Quote** (opens
+Repost → Quote and fills its comment box), and **Insert** (fills the reply
+composer). Edit the result if you like, then press Post yourself.
 
 <img src="docs/assets/ai-reply-button-preview.svg" alt="Mockup showing the AI Reply button placed in a post's action row, next to Reply, Retweet, Like, and Bookmark" width="560">
 
@@ -228,11 +250,12 @@ newer text.
 ### Optional: let it read images in posts
 
 The panel can attach every image in the post (up to 4, X's own per-post max)
-to the AI request so replies can reference charts, memes, or screenshots —
-off by default. Toggle **Read images** in Settings → Default, or
-per-generation in the on-page panel (it only appears when the post has at
-least one image). This **requires `AI_DEFAULT_MODEL` to be a vision-capable
-model** (e.g. a
+to the AI request so replies can reference charts, memes, or screenshots.
+The default is **Auto**: it reads images for image-only posts, short captions,
+or captions that refer to visual content. **On** always reads attached images;
+**Off** never sends them. Choose the default in Tone → Defaults or override it
+per generation (the control appears only when the post has an image).
+This **requires `AI_DEFAULT_MODEL` to be a vision-capable model** (e.g. a
 multimodal model on OpenRouter, or `gpt-4o`/`gpt-4.1`-class models on
 OpenAI) — non-vision models typically just ignore the image rather than
 erroring. See `docs/API.md` for the exact request shape.
