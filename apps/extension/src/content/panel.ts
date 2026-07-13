@@ -4,6 +4,7 @@ import type {
   ExtractedPostContext,
   GenerateReplyResponse,
   GeneratedReply,
+  ReadImagesMode,
   Tone,
 } from "../shared/types";
 
@@ -903,15 +904,16 @@ function readUseEmoji(panel: HTMLElement): boolean | undefined {
   return active ? active.dataset.emoji === "on" : undefined;
 }
 
-function setReadImagesGroup(panel: HTMLElement, value: boolean): void {
+function setReadImagesGroup(panel: HTMLElement, value: ReadImagesMode): void {
   panel.querySelectorAll<HTMLButtonElement>("[data-images-group] button").forEach((button) => {
-    button.setAttribute("aria-pressed", String((button.dataset.images === "on") === value));
+    button.setAttribute("aria-pressed", String(button.dataset.images === value));
   });
 }
 
-function readReadImages(panel: HTMLElement): boolean | undefined {
+function readReadImages(panel: HTMLElement): ReadImagesMode | undefined {
   const active = panel.querySelector<HTMLButtonElement>('[data-images-group] button[aria-pressed="true"]');
-  return active ? active.dataset.images === "on" : undefined;
+  if (!active) return undefined;
+  return active.dataset.images === "on" ? "on" : active.dataset.images === "off" ? "off" : "auto";
 }
 
 function setReplyLanguage(panel: HTMLElement, value: "post" | "en"): void {
@@ -1000,7 +1002,7 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
         draftCount?: number;
         maxReplyLength?: number | "auto";
         useEmoji?: boolean;
-        readImages?: boolean;
+        readImages?: ReadImagesMode;
         favoriteTones?: Tone[];
       };
     };
@@ -1025,10 +1027,7 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
       if (response.settings.maxReplyLength) {
         setMaxLength(panel, response.settings.maxReplyLength);
       }
-      // Skip if this post has no caption text — the toggle is forcibly
-      // locked to "on" in that case (see openPanel), don't let the saved
-      // default silently turn it back off.
-      if (typeof response.settings.readImages === "boolean" && panel.dataset.imagesForced !== "true") {
+      if (response.settings.readImages) {
         setReadImagesGroup(panel, response.settings.readImages);
       }
     }
@@ -1156,12 +1155,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
           </div>
           <div class="eks-count-label" data-images-label hidden>
             <span class="eks-image-label-heading">
-              <span data-images-label-text>Image</span>
-              <button type="button" class="eks-tooltip-info" data-images-info aria-label="Why image reading is required" hidden>i</button>
+              <span data-images-label-text>Read image</span>
+              <button type="button" class="eks-tooltip-info" data-images-info aria-label="About automatic image reading" data-tooltip="Auto reads image-only posts, short captions, or captions that refer to visual content. On always reads attached images; Off never sends them.">i</button>
             </span>
             <div class="eks-count-group" data-images-group role="group" aria-label="Read images in this post">
-              <button type="button" data-images="off" aria-pressed="true">Off</button>
+              <button type="button" data-images="auto" aria-pressed="true">Auto</button>
               <button type="button" data-images="on" aria-pressed="false">On</button>
+              <button type="button" data-images="off" aria-pressed="false">Off</button>
             </div>
           </div>
         </div>
@@ -1287,35 +1287,17 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   // Only show the image toggle when this specific post actually has at
   // least one image — nothing to switch on/off otherwise.
   const imageCount = !("error" in input) ? input.context.imageUrls?.length ?? 0 : 0;
-  const hasPostText = !("error" in input) && Boolean(input.context.postText);
   if (imageCount > 0) {
     panel.querySelector<HTMLElement>("[data-images-label]")?.removeAttribute("hidden");
     const labelText = panel.querySelector<HTMLElement>("[data-images-label-text]");
-    if (labelText) labelText.textContent = imageCount > 1 ? `Images (${imageCount})` : "Image";
-
-    // No caption text at all — the image is the only signal available, so
-    // reading it isn't optional. Force it on and lock it there (with a
-    // tooltip explaining why) instead of letting a stale "off" default
-    // silently produce a contentless generate request.
-    if (!hasPostText) {
-      panel.dataset.imagesForced = "true";
-      setReadImagesGroup(panel, true);
-      panel.querySelectorAll<HTMLButtonElement>("[data-images-group] button").forEach((button) => {
-        button.disabled = true;
-      });
-      const infoButton = panel.querySelector<HTMLButtonElement>("[data-images-info]");
-      if (infoButton) {
-        infoButton.hidden = false;
-        infoButton.dataset.tooltip = "This post has no caption text, so reading the image is required to generate a reply.";
-      }
-    }
+    if (labelText) labelText.textContent = imageCount > 1 ? `Read images (${imageCount})` : "Read image";
   }
 
   panel.querySelector("[data-images-group]")?.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-images]");
     if (!button) return;
     panel.dataset.controlsTouched = "true";
-    setReadImagesGroup(panel, button.dataset.images === "on");
+    setReadImagesGroup(panel, button.dataset.images === "on" ? "on" : button.dataset.images === "off" ? "off" : "auto");
   });
 
   // Take manual control of the disclosure toggle instead of letting the

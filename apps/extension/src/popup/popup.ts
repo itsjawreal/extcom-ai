@@ -12,6 +12,7 @@ import type {
   HistoryEntry,
   ModelOption,
   ModelsResponse,
+  ReadImagesMode,
   Tone,
   UsageStats,
 } from "../shared/types";
@@ -110,7 +111,7 @@ let settingsLoadId = 0;
 let modelLoadId = 0;
 let draftCount = 3;
 let useEmoji = true;
-let readImages = false;
+let readImages: ReadImagesMode = "auto";
 let maxLengthMode: "auto" | "manual" = "manual";
 let latestUsageStats: UsageStats = { totalGenerations: 0, totalInserted: 0, history: [] };
 let historyFilter: HistoryFilter = "all";
@@ -352,10 +353,10 @@ function setUseEmoji(value: boolean): void {
   }
 }
 
-function setReadImages(value: boolean): void {
+function setReadImages(value: ReadImagesMode): void {
   readImages = value;
   for (const button of readImagesButtons) {
-    button.setAttribute("aria-pressed", String((button.dataset.images === "on") === value));
+    button.setAttribute("aria-pressed", String(button.dataset.images === value));
   }
 }
 
@@ -387,7 +388,7 @@ useEmojiGroup.addEventListener("click", (event) => {
 readImagesGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-images]");
   if (!button) return;
-  setReadImages(button.dataset.images === "on");
+  setReadImages(button.dataset.images === "on" ? "on" : button.dataset.images === "off" ? "off" : "auto");
   saveToneSettings();
 });
 
