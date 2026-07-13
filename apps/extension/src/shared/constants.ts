@@ -29,9 +29,8 @@ export const TONE_LABELS: Record<Tone, string> = {
 
 export const TONE_AUTO_LABEL = "Auto (AI picks)";
 
-// Reply-length presets shown in the popup/panel, matching X's own post
-// limits per plan: Free (280), Premium (4,000), Premium+ (25,000). A custom
-// numeric input next to these covers any exact value in between.
+// Reply-length landmarks shown above the slider, matching X's own post
+// limits per plan: Free (280), Premium (4,000), Premium+ (25,000).
 export const REPLY_LENGTH_PRESETS = [280, 4_000, 25_000] as const;
 
 // The custom-length input has no native min/max enforcement like the range
@@ -44,12 +43,31 @@ export const REPLY_LENGTH_PRESETS = [280, 4_000, 25_000] as const;
 // being corrected up front.
 export const MIN_REPLY_LENGTH = 50;
 export const MAX_REPLY_LENGTH = 25_000;
+export const REPLY_LENGTH_SLIDER_MAX = 10_000;
 export const MAX_BLOCKED_TERMS = 50;
 export const MAX_BLOCKED_TERM_LENGTH = 80;
 
 export function clampReplyLength(value: number): number {
   if (!Number.isFinite(value)) return MIN_REPLY_LENGTH;
   return Math.min(MAX_REPLY_LENGTH, Math.max(MIN_REPLY_LENGTH, Math.round(value)));
+}
+
+export function replyLengthToSliderPosition(value: number): number {
+  const length = clampReplyLength(value);
+  const progress = Math.log(length / MIN_REPLY_LENGTH) / Math.log(MAX_REPLY_LENGTH / MIN_REPLY_LENGTH);
+  return Math.round(progress * REPLY_LENGTH_SLIDER_MAX);
+}
+
+export function sliderPositionToReplyLength(value: number): number {
+  const position = Math.min(REPLY_LENGTH_SLIDER_MAX, Math.max(0, Math.round(value)));
+  // Snap within 2% of a landmark. Outside those small zones the logarithmic
+  // track stays continuous, with 10-character granularity.
+  for (const preset of REPLY_LENGTH_PRESETS) {
+    if (Math.abs(position - replyLengthToSliderPosition(preset)) <= REPLY_LENGTH_SLIDER_MAX * 0.02) return preset;
+  }
+  const progress = position / REPLY_LENGTH_SLIDER_MAX;
+  const raw = MIN_REPLY_LENGTH * Math.pow(MAX_REPLY_LENGTH / MIN_REPLY_LENGTH, progress);
+  return clampReplyLength(Math.round(raw / 10) * 10);
 }
 
 export function normalizeBlockedTerms(value: unknown): string[] {

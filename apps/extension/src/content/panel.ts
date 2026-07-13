@@ -1,5 +1,14 @@
 import { insertQuoteIntoComposer, insertReplyIntoComposer } from "./replyComposer";
-import { clampReplyLength, REPLY_LENGTH_PRESETS, TONE_AUTO_LABEL, TONE_LABELS, toneLabel } from "../shared/constants";
+import {
+  clampReplyLength,
+  REPLY_LENGTH_PRESETS,
+  REPLY_LENGTH_SLIDER_MAX,
+  replyLengthToSliderPosition,
+  sliderPositionToReplyLength,
+  TONE_AUTO_LABEL,
+  TONE_LABELS,
+  toneLabel,
+} from "../shared/constants";
 import type {
   ExtractedPostContext,
   GenerateReplyResponse,
@@ -981,13 +990,15 @@ function readMaxLength(panel: HTMLElement): number | "auto" | undefined {
   return input ? clampReplyLength(Number(input.value)) : undefined;
 }
 
-function syncMaxLengthPreset(panel: HTMLElement): void {
+function syncMaxLengthSlider(panel: HTMLElement, value?: number): void {
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
-  const current = input ? Number(input.value) : NaN;
+  const slider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
+  const current = clampReplyLength(value ?? Number(input?.value));
+  if (slider) slider.value = String(replyLengthToSliderPosition(current));
   panel
-    .querySelectorAll<HTMLButtonElement>("[data-max-length-preset-group] button[data-length-preset]")
-    .forEach((button) => {
-      button.setAttribute("aria-pressed", String(Number(button.dataset.lengthPreset) === current));
+    .querySelectorAll<HTMLElement>("[data-length-mark]")
+    .forEach((mark) => {
+      mark.dataset.active = String(Number(mark.dataset.lengthMark) === current);
     });
 }
 
@@ -999,8 +1010,8 @@ function setMaxLength(panel: HTMLElement, value: number | "auto"): void {
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
   const slider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
   if (input) input.value = String(value);
-  if (slider) slider.value = String(value);
-  syncMaxLengthPreset(panel);
+  if (slider) slider.value = String(replyLengthToSliderPosition(value));
+  syncMaxLengthSlider(panel, value);
   setLengthMode(panel, "manual");
 }
 
@@ -1142,11 +1153,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
             </div>
           </span>
           <div data-max-length-manual-row>
-            <div class="eks-count-group" data-max-length-preset-group role="group" aria-label="Reply length preset">
-              ${REPLY_LENGTH_PRESETS.map((preset) => `<button type="button" data-length-preset="${preset}" aria-pressed="false">${preset.toLocaleString()}</button>`).join("")}
-            </div>
             <div class="eks-max-length-control-row">
-              <input type="range" data-max-length-slider min="50" max="25000" step="10" value="220" aria-label="Reply length slider" />
+              <div class="eks-max-length-slider-column">
+                <div class="eks-max-length-marks" aria-hidden="true">
+                  ${REPLY_LENGTH_PRESETS.map((preset) => `<span data-length-mark="${preset}" style="left:${replyLengthToSliderPosition(preset) / REPLY_LENGTH_SLIDER_MAX * 100}%">${preset.toLocaleString()}</span>`).join("")}
+                </div>
+                <input type="range" data-max-length-slider min="0" max="${REPLY_LENGTH_SLIDER_MAX}" step="1" value="${replyLengthToSliderPosition(220)}" aria-label="Reply length slider" />
+              </div>
               <input type="number" inputmode="numeric" data-max-length-input min="50" max="25000" step="10" value="220" aria-label="Reply length in characters" />
             </div>
           </div>
@@ -1242,8 +1255,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   const maxLengthSlider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
   maxLengthInput?.addEventListener("input", () => {
     panel.dataset.controlsTouched = "true";
-    if (maxLengthSlider) maxLengthSlider.value = String(clampReplyLength(Number(maxLengthInput.value)));
-    syncMaxLengthPreset(panel);
+    syncMaxLengthSlider(panel);
   });
 
   // "change" (fires once on blur/commit) clamps the visible value into
@@ -1251,23 +1263,14 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   // typing "4" toward "4000" would get snapped to 50 after the first digit.
   maxLengthInput?.addEventListener("change", () => {
     maxLengthInput.value = String(clampReplyLength(Number(maxLengthInput.value)));
-    if (maxLengthSlider) maxLengthSlider.value = maxLengthInput.value;
-    syncMaxLengthPreset(panel);
+    syncMaxLengthSlider(panel);
   });
 
   maxLengthSlider?.addEventListener("input", () => {
     panel.dataset.controlsTouched = "true";
-    if (maxLengthInput) maxLengthInput.value = maxLengthSlider.value;
-    syncMaxLengthPreset(panel);
-  });
-
-  panel.querySelector("[data-max-length-preset-group]")?.addEventListener("click", (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-length-preset]");
-    if (!button?.dataset.lengthPreset) return;
-    panel.dataset.controlsTouched = "true";
-    if (maxLengthInput) maxLengthInput.value = button.dataset.lengthPreset;
-    if (maxLengthSlider) maxLengthSlider.value = button.dataset.lengthPreset;
-    syncMaxLengthPreset(panel);
+    const length = sliderPositionToReplyLength(Number(maxLengthSlider.value));
+    if (maxLengthInput) maxLengthInput.value = String(length);
+    syncMaxLengthSlider(panel, length);
   });
 
   panel.querySelector("[data-length-mode-group]")?.addEventListener("click", (event) => {
