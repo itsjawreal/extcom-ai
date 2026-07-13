@@ -956,11 +956,13 @@ function languageDisplayName(languageTag?: string): string {
 
 function setLengthMode(panel: HTMLElement, mode: "auto" | "manual"): void {
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
+  const slider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
   const manualRow = panel.querySelector<HTMLElement>("[data-max-length-manual-row]");
   panel.querySelectorAll<HTMLButtonElement>("[data-length-mode-group] button[data-length-mode]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.lengthMode === mode));
   });
   if (input) input.disabled = mode === "auto";
+  if (slider) slider.disabled = mode === "auto";
   // Auto has no numeric target to show — hide the slider/value row entirely
   // instead of leaving a disabled, dead control taking up space.
   if (manualRow) manualRow.hidden = mode === "auto";
@@ -995,9 +997,9 @@ function setMaxLength(panel: HTMLElement, value: number | "auto"): void {
     return;
   }
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
-  const display = panel.querySelector<HTMLElement>("[data-max-length-value]");
+  const slider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
   if (input) input.value = String(value);
-  if (display) display.textContent = String(value);
+  if (slider) slider.value = String(value);
   syncMaxLengthPreset(panel);
   setLengthMode(panel, "manual");
 }
@@ -1140,11 +1142,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
             </div>
           </span>
           <div data-max-length-manual-row>
-            <p class="eks-field-row-value eks-max-length-value-row"><span data-max-length-value>220</span> chars</p>
             <div class="eks-count-group" data-max-length-preset-group role="group" aria-label="Reply length preset">
               ${REPLY_LENGTH_PRESETS.map((preset) => `<button type="button" data-length-preset="${preset}" aria-pressed="false">${preset.toLocaleString()}</button>`).join("")}
             </div>
-            <input type="number" inputmode="numeric" data-max-length-input min="50" max="25000" step="10" value="220" />
+            <div class="eks-max-length-control-row">
+              <input type="range" data-max-length-slider min="50" max="25000" step="10" value="220" aria-label="Reply length slider" />
+              <input type="number" inputmode="numeric" data-max-length-input min="50" max="25000" step="10" value="220" aria-label="Reply length in characters" />
+            </div>
           </div>
         </div>
         <div class="eks-panel-config">
@@ -1235,10 +1239,10 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   }
 
   const maxLengthInput = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
-  const maxLengthValue = panel.querySelector<HTMLElement>("[data-max-length-value]");
+  const maxLengthSlider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
   maxLengthInput?.addEventListener("input", () => {
     panel.dataset.controlsTouched = "true";
-    if (maxLengthValue) maxLengthValue.textContent = maxLengthInput.value;
+    if (maxLengthSlider) maxLengthSlider.value = String(clampReplyLength(Number(maxLengthInput.value)));
     syncMaxLengthPreset(panel);
   });
 
@@ -1247,7 +1251,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   // typing "4" toward "4000" would get snapped to 50 after the first digit.
   maxLengthInput?.addEventListener("change", () => {
     maxLengthInput.value = String(clampReplyLength(Number(maxLengthInput.value)));
-    if (maxLengthValue) maxLengthValue.textContent = maxLengthInput.value;
+    if (maxLengthSlider) maxLengthSlider.value = maxLengthInput.value;
+    syncMaxLengthPreset(panel);
+  });
+
+  maxLengthSlider?.addEventListener("input", () => {
+    panel.dataset.controlsTouched = "true";
+    if (maxLengthInput) maxLengthInput.value = maxLengthSlider.value;
     syncMaxLengthPreset(panel);
   });
 
@@ -1256,7 +1266,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     if (!button?.dataset.lengthPreset) return;
     panel.dataset.controlsTouched = "true";
     if (maxLengthInput) maxLengthInput.value = button.dataset.lengthPreset;
-    if (maxLengthValue) maxLengthValue.textContent = button.dataset.lengthPreset;
+    if (maxLengthSlider) maxLengthSlider.value = button.dataset.lengthPreset;
     syncMaxLengthPreset(panel);
   });
 

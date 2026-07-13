@@ -604,8 +604,26 @@
     .password-toggle[aria-pressed="true"] .password-eye-on {
       display: none;
     }
-    #max-length-caption {
-      margin: 0 0 4px;
+    .max-length-control-row {
+      align-items: center;
+      display: flex;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    #max-length-slider {
+      accent-color: var(--accent);
+      background: transparent;
+      border: 0;
+      flex: 1;
+      margin: 0;
+      min-height: 24px;
+      padding: 0;
+      width: auto;
+    }
+    #max-length {
+      flex: 0 0 82px;
+      margin: 0;
+      width: 82px;
     }
     #ai-model-custom-row {
       display: flex;
@@ -940,13 +958,15 @@
           </div>
         </span>
         <div id="max-length-manual-row">
-          <p class="field-row-value" id="max-length-caption"><span id="max-length-value">220</span> characters</p>
           <div class="segmented" id="max-length-preset" role="group" aria-label="Reply length preset">
             <button type="button" data-length-preset="280" aria-pressed="false">280</button>
             <button type="button" data-length-preset="4000" aria-pressed="false">4,000</button>
             <button type="button" data-length-preset="25000" aria-pressed="false">25,000</button>
           </div>
-          <input id="max-length" type="number" inputmode="numeric" min="50" max="25000" step="10" value="220" placeholder="Custom characters" />
+          <div class="max-length-control-row">
+            <input id="max-length-slider" type="range" min="50" max="25000" step="10" value="220" aria-label="Default reply length slider" />
+            <input id="max-length" type="number" inputmode="numeric" min="50" max="25000" step="10" value="220" aria-label="Default reply length in characters" />
+          </div>
         </div>
       </div>
       <div class="field-block">
