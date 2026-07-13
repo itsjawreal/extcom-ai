@@ -1155,13 +1155,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
           </div>
           <div class="eks-count-label" data-images-label hidden>
             <span class="eks-image-label-heading">
-              <span data-images-label-text>Image</span>
-              <button type="button" class="eks-tooltip-info" data-images-info aria-label="About image reading" hidden>i</button>
+              <span data-images-label-text>Read image</span>
+              <button type="button" class="eks-tooltip-info" data-images-info aria-label="About automatic image reading" data-tooltip="Auto reads image-only posts, short captions, or captions that refer to visual content. On always reads attached images; Off never sends them.">i</button>
             </span>
             <div class="eks-count-group" data-images-group role="group" aria-label="Read images in this post">
               <button type="button" data-images="auto" aria-pressed="true">Auto</button>
-              <button type="button" data-images="off" aria-pressed="false">Off</button>
               <button type="button" data-images="on" aria-pressed="false">On</button>
+              <button type="button" data-images="off" aria-pressed="false">Off</button>
             </div>
           </div>
         </div>
@@ -1287,22 +1287,10 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   // Only show the image toggle when this specific post actually has at
   // least one image — nothing to switch on/off otherwise.
   const imageCount = !("error" in input) ? input.context.imageUrls?.length ?? 0 : 0;
-  const hasPostText = !("error" in input) && Boolean(input.context.postText);
   if (imageCount > 0) {
     panel.querySelector<HTMLElement>("[data-images-label]")?.removeAttribute("hidden");
     const labelText = panel.querySelector<HTMLElement>("[data-images-label-text]");
-    if (labelText) labelText.textContent = imageCount > 1 ? `Images (${imageCount})` : "Image";
-
-    // Keep all three choices honest even for image-only posts. Auto/On can
-    // generate from the image; Off remains selectable and surfaces a clear
-    // error at generation time instead of being silently overridden.
-    if (!hasPostText) {
-      const infoButton = panel.querySelector<HTMLButtonElement>("[data-images-info]");
-      if (infoButton) {
-        infoButton.hidden = false;
-        infoButton.dataset.tooltip = "This post has no caption. Auto or On reads the image; Off cannot generate a relevant reply.";
-      }
-    }
+    if (labelText) labelText.textContent = imageCount > 1 ? `Read images (${imageCount})` : "Read image";
   }
 
   panel.querySelector("[data-images-group]")?.addEventListener("click", (event) => {
