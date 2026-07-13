@@ -533,12 +533,70 @@
   font-weight: 400;
 }
 
-.eks-max-length-value-row {
-  margin: 0 0 4px;
+.eks-max-length-control-row {
+  align-items: flex-end;
+  display: flex;
+  gap: 10px;
 }
 
-.eks-tone-label [data-max-length-preset-group] {
-  margin-bottom: 8px;
+.eks-max-length-slider-column {
+  flex: 1;
+  min-width: 0;
+}
+
+.eks-max-length-marks {
+  height: 23px;
+  margin: 0 8px;
+  position: relative;
+}
+
+.eks-max-length-marks span {
+  color: var(--eks-field-value);
+  font-size: 9px;
+  line-height: 1;
+  position: absolute;
+  text-align: center;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.eks-max-length-marks span::after {
+  background: var(--eks-border);
+  border-radius: 50%;
+  content: "";
+  display: block;
+  height: 4px;
+  margin: 4px auto 0;
+  width: 4px;
+}
+
+.eks-max-length-marks span[data-active="true"] {
+  color: var(--eks-accent);
+}
+
+.eks-max-length-marks span[data-active="true"]::after {
+  background: var(--eks-accent);
+}
+
+.eks-max-length-marks span:last-child {
+  transform: translateX(-100%);
+}
+
+.eks-tone-label input[data-max-length-slider] {
+  accent-color: var(--eks-accent);
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+  display: block;
+  min-width: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.eks-tone-label input[data-max-length-input] {
+  flex: 0 0 72px;
+  width: 72px;
 }
 
 .eks-extra-details {

@@ -3,6 +3,10 @@ import {
   DEFAULT_SETTINGS_PARTIAL,
   MAX_BLOCKED_TERMS,
   normalizeBlockedTerms,
+  REPLY_LENGTH_PRESETS,
+  REPLY_LENGTH_SLIDER_MAX,
+  replyLengthToSliderPosition,
+  sliderPositionToReplyLength,
   TONE_AUTO_LABEL,
   TONE_LABELS,
 } from "../shared/constants";
@@ -65,12 +69,11 @@ const instructionInput = document.getElementById("default-instruction") as HTMLT
 const blockedTermsInput = document.getElementById("blocked-terms") as HTMLTextAreaElement;
 const blockedTermsCount = document.getElementById("blocked-terms-count") as HTMLElement;
 const maxLengthInput = document.getElementById("max-length") as HTMLInputElement;
-const maxLengthValue = document.getElementById("max-length-value") as HTMLElement;
+const maxLengthSlider = document.getElementById("max-length-slider") as HTMLInputElement;
 const maxLengthManualRow = document.getElementById("max-length-manual-row") as HTMLElement;
 const maxLengthModeGroup = document.getElementById("max-length-mode") as HTMLElement;
 const maxLengthModeButtons = Array.from(maxLengthModeGroup.querySelectorAll<HTMLButtonElement>("button"));
-const maxLengthPresetGroup = document.getElementById("max-length-preset") as HTMLElement;
-const maxLengthPresetButtons = Array.from(maxLengthPresetGroup.querySelectorAll<HTMLButtonElement>("button"));
+const maxLengthMarks = Array.from(document.querySelectorAll<HTMLElement>("[data-length-mark]"));
 const draftCountGroup = document.getElementById("draft-count") as HTMLElement;
 const draftCountButtons = Array.from(draftCountGroup.querySelectorAll<HTMLButtonElement>("button"));
 const useEmojiGroup = document.getElementById("use-emoji") as HTMLElement;
@@ -366,6 +369,7 @@ function setMaxLengthMode(mode: "auto" | "manual"): void {
     button.setAttribute("aria-pressed", String(button.dataset.lengthMode === mode));
   }
   maxLengthInput.disabled = mode === "auto";
+  maxLengthSlider.disabled = mode === "auto";
   // Auto has no numeric target to show — hide the slider/value row entirely
   // instead of leaving a disabled, dead control taking up space.
   maxLengthManualRow.hidden = mode === "auto";
@@ -399,16 +403,21 @@ maxLengthModeGroup.addEventListener("click", (event) => {
   saveToneSettings();
 });
 
-function syncMaxLengthPreset(): void {
-  const current = Number(maxLengthInput.value);
-  for (const button of maxLengthPresetButtons) {
-    button.setAttribute("aria-pressed", String(Number(button.dataset.lengthPreset) === current));
+function syncMaxLengthSlider(value = Number(maxLengthInput.value)): void {
+  const length = clampReplyLength(value);
+  maxLengthSlider.value = String(replyLengthToSliderPosition(length));
+  for (const mark of maxLengthMarks) {
+    mark.dataset.active = String(Number(mark.dataset.lengthMark) === length);
   }
 }
 
+for (const mark of maxLengthMarks) {
+  const preset = Number(mark.dataset.lengthMark);
+  mark.style.left = `${replyLengthToSliderPosition(preset) / REPLY_LENGTH_SLIDER_MAX * 100}%`;
+}
+
 maxLengthInput.addEventListener("input", () => {
-  maxLengthValue.textContent = maxLengthInput.value;
-  syncMaxLengthPreset();
+  syncMaxLengthSlider();
 });
 
 // "change" (fires once on blur/commit), not "input" (fires on every
@@ -417,19 +426,16 @@ maxLengthInput.addEventListener("input", () => {
 // the first keystroke).
 maxLengthInput.addEventListener("change", () => {
   maxLengthInput.value = String(clampReplyLength(Number(maxLengthInput.value)));
-  maxLengthValue.textContent = maxLengthInput.value;
-  syncMaxLengthPreset();
+  syncMaxLengthSlider();
   saveToneSettings();
 });
 
-maxLengthPresetGroup.addEventListener("click", (event) => {
-  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-length-preset]");
-  if (!button?.dataset.lengthPreset) return;
-  maxLengthInput.value = button.dataset.lengthPreset;
-  maxLengthValue.textContent = maxLengthInput.value;
-  syncMaxLengthPreset();
-  saveToneSettings();
+maxLengthSlider.addEventListener("input", () => {
+  const length = sliderPositionToReplyLength(Number(maxLengthSlider.value));
+  maxLengthInput.value = String(length);
+  syncMaxLengthSlider(length);
 });
+maxLengthSlider.addEventListener("change", saveToneSettings);
 
 toneSelect.addEventListener("change", () => {
   syncQuickTonesActive();
@@ -819,8 +825,7 @@ async function loadSettings(statusNode: HTMLElement): Promise<void> {
   // its own default) even while Auto is active and the input is disabled.
   if (response.settings.maxReplyLength !== "auto") {
     maxLengthInput.value = String(response.settings.maxReplyLength);
-    maxLengthValue.textContent = maxLengthInput.value;
-    syncMaxLengthPreset();
+    syncMaxLengthSlider();
   }
   setMaxLengthMode(response.settings.maxReplyLength === "auto" ? "auto" : "manual");
   setDraftCount(response.settings.draftCount);

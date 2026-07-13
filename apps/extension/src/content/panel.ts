@@ -1,5 +1,14 @@
 import { insertQuoteIntoComposer, insertReplyIntoComposer } from "./replyComposer";
-import { clampReplyLength, REPLY_LENGTH_PRESETS, TONE_AUTO_LABEL, TONE_LABELS, toneLabel } from "../shared/constants";
+import {
+  clampReplyLength,
+  REPLY_LENGTH_PRESETS,
+  REPLY_LENGTH_SLIDER_MAX,
+  replyLengthToSliderPosition,
+  sliderPositionToReplyLength,
+  TONE_AUTO_LABEL,
+  TONE_LABELS,
+  toneLabel,
+} from "../shared/constants";
 import type {
   ExtractedPostContext,
   GenerateReplyResponse,
@@ -175,6 +184,23 @@ function closeContentTooltip(): void {
   if (!tooltip) return;
   tooltip.dataset.open = "false";
   tooltip.setAttribute("aria-hidden", "true");
+}
+
+// X can stop pointer/click bubbling inside its React event layer. Bind the
+// small info controls directly as well as keeping the document delegation
+// below for dynamically-created action buttons.
+function bindContentTooltip(source: HTMLElement): void {
+  source.addEventListener("pointerenter", (event) => {
+    if (event.pointerType === "mouse" || event.pointerType === "pen") openContentTooltip(source);
+  });
+  source.addEventListener("pointerleave", () => {
+    if (activeTooltipSource === source) closeContentTooltip();
+  });
+  source.addEventListener("focus", () => openContentTooltip(source));
+  source.addEventListener("blur", () => {
+    if (activeTooltipSource === source) closeContentTooltip();
+  });
+  source.addEventListener("click", () => openContentTooltip(source));
 }
 
 function getPostKey(post: HTMLElement): string | null {
@@ -939,11 +965,13 @@ function languageDisplayName(languageTag?: string): string {
 
 function setLengthMode(panel: HTMLElement, mode: "auto" | "manual"): void {
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
+  const slider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
   const manualRow = panel.querySelector<HTMLElement>("[data-max-length-manual-row]");
   panel.querySelectorAll<HTMLButtonElement>("[data-length-mode-group] button[data-length-mode]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.lengthMode === mode));
   });
   if (input) input.disabled = mode === "auto";
+  if (slider) slider.disabled = mode === "auto";
   // Auto has no numeric target to show — hide the slider/value row entirely
   // instead of leaving a disabled, dead control taking up space.
   if (manualRow) manualRow.hidden = mode === "auto";
@@ -962,13 +990,15 @@ function readMaxLength(panel: HTMLElement): number | "auto" | undefined {
   return input ? clampReplyLength(Number(input.value)) : undefined;
 }
 
-function syncMaxLengthPreset(panel: HTMLElement): void {
+function syncMaxLengthSlider(panel: HTMLElement, value?: number): void {
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
-  const current = input ? Number(input.value) : NaN;
+  const slider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
+  const current = clampReplyLength(value ?? Number(input?.value));
+  if (slider) slider.value = String(replyLengthToSliderPosition(current));
   panel
-    .querySelectorAll<HTMLButtonElement>("[data-max-length-preset-group] button[data-length-preset]")
-    .forEach((button) => {
-      button.setAttribute("aria-pressed", String(Number(button.dataset.lengthPreset) === current));
+    .querySelectorAll<HTMLElement>("[data-length-mark]")
+    .forEach((mark) => {
+      mark.dataset.active = String(Number(mark.dataset.lengthMark) === current);
     });
 }
 
@@ -978,10 +1008,10 @@ function setMaxLength(panel: HTMLElement, value: number | "auto"): void {
     return;
   }
   const input = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
-  const display = panel.querySelector<HTMLElement>("[data-max-length-value]");
+  const slider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
   if (input) input.value = String(value);
-  if (display) display.textContent = String(value);
-  syncMaxLengthPreset(panel);
+  if (slider) slider.value = String(replyLengthToSliderPosition(value));
+  syncMaxLengthSlider(panel, value);
   setLengthMode(panel, "manual");
 }
 
@@ -1123,11 +1153,15 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
             </div>
           </span>
           <div data-max-length-manual-row>
-            <p class="eks-field-row-value eks-max-length-value-row"><span data-max-length-value>220</span> chars</p>
-            <div class="eks-count-group" data-max-length-preset-group role="group" aria-label="Reply length preset">
-              ${REPLY_LENGTH_PRESETS.map((preset) => `<button type="button" data-length-preset="${preset}" aria-pressed="false">${preset.toLocaleString()}</button>`).join("")}
+            <div class="eks-max-length-control-row">
+              <div class="eks-max-length-slider-column">
+                <div class="eks-max-length-marks" aria-hidden="true">
+                  ${REPLY_LENGTH_PRESETS.map((preset) => `<span data-length-mark="${preset}" style="left:${replyLengthToSliderPosition(preset) / REPLY_LENGTH_SLIDER_MAX * 100}%">${preset.toLocaleString()}</span>`).join("")}
+                </div>
+                <input type="range" data-max-length-slider min="0" max="${REPLY_LENGTH_SLIDER_MAX}" step="1" value="${replyLengthToSliderPosition(220)}" aria-label="Reply length slider" />
+              </div>
+              <input type="number" inputmode="numeric" data-max-length-input min="50" max="25000" step="10" value="220" aria-label="Reply length in characters" />
             </div>
-            <input type="number" inputmode="numeric" data-max-length-input min="50" max="25000" step="10" value="220" />
           </div>
         </div>
         <div class="eks-panel-config">
@@ -1183,6 +1217,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
 
   renderContext(panel, input);
   panel.querySelector(".eks-panel-close")?.addEventListener("click", () => closePanel());
+  panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
 
   const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
   const toneTrigger = panel.querySelector<HTMLButtonElement>("[data-tone-trigger]");
@@ -1217,11 +1252,10 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   }
 
   const maxLengthInput = panel.querySelector<HTMLInputElement>("[data-max-length-input]");
-  const maxLengthValue = panel.querySelector<HTMLElement>("[data-max-length-value]");
+  const maxLengthSlider = panel.querySelector<HTMLInputElement>("[data-max-length-slider]");
   maxLengthInput?.addEventListener("input", () => {
     panel.dataset.controlsTouched = "true";
-    if (maxLengthValue) maxLengthValue.textContent = maxLengthInput.value;
-    syncMaxLengthPreset(panel);
+    syncMaxLengthSlider(panel);
   });
 
   // "change" (fires once on blur/commit) clamps the visible value into
@@ -1229,17 +1263,14 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   // typing "4" toward "4000" would get snapped to 50 after the first digit.
   maxLengthInput?.addEventListener("change", () => {
     maxLengthInput.value = String(clampReplyLength(Number(maxLengthInput.value)));
-    if (maxLengthValue) maxLengthValue.textContent = maxLengthInput.value;
-    syncMaxLengthPreset(panel);
+    syncMaxLengthSlider(panel);
   });
 
-  panel.querySelector("[data-max-length-preset-group]")?.addEventListener("click", (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-length-preset]");
-    if (!button?.dataset.lengthPreset) return;
+  maxLengthSlider?.addEventListener("input", () => {
     panel.dataset.controlsTouched = "true";
-    if (maxLengthInput) maxLengthInput.value = button.dataset.lengthPreset;
-    if (maxLengthValue) maxLengthValue.textContent = button.dataset.lengthPreset;
-    syncMaxLengthPreset(panel);
+    const length = sliderPositionToReplyLength(Number(maxLengthSlider.value));
+    if (maxLengthInput) maxLengthInput.value = String(length);
+    syncMaxLengthSlider(panel, length);
   });
 
   panel.querySelector("[data-length-mode-group]")?.addEventListener("click", (event) => {

@@ -604,8 +604,64 @@
     .password-toggle[aria-pressed="true"] .password-eye-on {
       display: none;
     }
-    #max-length-caption {
-      margin: 0 0 4px;
+    .max-length-control-row {
+      align-items: flex-end;
+      display: flex;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .max-length-slider-column {
+      flex: 1;
+      min-width: 0;
+    }
+    .max-length-marks {
+      height: 23px;
+      margin: 0 8px;
+      position: relative;
+    }
+    .max-length-mark {
+      color: var(--muted-2);
+      font-size: 9px;
+      line-height: 1;
+      position: absolute;
+      text-align: center;
+      top: 0;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+    .max-length-mark::after {
+      background: var(--border);
+      border-radius: 50%;
+      content: "";
+      display: block;
+      height: 4px;
+      margin: 4px auto 0;
+      width: 4px;
+    }
+    .max-length-mark[data-active="true"] {
+      color: var(--accent);
+    }
+    .max-length-mark[data-active="true"]::after {
+      background: var(--accent);
+    }
+    .max-length-mark:last-child {
+      transform: translateX(-100%);
+    }
+    #max-length-slider {
+      accent-color: var(--accent);
+      background: transparent;
+      border: 0;
+      box-sizing: border-box;
+      display: block;
+      margin: 0;
+      min-height: 24px;
+      padding: 0;
+      width: 100%;
+    }
+    #max-length {
+      flex: 0 0 82px;
+      margin: 0;
+      width: 82px;
     }
     #ai-model-custom-row {
       display: flex;
@@ -940,13 +996,17 @@
           </div>
         </span>
         <div id="max-length-manual-row">
-          <p class="field-row-value" id="max-length-caption"><span id="max-length-value">220</span> characters</p>
-          <div class="segmented" id="max-length-preset" role="group" aria-label="Reply length preset">
-            <button type="button" data-length-preset="280" aria-pressed="false">280</button>
-            <button type="button" data-length-preset="4000" aria-pressed="false">4,000</button>
-            <button type="button" data-length-preset="25000" aria-pressed="false">25,000</button>
+          <div class="max-length-control-row">
+            <div class="max-length-slider-column">
+              <div class="max-length-marks" aria-hidden="true">
+                <span class="max-length-mark" data-length-mark="280">280</span>
+                <span class="max-length-mark" data-length-mark="4000">4,000</span>
+                <span class="max-length-mark" data-length-mark="25000">25,000</span>
+              </div>
+              <input id="max-length-slider" type="range" min="0" max="10000" step="1" value="2384" aria-label="Default reply length slider" />
+            </div>
+            <input id="max-length" type="number" inputmode="numeric" min="50" max="25000" step="10" value="220" aria-label="Default reply length in characters" />
           </div>
-          <input id="max-length" type="number" inputmode="numeric" min="50" max="25000" step="10" value="220" placeholder="Custom characters" />
         </div>
       </div>
       <div class="field-block">
