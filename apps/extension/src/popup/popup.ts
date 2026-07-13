@@ -1,4 +1,11 @@
-import { clampReplyLength, DEFAULT_SETTINGS_PARTIAL, TONE_AUTO_LABEL, TONE_LABELS } from "../shared/constants";
+import {
+  clampReplyLength,
+  DEFAULT_SETTINGS_PARTIAL,
+  MAX_BLOCKED_TERMS,
+  normalizeBlockedTerms,
+  TONE_AUTO_LABEL,
+  TONE_LABELS,
+} from "../shared/constants";
 import type {
   ConnectionStatus,
   ExtensionSettings,
@@ -54,6 +61,8 @@ const authTokenInput = document.getElementById("auth-token") as HTMLInputElement
 const authTokenToggle = document.getElementById("toggle-auth-token") as HTMLButtonElement;
 const toneSelect = document.getElementById("tone-default") as HTMLSelectElement;
 const instructionInput = document.getElementById("default-instruction") as HTMLTextAreaElement;
+const blockedTermsInput = document.getElementById("blocked-terms") as HTMLTextAreaElement;
+const blockedTermsCount = document.getElementById("blocked-terms-count") as HTMLElement;
 const maxLengthInput = document.getElementById("max-length") as HTMLInputElement;
 const maxLengthValue = document.getElementById("max-length-value") as HTMLElement;
 const maxLengthManualRow = document.getElementById("max-length-manual-row") as HTMLElement;
@@ -82,6 +91,7 @@ const toneSubtabs = document.getElementById("tone-subtabs") as HTMLElement;
 const toneSubpanels = {
   tone: document.getElementById("tone-subpanel-tone") as HTMLElement,
   defaults: document.getElementById("tone-subpanel-defaults") as HTMLElement,
+  rules: document.getElementById("tone-subpanel-rules") as HTMLElement,
 };
 const advancedSubtabs = document.getElementById("advanced-subtabs") as HTMLElement;
 const advancedSubpanels = {
@@ -425,6 +435,23 @@ toneSelect.addEventListener("change", () => {
   saveToneSettings();
 });
 instructionInput.addEventListener("input", saveToneSettingsDebounced);
+
+function readBlockedTerms(): string[] {
+  return normalizeBlockedTerms(blockedTermsInput.value.split(/\r?\n/));
+}
+
+function syncBlockedTermsCount(): void {
+  blockedTermsCount.textContent = `${readBlockedTerms().length}/${MAX_BLOCKED_TERMS}`;
+}
+
+blockedTermsInput.addEventListener("input", () => {
+  syncBlockedTermsCount();
+  saveToneSettingsDebounced();
+});
+blockedTermsInput.addEventListener("change", () => {
+  blockedTermsInput.value = readBlockedTerms().join("\n");
+  syncBlockedTermsCount();
+});
 
 function syncQuickTonesActive(): void {
   quickTonesRow.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
@@ -784,6 +811,8 @@ async function loadSettings(statusNode: HTMLElement): Promise<void> {
   authTokenInput.value = response.settings.authToken;
   toneSelect.value = response.settings.toneDefault;
   instructionInput.value = response.settings.defaultInstruction;
+  blockedTermsInput.value = (response.settings.blockedTerms ?? []).join("\n");
+  syncBlockedTermsCount();
   // The input always needs a numeric value to fall back to if the user
   // switches from Auto back to Manual, so it keeps the last-known number (or
   // its own default) even while Auto is active and the input is disabled.
@@ -840,6 +869,7 @@ async function saveSettings(
       useEmoji,
       readImages,
       favoriteTones,
+      blockedTerms: readBlockedTerms(),
       aiModel: pendingAiModelValue,
     };
     // Persist first: chrome.permissions.request() below can pop a native

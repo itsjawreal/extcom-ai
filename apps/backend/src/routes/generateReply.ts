@@ -118,6 +118,24 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
 
   const sourceLanguage = optionalLanguageTag(body.sourceLanguage);
 
+  let blockedTerms: string[] | undefined;
+  if (body.blockedTerms !== undefined) {
+    if (!Array.isArray(body.blockedTerms) || body.blockedTerms.length > 50) {
+      throw new Error("blockedTerms must contain at most 50 items.");
+    }
+    const seen = new Set<string>();
+    blockedTerms = [];
+    for (const item of body.blockedTerms) {
+      const term = optionalString(item, 80)?.trim();
+      if (!term) throw new Error("Each blockedTerms item must be a non-empty string of at most 80 characters.");
+      const key = term.normalize("NFKC").toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      blockedTerms.push(term);
+    }
+    if (blockedTerms.length === 0) blockedTerms = undefined;
+  }
+
   let visibleThreadText: string[] | undefined;
   if (body.visibleThreadText !== undefined) {
     if (!Array.isArray(body.visibleThreadText) || body.visibleThreadText.length > 5) {
@@ -161,6 +179,7 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     imageUrls,
     visibleThreadText,
     extraInstruction: optionalString(body.extraInstruction, 500),
+    blockedTerms,
     model: optionalString(body.model, 200),
   };
 }

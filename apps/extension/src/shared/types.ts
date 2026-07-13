@@ -53,6 +53,7 @@ export type GenerateReplyRequest = ExtractedPostContext & {
   // tone (never "auto") is echoed back per-reply in GeneratedReply.tone.
   tone: Tone | "auto";
   extraInstruction?: string;
+  blockedTerms?: string[];
   count: number;
   // "auto" means no fixed character target — the AI picks whatever length
   // reads most natural for the tone/post, capped only by a safety ceiling.
@@ -105,6 +106,9 @@ export type ExtensionSettings = {
   // panel, on top of the full tone dropdown. Capped at 5, "auto" excluded
   // (it's already always the first dropdown option).
   favoriteTones: Tone[];
+  // Local-only rules sent transiently during generation. Never stored by
+  // the backend or copied into history.
+  blockedTerms: string[];
   // Empty string means "no override" — the backend's own AI_DEFAULT_MODEL
   // is used. Set from the Advanced tab's model dropdown/custom field.
   aiModel: string;

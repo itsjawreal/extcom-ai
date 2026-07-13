@@ -904,6 +904,7 @@
     <div class="tabs tabs-compact" id="tone-subtabs" role="tablist">
       <button type="button" class="tab" id="tone-tab-tone" data-tone-subtab="tone" role="tab" aria-controls="tone-subpanel-tone" aria-selected="true" tabindex="0">Tone</button>
       <button type="button" class="tab" id="tone-tab-defaults" data-tone-subtab="defaults" role="tab" aria-controls="tone-subpanel-defaults" aria-selected="false" tabindex="-1">Reply defaults</button>
+      <button type="button" class="tab" id="tone-tab-rules" data-tone-subtab="rules" role="tab" aria-controls="tone-subpanel-rules" aria-selected="false" tabindex="-1">Rules</button>
     </div>
 
     <div id="tone-subpanel-tone" data-tone-subpanel="tone" role="tabpanel" aria-labelledby="tone-tab-tone">
@@ -972,6 +973,15 @@
           <button type="button" data-images="on" aria-pressed="false">On</button>
         </div>
       </div>
+    </div>
+
+    <div id="tone-subpanel-rules" data-tone-subpanel="rules" role="tabpanel" aria-labelledby="tone-tab-rules" hidden>
+      <label>
+        Never mention
+        <textarea id="blocked-terms" rows="6" placeholder="One word or phrase per line"></textarea>
+      </label>
+      <p class="field-hint hint"><span id="blocked-terms-count">0/50</span> rules · max 80 characters each. Applies to generated replies only.</p>
+      <p class="hint">Saved only in this browser. Rules are sent temporarily when generating and are never added to history.</p>
     </div>
 
     <p class="status" id="status-tone" aria-live="polite"></p>

@@ -1,4 +1,10 @@
-import { clampReplyLength, MAX_REPLY_LENGTH, MIN_REPLY_LENGTH, TONE_LABELS } from "../shared/constants";
+import {
+  clampReplyLength,
+  MAX_REPLY_LENGTH,
+  MIN_REPLY_LENGTH,
+  normalizeBlockedTerms,
+  TONE_LABELS,
+} from "../shared/constants";
 import type {
   ConnectionStatus,
   ExtensionSettings,
@@ -20,6 +26,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   useEmoji: true,
   readImages: false,
   favoriteTones: [],
+  blockedTerms: [],
   aiModel: "",
 };
 
@@ -64,7 +71,7 @@ function normalizeFavoriteTones(value: unknown): Tone[] {
 
 // "model" is deliberately excluded — it's a popup-level (Advanced tab)
 // setting only, not something the on-page panel can override per-generation.
-type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji" | "model"> & {
+type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji" | "model" | "blockedTerms"> & {
   tone?: Tone | "auto";
   count?: number;
   maxLength?: number | "auto";
@@ -107,6 +114,7 @@ async function getSettings(): Promise<ExtensionSettings> {
     useEmoji: typeof stored.useEmoji === "boolean" ? stored.useEmoji : DEFAULT_SETTINGS.useEmoji,
     readImages: typeof stored.readImages === "boolean" ? stored.readImages : DEFAULT_SETTINGS.readImages,
     favoriteTones: normalizeFavoriteTones(stored.favoriteTones),
+    blockedTerms: normalizeBlockedTerms(stored.blockedTerms),
     aiModel: String(stored.aiModel ?? DEFAULT_SETTINGS.aiModel),
   };
 }
@@ -187,6 +195,7 @@ async function testModel(model: string, settings: ExtensionSettings): Promise<vo
 
 async function saveSettings(settings: Partial<ExtensionSettings>): Promise<ExtensionSettings> {
   const next = { ...(await getSettings()), ...settings };
+  next.blockedTerms = normalizeBlockedTerms(next.blockedTerms);
   await chrome.storage.local.set(next);
   return next;
 }
@@ -356,6 +365,7 @@ async function generateReply(
     count: rawInput.count ?? settings.draftCount,
     maxLength,
     useEmoji: rawInput.useEmoji ?? settings.useEmoji,
+    blockedTerms: settings.blockedTerms.length ? settings.blockedTerms : undefined,
     imageUrls: readImages ? rawInput.imageUrls : undefined,
     // Model choice lives only in the popup's Advanced tab, not per-generation
     // in the panel — see the GenerateInput type comment above.

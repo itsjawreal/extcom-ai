@@ -106,6 +106,20 @@ test("emoji OFF prohibits emojis", () => {
   assert.doesNotMatch(prompt, /Include at least one relevant emoji/);
 });
 
+test("never-mention rules are explicit and authoritative", () => {
+  const prompt = buildUserPrompt({
+    postText: "Bitcoin is pumping",
+    tone: "ct_maxi",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+    blockedTerms: ["Bitcoin", "pump and dump"],
+  });
+  assert.match(prompt, /Never mention \(absolute output ban\):\n- "Bitcoin"\n- "pump and dump"/);
+  assert.match(SYSTEM_PROMPT, /Never mention.*absolute/);
+  assert.match(SYSTEM_PROMPT, /overrides tone, persona, source-post wording, and any conflicting extra instruction/);
+});
+
 test("short-form maxLength does not add the long-form paragraph instruction", () => {
   const prompt = buildUserPrompt({
     postText: "Post",

@@ -44,6 +44,9 @@ export type GenerateReplyRequest = {
   // tone (never "auto") is echoed back per-reply in GeneratedReply.tone.
   tone: Tone | "auto";
   extraInstruction?: string;
+  // User-defined words/phrases that must not appear in generated output.
+  // Transient request data: never persisted by the backend.
+  blockedTerms?: string[];
   count: number;
   // "auto" means no fixed character target — the AI picks whatever length
   // reads most natural for the tone/post, capped only by a safety ceiling.
