@@ -215,12 +215,15 @@ generated at different tones, and a one-off instruction expanded:
 ### Create a standalone post
 
 On X Home or the `/compose/post` modal, click **✦ AI Post** next to X's own
-Post button. Describe the topic/angle, then choose tone, language, length,
-draft count, and emoji preference. If X's composer already contains text,
-the panel also offers **Rewrite** and **Continue** modes. **Insert** only
-fills that composer; the extension never clicks the final Post button. If
-you edit the composer after generation, insertion stops instead of
-overwriting your newer text.
+Post button. Type the topic, angle, or draft directly in X's **What's
+happening?** composer, then choose Fresh, Rewrite, or Continue plus tone,
+language, length, draft count, and emoji preference. Fresh treats the composer
+text as source material for a new post; Rewrite and Continue treat it as the
+working draft. **Insert** only fills that composer; the extension never clicks
+the final Post button. The AI Post panel stays open after Insert so another
+Fresh, Rewrite, or Continue pass can use the inserted text immediately. If you
+edit the composer after generation, insertion stops instead of overwriting your
+newer text.
 
 ### Optional: let it read images in posts
 

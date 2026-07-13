@@ -5,8 +5,18 @@ import {
 } from "./replyComposer";
 import { findStandaloneComposers, POST_COMPOSER_SESSION_ATTRIBUTE } from "./postComposerObserver";
 
-function normalizeComposerText(text: string): string {
-  return text.replace(/\u00a0/g, " ").replace(/\r\n/g, "\n").trim();
+function normalizeComposerSnapshot(text: string): string {
+  // Both values come from getComposerText(), so their DOM representation is
+  // directly comparable. Preserve authored whitespace here: adding a blank
+  // line after generation is a user edit and must stop replacement.
+  return text.replace(/\u00a0/g, " ").replace(/\r\n?/g, "\n").trim();
+}
+
+function normalizeRenderedText(text: string): string {
+  // Draft.js stores paragraphs as ContentBlocks. Chromium innerText can expose
+  // extra newlines at their DOM boundaries, so compare authored tokens rather
+  // than browser-specific block whitespace only when verifying inserted text.
+  return text.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function findLiveComposer(initialRoot: HTMLElement): { root: HTMLElement; editable: HTMLElement } | null {
@@ -41,20 +51,16 @@ export function readStandaloneComposerSnapshot(root: HTMLElement): { available: 
   return { available: true, text: getComposerText(resolveEditableTarget(live.editable)) };
 }
 
-export function readStandaloneComposerText(root: HTMLElement): string {
-  return readStandaloneComposerSnapshot(root).text;
-}
-
 export async function insertPostIntoComposer(
   initialRoot: HTMLElement,
   expectedExistingText: string,
   text: string,
-): Promise<void> {
+): Promise<HTMLElement> {
   let composer = findLiveComposer(initialRoot);
   if (!composer) throw new Error("Post composer is no longer open.");
 
   const currentText = getComposerText(resolveEditableTarget(composer.editable));
-  if (normalizeComposerText(currentText) !== normalizeComposerText(expectedExistingText)) {
+  if (normalizeComposerSnapshot(currentText) !== normalizeComposerSnapshot(expectedExistingText)) {
     throw new Error("Composer text changed after generation. Generate again before inserting so your edits are not overwritten.");
   }
 
@@ -62,7 +68,7 @@ export async function insertPostIntoComposer(
   if (!inserted) {
     composer = findLiveComposer(initialRoot) ?? composer;
     const retryText = getComposerText(resolveEditableTarget(composer.editable));
-    if (normalizeComposerText(retryText) !== normalizeComposerText(expectedExistingText)) {
+    if (normalizeComposerSnapshot(retryText) !== normalizeComposerSnapshot(expectedExistingText)) {
       throw new Error("Composer changed during insertion. Check its current text before trying again; insertion stopped to avoid overwriting it.");
     }
     inserted = await insertTextIntoComposer(composer.editable, text);
@@ -71,7 +77,8 @@ export async function insertPostIntoComposer(
 
   composer = findLiveComposer(initialRoot) ?? composer;
   const editable = resolveEditableTarget(composer.editable);
-  if (normalizeComposerText(getComposerText(editable)) !== normalizeComposerText(text)) {
+  if (normalizeRenderedText(getComposerText(editable)) !== normalizeRenderedText(text)) {
     throw new Error("Post composer could not be verified after insertion.");
   }
+  return composer.root;
 }
