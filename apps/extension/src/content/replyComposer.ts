@@ -1,8 +1,10 @@
 import { insertViaPageBridge } from "./pageBridge";
 
 const REPLY_CONTROL_SELECTOR = '[data-testid="reply"]';
-const RETWEET_CONTROL_SELECTOR = '[data-testid="retweet"]';
-const QUOTE_MENU_ITEM_TEXT = /quote/i;
+// X flips the action test id after a post has already been reposted. Both
+// states open the same menu; Quote remains available beside Repost/Undo.
+const RETWEET_CONTROL_SELECTOR = '[data-testid="retweet"], [data-testid="unretweet"]';
+const QUOTE_MENU_ITEM_TEXT = /\b(?:quote|kutip)\b/iu;
 const COMPOSER_SELECTOR = [
   '[data-testid="tweetTextarea_0"]',
   '[data-testid="tweetTextarea_1"]',
@@ -144,23 +146,13 @@ function setSelection(editable: HTMLElement, mode: "all" | "end"): boolean {
   }
 }
 
-function dispatchComposerInput(composer: HTMLElement, text: string): void {
-  composer.dispatchEvent(new InputEvent("beforeinput", {
-    bubbles: true,
-    cancelable: true,
-    inputType: "insertText",
-    data: text,
-  }));
-  composer.dispatchEvent(new InputEvent("input", {
-    bubbles: true,
-    inputType: "insertText",
-    data: text,
-  }));
-}
-
 function primeComposer(editable: HTMLElement): void {
   editable.focus();
   editable.click();
+}
+
+function waitForEditorFrame(): Promise<void> {
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
 }
 
 export function getComposerText(editable: HTMLElement): string {
@@ -179,10 +171,22 @@ export function getComposerText(editable: HTMLElement): string {
   return text.replace(/\u00a0/g, " ").replace(/\r\n?/g, "\n").trim();
 }
 
+function normalizeComposerTextForComparison(value: string): string {
+  return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function composerContainsText(editable: HTMLElement, text: string): boolean {
-  const actual = getComposerText(editable);
-  const expected = text.replace(/\u00a0/g, " ").trim();
+  const actual = normalizeComposerTextForComparison(getComposerText(editable));
+  const expected = normalizeComposerTextForComparison(text);
   return actual === expected || actual.includes(expected);
+}
+
+function composerMatchesText(editable: HTMLElement, text: string): boolean {
+  // X/Draft.js renders newlines as block elements. innerText may add an extra
+  // newline at block boundaries while the controlled EditorState is correct.
+  // Normalize render-only whitespace but keep all authored tokens strict.
+  return normalizeComposerTextForComparison(getComposerText(editable)) ===
+    normalizeComposerTextForComparison(text);
 }
 
 async function tryPasteIntoComposer(editable: HTMLElement, text: string): Promise<boolean> {
@@ -198,7 +202,7 @@ async function tryPasteIntoComposer(editable: HTMLElement, text: string): Promis
       cancelable: true,
       clipboardData: transfer,
     }));
-    if (composerContainsText(editable, text)) return true;
+    if (composerMatchesText(editable, text)) return true;
 
     // Controlled editors normally cancel paste while applying it themselves.
     // Give that handler one frame to update state before trying another method;
@@ -206,7 +210,7 @@ async function tryPasteIntoComposer(editable: HTMLElement, text: string): Promis
     if (!notCanceled) {
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
     }
-    return composerContainsText(editable, text);
+    return composerMatchesText(editable, text);
   } catch {
     return false;
   }
@@ -227,34 +231,33 @@ export async function insertTextIntoComposer(composer: HTMLElement, text: string
   primeComposer(editable);
 
   const currentText = getComposerText(editable);
-  setSelection(editable, currentText ? "all" : "end");
 
+  // Replacement is handled once in X's own page context. Trying an
+  // isolated-world edit first and then falling back can append the same text
+  // twice when X ignores the Range selection but still mutates its state.
+  if (currentText) {
+    const bridged = await insertViaPageBridge(editable, text);
+    if (!bridged) return false;
+    await waitForEditorFrame();
+    return composerMatchesText(editable, text);
+  }
+
+  // Synthetic paste is safe only for a genuinely empty composer.
+  setSelection(editable, "end");
   if (await tryPasteIntoComposer(editable, text)) {
     editable.focus();
     return true;
   }
+  // A canceled/failed paste may still have mutated a controlled editor. Never
+  // follow a partial write with another insertion attempt.
+  if (getComposerText(editable)) return false;
 
-  let inserted = false;
-  try {
-    if (currentText) {
-      document.execCommand("delete");
-      setSelection(editable, "end");
-    }
-    inserted = document.execCommand("insertText", false, text);
-  } catch {
-    inserted = false;
-  }
-
-  if (!inserted) {
-    return insertViaPageBridge(editable, text);
-  }
-
-  dispatchComposerInput(editable, text);
-  if (getComposerText(editable).length > 0) return true;
-
-  // execCommand reported success but the editor state stayed empty (X's editor
-  // can swallow isolated-world edits). Retry from the page context.
-  return insertViaPageBridge(editable, text);
+  // Keep the fallback state-driven too. Native insertText mutates Draft's DOM
+  // outside React and can leave stale nodes or lose all but the final line.
+  const bridged = await insertViaPageBridge(editable, text);
+  if (!bridged) return false;
+  await waitForEditorFrame();
+  return composerMatchesText(editable, text);
 }
 
 export async function insertReplyIntoComposer(post: HTMLElement, text: string): Promise<void> {

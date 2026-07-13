@@ -17,8 +17,22 @@ if (!(window as typeof window & { __extcomAiPageInsertInstalled__?: boolean })._
     text: string;
   };
 
-  const getText = (element: HTMLElement): string =>
-    element.textContent?.replace(/\u00a0/g, " ").trim() || "";
+  type InsertResult = {
+    ok: boolean;
+    reason?: string;
+  };
+
+  const wait = (ms: number): Promise<void> =>
+    new Promise((resolve) => window.setTimeout(resolve, ms));
+
+  const getText = (element: HTMLElement): string => {
+    const authoredText = element.textContent?.replace(/\u00a0/g, " ").trim() || "";
+    if (!authoredText) return "";
+    return (element.innerText || authoredText)
+      .replace(/\u00a0/g, " ")
+      .replace(/\r\n?/g, "\n")
+      .trim();
+  };
 
   const resolveEditableTarget = (composer: HTMLElement): HTMLElement => {
     if (composer.matches('[contenteditable="true"]')) return composer;
@@ -46,40 +60,105 @@ if (!(window as typeof window & { __extcomAiPageInsertInstalled__?: boolean })._
     }
   };
 
-  const insertIntoComposer = (composer: HTMLElement, text: string): boolean => {
-    const editable = resolveEditableTarget(composer);
-    editable.focus();
-    editable.click();
+  const selectionIsInside = (editable: HTMLElement): boolean => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false;
+    const isInside = (node: Node | null): boolean => {
+      if (!node) return false;
+      return node === editable || editable.contains(node.nodeType === Node.ELEMENT_NODE ? node : node.parentNode);
+    };
+    return isInside(selection.anchorNode) && isInside(selection.focusNode);
+  };
 
-    const currentText = getText(editable);
-    setSelection(editable, currentText ? "all" : "end");
+  const normalizeText = (value: string): string =>
+    value.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 
-    let inserted = false;
+  const textIsEquivalent = (actual: string, expected: string): boolean =>
+    normalizeText(actual) === normalizeText(expected);
+
+  const selectionCoversText = (editable: HTMLElement, expected: string): boolean => {
+    if (!selectionIsInside(editable)) return false;
+    return normalizeText(window.getSelection()?.toString() || "") === normalizeText(expected);
+  };
+
+  const selectAllEditableText = (editable: HTMLElement, expected: string): boolean => {
+    // Unlike a Range created by an extension isolated world, selectAll updates
+    // the active editable region through Chromium's native editing command.
+    // Never fall back to a DOM Range for replacement: Draft.js may paint that
+    // range without accepting it into its controlled EditorState.
     try {
-      if (currentText) {
-        document.execCommand("delete");
-        setSelection(editable, "end");
-      }
-      inserted = document.execCommand("insertText", false, text);
+      document.execCommand("selectAll", false);
     } catch {
-      inserted = false;
+      return false;
+    }
+    return selectionCoversText(editable, expected);
+  };
+
+  const pasteIntoEditor = (editable: HTMLElement, text: string): boolean => {
+    if (typeof DataTransfer === "undefined" || typeof ClipboardEvent === "undefined") {
+      return false;
     }
 
-    if (!inserted) return false;
+    try {
+      const transfer = new DataTransfer();
+      transfer.setData("text/plain", text);
+      editable.dispatchEvent(new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: transfer,
+      }));
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
-    editable.dispatchEvent(new InputEvent("beforeinput", {
-      bubbles: true,
-      cancelable: true,
-      inputType: "insertText",
-      data: text,
-    }));
-    editable.dispatchEvent(new InputEvent("input", {
-      bubbles: true,
-      inputType: "insertText",
-      data: text,
-    }));
+  const insertIntoComposer = async (composer: HTMLElement, text: string): Promise<InsertResult> => {
+    const editable = resolveEditableTarget(composer);
+    const currentText = getText(editable);
 
-    return getText(editable).length > 0;
+    editable.focus({ preventScroll: true });
+    // X uses Draft.js. Its controlled SelectionState trails DOM focus changes;
+    // proven X automation waits before selecting and again before insertion.
+    await wait(300);
+    if (document.activeElement !== editable && !editable.contains(document.activeElement)) {
+      return { ok: false, reason: "composer-did-not-keep-focus" };
+    }
+
+    const selectionReady = currentText
+      ? selectAllEditableText(editable, currentText)
+      : setSelection(editable, "end");
+    if (!selectionReady) return { ok: false, reason: "full-draft-selection-not-established" };
+
+    await wait(200);
+    if (currentText && !selectionCoversText(editable, currentText)) {
+      return { ok: false, reason: "full-draft-selection-was-lost" };
+    }
+
+    // Let Draft.js own the mutation. Its paste handler converts multiline text
+    // into ContentBlocks and updates EditorState before React renders the DOM.
+    // Native insertText mutates the DOM first; on X that can leave stale nodes
+    // which duplicate on the user's next edit, and multiline input may update
+    // only the final block in Draft's state.
+    if (!pasteIntoEditor(editable, text)) {
+      return { ok: false, reason: "editor-paste-event-failed" };
+    }
+
+    await wait(250);
+    const expectedText = text.replace(/\u00a0/g, " ").replace(/\r\n?/g, "\n").trim();
+    const actualText = getText(editable);
+    // Draft.js represents line breaks as separate content blocks. Chromium's
+    // innerText can expose those block boundaries as an extra newline even
+    // though Draft's EditorState contains the exact inserted text. Compare
+    // semantic text here; duplicated or missing words still fail closed.
+    if (!textIsEquivalent(actualText, expectedText)) {
+      return {
+        ok: false,
+        reason: `exact-text-check-failed(before=${currentText.length}, expected=${expectedText.length}, actual=${actualText.length})`,
+      };
+    }
+
+    return { ok: true };
   };
 
   document.addEventListener(REQUEST_EVENT, (event) => {
@@ -91,11 +170,13 @@ if (!(window as typeof window & { __extcomAiPageInsertInstalled__?: boolean })._
       `[${detail.targetAttribute}="${detail.id}"]`,
     );
 
-    const response = {
-      id: detail.id,
-      ok: composer ? insertIntoComposer(composer, detail.text) : false,
-    };
-
-    document.dispatchEvent(new CustomEvent(RESPONSE_EVENT, { detail: response }));
+    void (async () => {
+      const result = composer
+        ? await insertIntoComposer(composer, detail.text)
+        : { ok: false, reason: "composer-target-not-found" };
+      document.dispatchEvent(new CustomEvent(RESPONSE_EVENT, {
+        detail: { id: detail.id, ...result },
+      }));
+    })();
   });
 }

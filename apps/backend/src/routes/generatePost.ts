@@ -24,6 +24,9 @@ type GenerateFn = (input: GeneratePostRequest) => Promise<{
 }>;
 
 const PRICING_LOOKUP_TIMEOUT_MS = 3_000;
+const AUTO_POST_LENGTH_CEILING = 280;
+const MIN_CONTINUE_ADDITION_LENGTH = 50;
+const MAX_POST_LENGTH = 25_000;
 
 function optionalString(value: unknown, maxLength: number, field: string): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
@@ -88,9 +91,26 @@ export function validateGeneratePostRequest(value: unknown): GeneratePostRequest
   const maxLength = body.maxLength === undefined ? 220 : body.maxLength;
   if (
     maxLength !== "auto" &&
-    (!Number.isInteger(maxLength) || Number(maxLength) < 50 || Number(maxLength) > 25_000)
+    (!Number.isInteger(maxLength) || Number(maxLength) < 50 || Number(maxLength) > MAX_POST_LENGTH)
   ) {
     throw new Error('maxLength must be "auto" or an integer between 50 and 25000.');
+  }
+  if (body.mode === "continue" && existingDraft) {
+    const requiredLength = existingDraft.length + MIN_CONTINUE_ADDITION_LENGTH;
+    if (requiredLength > MAX_POST_LENGTH) {
+      throw new Error(
+        `continue mode cannot extend this ${existingDraft.length}-character draft within the 25000-character maximum.`,
+      );
+    }
+    const effectiveLimit = maxLength === "auto" ? AUTO_POST_LENGTH_CEILING : Number(maxLength);
+    if (effectiveLimit < requiredLength) {
+      const alternative = requiredLength <= AUTO_POST_LENGTH_CEILING
+        ? ` Set maxLength to at least ${requiredLength}, or use "auto".`
+        : ` Set maxLength to at least ${requiredLength}.`;
+      throw new Error(
+        `continue mode needs room after the existing ${existingDraft.length}-character draft.${alternative}`,
+      );
+    }
   }
   const useEmoji = body.useEmoji === undefined ? true : body.useEmoji;
   if (typeof useEmoji !== "boolean") throw new Error("useEmoji must be a boolean.");
