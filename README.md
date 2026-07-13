@@ -1,10 +1,9 @@
 # Extcom AI Reply
 
-A self-hosted, human-in-the-loop AI reply copilot for X/Twitter. A Chrome
-extension adds an **✦ AI Reply** button to posts; your own backend generates
-reply drafts with the AI provider key **you** control; you pick a draft, it is
-inserted into the reply composer (or a Quote Tweet's comment box), and **you
-always press Post yourself**.
+A self-hosted, human-in-the-loop AI writing copilot for X/Twitter. A Chrome
+extension adds **✦ AI Reply** to posts and **✦ AI Post** to X's standalone
+composer; your own backend generates drafts with the AI provider key **you**
+control; you choose and insert a draft, and **you always press Post yourself**.
 
 - No SaaS, no signup, no telemetry: deploy the backend on your own VPS/PaaS.
 - Your AI API key (OpenRouter or OpenAI) never leaves your server.
@@ -19,14 +18,14 @@ Chrome extension ──(your access token)──▶ your backend ──(your API
 - **Backend/server environment:** `OPENROUTER_API_KEY` or `OPENAI_API_KEY`,
   `AUTH_TOKENS`, optional `ADMIN_SECRET`, model, and database path.
 - **Backend source file (`apps/backend/PERSONA.md`):** optional persistent
-  voice/identity applied to every reply this backend generates, no
+  voice/identity applied to every draft this backend generates, no
   per-user setting involved. Ships empty (no effect) by default. It's a
   git-tracked file baked into the Docker image, so on a PaaS deploy,
   editing it means commit + redeploy like any code change (VPS with a live
   checkout can just edit + rebuild locally). See
   [docs/PROMPT.md](docs/PROMPT.md#persona).
 - **Extension popup (Settings → Default):** default tone, standing
-  instruction, default reply length, draft count, use emoji, read images.
+  instruction, default max length, draft count, use emoji, read images.
 - **Extension popup (Settings → Advanced):** public backend URL, one backend
   access token, optional AI model override (picked from a live-fetched
   dropdown or typed as custom, falls back to the backend's own
@@ -112,8 +111,8 @@ tokens, usage counters) is lost on every redeploy or restart.
 
 The backend exposes `GET /health`, `GET /v1/me` (bearer token, checks
 connection/plan/remaining quota without consuming it), `POST
-/v1/generate-reply` (bearer token), and `POST|GET /v1/admin/tokens` (admin
-secret, optional).
+/v1/generate-reply`, `POST /v1/generate-post` (both bearer token), and
+`POST|GET /v1/admin/tokens` (admin secret, optional).
 
 ### Real-world cost example
 
@@ -170,13 +169,13 @@ extension folder at all.
    **Home** — connection status, total generations, and total drafts
    inserted. A bottom nav switches between **Home**, **History**, **Tone**,
    and **Advanced**.
-2. **History** tab: every generation, filterable by All / Reply / Quote /
+2. **History** tab: every generation, filterable by All / Post / Reply / Quote /
    Not inserted, each entry with a ↗ link back to the post it was inserted
    into.
 3. **Tone** tab: default tone (24 available, from `degen` to `roast` to
    `philosophical`, plus **Auto** which lets the AI pick whichever tone
    best fits each post — see `docs/API.md` for the full list, pin up to 5
-   as quick-pick chips), standing instruction, default reply length (a
+   as quick-pick chips), standing instruction, default maximum length (a
    fixed character count, or **Auto** to let the AI pick a natural length
    capped at 280 chars), draft count, and whether to use emoji / read
    images by default. See `docs/PROMPT.md` for exactly what's sent to the
@@ -212,6 +211,16 @@ A closer look at a few of its states — the tone dropdown open, drafts
 generated at different tones, and a one-off instruction expanded:
 
 <img src="docs/assets/reply-generator-popup.png" alt="The AI Reply panel open on x.com in four states: context summary, the tone dropdown open, generated draft cards with Copy/Regenerate/Quote/Insert, and a one-off instruction expanded with more drafts" width="900">
+
+### Create a standalone post
+
+On X Home or the `/compose/post` modal, click **✦ AI Post** next to X's own
+Post button. Describe the topic/angle, then choose tone, language, length,
+draft count, and emoji preference. If X's composer already contains text,
+the panel also offers **Rewrite** and **Continue** modes. **Insert** only
+fills that composer; the extension never clicks the final Post button. If
+you edit the composer after generation, insertion stops instead of
+overwriting your newer text.
 
 ### Optional: let it read images in posts
 

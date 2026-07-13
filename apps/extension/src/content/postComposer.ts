@@ -1,0 +1,77 @@
+import {
+  getComposerText,
+  insertTextIntoComposer,
+  resolveEditableTarget,
+} from "./replyComposer";
+import { findStandaloneComposers, POST_COMPOSER_SESSION_ATTRIBUTE } from "./postComposerObserver";
+
+function normalizeComposerText(text: string): string {
+  return text.replace(/\u00a0/g, " ").replace(/\r\n/g, "\n").trim();
+}
+
+function findLiveComposer(initialRoot: HTMLElement): { root: HTMLElement; editable: HTMLElement } | null {
+  const composers = findStandaloneComposers();
+  const exact = composers.find(({ root }) => root === initialRoot);
+  if (exact) return exact;
+
+  const sessionId = initialRoot.getAttribute(POST_COMPOSER_SESSION_ATTRIBUTE);
+  if (!sessionId) return null;
+  const sameSession = composers.find(
+    ({ root }) => root.getAttribute(POST_COMPOSER_SESSION_ATTRIBUTE) === sessionId,
+  );
+  if (sameSession) return sameSession;
+
+  // MutationObserver reconciliation runs on the next animation frame. If X
+  // swaps the root and the user acts inside that tiny window, transfer the
+  // still-valid session eagerly. A completed scan with no composer removes
+  // the old root's session id, so a genuinely new composer cannot enter here.
+  const expectedModal = initialRoot.matches('[role="dialog"]');
+  const replacement = composers.find(({ root }) =>
+    !root.hasAttribute(POST_COMPOSER_SESSION_ATTRIBUTE) &&
+    root.matches('[role="dialog"]') === expectedModal
+  );
+  if (!replacement) return null;
+  replacement.root.setAttribute(POST_COMPOSER_SESSION_ATTRIBUTE, sessionId);
+  return replacement;
+}
+
+export function readStandaloneComposerSnapshot(root: HTMLElement): { available: boolean; text: string } {
+  const live = findLiveComposer(root);
+  if (!live) return { available: false, text: "" };
+  return { available: true, text: getComposerText(resolveEditableTarget(live.editable)) };
+}
+
+export function readStandaloneComposerText(root: HTMLElement): string {
+  return readStandaloneComposerSnapshot(root).text;
+}
+
+export async function insertPostIntoComposer(
+  initialRoot: HTMLElement,
+  expectedExistingText: string,
+  text: string,
+): Promise<void> {
+  let composer = findLiveComposer(initialRoot);
+  if (!composer) throw new Error("Post composer is no longer open.");
+
+  const currentText = getComposerText(resolveEditableTarget(composer.editable));
+  if (normalizeComposerText(currentText) !== normalizeComposerText(expectedExistingText)) {
+    throw new Error("Composer text changed after generation. Generate again before inserting so your edits are not overwritten.");
+  }
+
+  let inserted = await insertTextIntoComposer(composer.editable, text);
+  if (!inserted) {
+    composer = findLiveComposer(initialRoot) ?? composer;
+    const retryText = getComposerText(resolveEditableTarget(composer.editable));
+    if (normalizeComposerText(retryText) !== normalizeComposerText(expectedExistingText)) {
+      throw new Error("Composer changed during insertion. Check its current text before trying again; insertion stopped to avoid overwriting it.");
+    }
+    inserted = await insertTextIntoComposer(composer.editable, text);
+  }
+  if (!inserted) throw new Error("Post composer could not be filled.");
+
+  composer = findLiveComposer(initialRoot) ?? composer;
+  const editable = resolveEditableTarget(composer.editable);
+  if (normalizeComposerText(getComposerText(editable)) !== normalizeComposerText(text)) {
+    throw new Error("Post composer could not be verified after insertion.");
+  }
+}

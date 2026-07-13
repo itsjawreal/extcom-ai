@@ -26,6 +26,8 @@ export type Tone =
 
 export type ReadImagesMode = "auto" | "off" | "on";
 
+export type ContentKind = "reply" | "quote" | "post";
+
 export type GeneratedReply = {
   id: string;
   text: string;
@@ -66,6 +68,22 @@ export type GenerateReplyRequest = ExtractedPostContext & {
   model?: string;
 };
 
+export type GeneratePostMode = "fresh" | "rewrite" | "continue";
+
+export type GeneratePostRequest = {
+  brief: string;
+  existingDraft?: string;
+  mode: GeneratePostMode;
+  language: "brief" | "en";
+  tone: Tone | "auto";
+  extraInstruction?: string;
+  blockedTerms?: string[];
+  count: number;
+  maxLength: number | "auto";
+  useEmoji: boolean;
+  model?: string;
+};
+
 export type ModelOption = {
   id: string;
   name?: string;
@@ -93,6 +111,10 @@ export type GenerateReplyResponse = {
     completionTokens: number;
     estimatedCostUsd?: number;
   };
+};
+
+export type GeneratePostResponse = Omit<GenerateReplyResponse, "replies"> & {
+  posts: GeneratedReply[];
 };
 
 export type ExtensionSettings = {
@@ -124,13 +146,19 @@ export type ConnectionStatus = {
 export type HistoryEntry = {
   id: string;
   createdAt: string;
+  // Optional for backward compatibility with history written before the
+  // standalone post generator existed. Old entries are treated as replies.
+  contentKind?: ContentKind;
+  // Neutral source field for new consumers. postText remains required so old
+  // popup builds can still render history produced by a newer service worker.
+  sourceText?: string;
   postText: string;
   postUrl?: string;
   tone: Tone;
   drafts: string[];
   inserted: boolean;
   // Only set once inserted — which composer the draft was inserted into.
-  insertKind?: "reply" | "quote";
+  insertKind?: ContentKind;
   // Absent for entries recorded before this field existed, or when the
   // provider didn't return usage data for that generation.
   model?: string;
@@ -145,7 +173,7 @@ export type UsageStats = {
   history: HistoryEntry[];
   // Tracks which history entries have been inserted (survives eviction from
   // history[] when cap is reached). Prevents insert count divergence.
-  insertedIds?: Record<string, "reply" | "quote">;
+  insertedIds?: Record<string, ContentKind>;
   // Optional (like insertedIds above) so existing stored stats without these
   // fields don't need a migration — getUsageStats() normalizes them to 0.
   totalPromptTokens?: number;

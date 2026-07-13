@@ -6,8 +6,11 @@ import {
   TONE_LABELS,
 } from "../shared/constants";
 import type {
+  ContentKind,
   ConnectionStatus,
   ExtensionSettings,
+  GeneratePostRequest,
+  GeneratePostResponse,
   GenerateReplyRequest,
   GenerateReplyResponse,
   HistoryEntry,
@@ -88,14 +91,25 @@ type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" |
   readImages?: ReadImagesMode | boolean;
 };
 
+// The same popup-level defaults used for replies also apply to standalone
+// posts. The composer may override them for one generation, but never the
+// model or local blocklist.
+type GeneratePostInput = Omit<GeneratePostRequest, "tone" | "count" | "maxLength" | "useEmoji" | "model" | "blockedTerms"> & {
+  tone?: Tone | "auto";
+  count?: number;
+  maxLength?: number | "auto";
+  useEmoji?: boolean;
+};
+
 type RuntimeMessage =
   | { type: "GET_SETTINGS" }
   | { type: "SAVE_SETTINGS"; settings: Partial<ExtensionSettings> }
   | { type: "CHECK_CONNECTION" }
   | { type: "GENERATE_REPLY"; input: GenerateInput }
+  | { type: "GENERATE_POST"; input: GeneratePostInput }
   | { type: "GET_USAGE_STATS" }
   | { type: "CLEAR_USAGE_STATS" }
-  | { type: "RECORD_INSERT"; historyId: string; kind: "reply" | "quote" }
+  | { type: "RECORD_INSERT"; historyId: string; kind: ContentKind }
   | { type: "GET_MODELS" }
   | { type: "TEST_MODEL"; model: string };
 
@@ -103,7 +117,7 @@ type RuntimeResponse =
   | {
       ok: true;
       settings?: ExtensionSettings;
-      data?: GenerateReplyResponse;
+      data?: GenerateReplyResponse | GeneratePostResponse;
       connection?: ConnectionStatus;
       usageStats?: UsageStats;
       historyId?: string;
@@ -224,6 +238,7 @@ async function getUsageStats(): Promise<UsageStats> {
     totalGenerations: Number.isFinite(stats?.totalGenerations) ? Number(stats?.totalGenerations) : 0,
     totalInserted: Number.isFinite(stats?.totalInserted) ? Number(stats?.totalInserted) : 0,
     history: Array.isArray(stats?.history) ? (stats?.history as HistoryEntry[]) : [],
+    insertedIds: stats?.insertedIds && typeof stats.insertedIds === "object" ? stats.insertedIds : {},
     totalPromptTokens: Number.isFinite(stats?.totalPromptTokens) ? Number(stats?.totalPromptTokens) : 0,
     totalCompletionTokens: Number.isFinite(stats?.totalCompletionTokens) ? Number(stats?.totalCompletionTokens) : 0,
     totalEstimatedCostUsd: Number.isFinite(stats?.totalEstimatedCostUsd) ? Number(stats?.totalEstimatedCostUsd) : 0,
@@ -237,12 +252,13 @@ async function saveUsageStats(stats: UsageStats): Promise<void> {
 async function recordGeneration(
   input: GenerateInput,
   data: GenerateReplyResponse,
-  settings: ExtensionSettings,
 ): Promise<string> {
   const historyId = crypto.randomUUID();
   const entry: HistoryEntry = {
     id: historyId,
     createdAt: new Date().toISOString(),
+    contentKind: "reply",
+    sourceText: truncateForHistory(input.postText),
     postText: truncateForHistory(input.postText),
     postUrl: input.postUrl,
     // data.replies[0].tone is always the backend's *resolved* tone (never
@@ -272,7 +288,44 @@ async function recordGeneration(
   return historyId;
 }
 
-async function recordInsert(historyId: string, kind: "reply" | "quote"): Promise<void> {
+async function recordPostGeneration(
+  input: GeneratePostInput,
+  data: GeneratePostResponse,
+): Promise<string> {
+  const historyId = crypto.randomUUID();
+  const sourceText = truncateForHistory(input.brief.trim() || input.existingDraft?.trim() || "");
+  const entry: HistoryEntry = {
+    id: historyId,
+    createdAt: new Date().toISOString(),
+    contentKind: "post",
+    sourceText,
+    // Keep the legacy field populated until every history consumer has moved
+    // to sourceText. This also makes rollback to an older popup harmless.
+    postText: sourceText,
+    tone: data.posts[0]?.tone ?? "smart",
+    drafts: data.posts.map((post) => post.text),
+    inserted: false,
+    model: data.model,
+    promptTokens: data.tokenUsage?.promptTokens,
+    completionTokens: data.tokenUsage?.completionTokens,
+    estimatedCostUsd: data.tokenUsage?.estimatedCostUsd,
+  };
+
+  const stats = await getUsageStats();
+  stats.totalGenerations += 1;
+  stats.history = [entry, ...stats.history].slice(0, HISTORY_CAP);
+  if (data.tokenUsage) {
+    stats.totalPromptTokens = (stats.totalPromptTokens ?? 0) + data.tokenUsage.promptTokens;
+    stats.totalCompletionTokens = (stats.totalCompletionTokens ?? 0) + data.tokenUsage.completionTokens;
+    if (data.tokenUsage.estimatedCostUsd !== undefined) {
+      stats.totalEstimatedCostUsd = (stats.totalEstimatedCostUsd ?? 0) + data.tokenUsage.estimatedCostUsd;
+    }
+  }
+  await saveUsageStats(stats);
+  return historyId;
+}
+
+async function recordInsert(historyId: string, kind: ContentKind): Promise<void> {
   const stats = await getUsageStats();
   const entry = stats.history.find((item) => item.id === historyId);
 
@@ -282,6 +335,7 @@ async function recordInsert(historyId: string, kind: "reply" | "quote"): Promise
     if (!entry.inserted) {
       entry.inserted = true;
       entry.insertKind = kind;
+      entry.contentKind = kind;
       stats.totalInserted += 1;
     }
   } else {
@@ -325,8 +379,8 @@ function truncateReply(text: string, maxLength: number | "auto"): string {
 
   // Reserve 1 char for the ellipsis so the marked result still fits limit.
   const cut = text.slice(0, limit - 1);
-  const lastSpace = cut.lastIndexOf(" ");
-  const trimmed = lastSpace > limit * 0.5 ? cut.slice(0, lastSpace) : cut;
+  const lastBoundary = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("\n"));
+  const trimmed = lastBoundary > limit * 0.5 ? cut.slice(0, lastBoundary) : cut;
   return `${trimmed.trimEnd()}…`;
 }
 
@@ -425,6 +479,68 @@ async function generateReply(
   };
 }
 
+async function generatePost(
+  rawInput: GeneratePostInput,
+  settings: ExtensionSettings,
+): Promise<GeneratePostResponse> {
+  const { baseUrl, token } = requireBackend(settings);
+  const combinedInstruction = [settings.defaultInstruction.trim(), rawInput.extraInstruction?.trim()]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, MAX_INSTRUCTION_LENGTH);
+  const requestedMaxLength = rawInput.maxLength ?? settings.maxReplyLength;
+  const maxLength = requestedMaxLength === "auto" ? "auto" : clampReplyLength(requestedMaxLength);
+
+  const input: GeneratePostRequest = {
+    ...rawInput,
+    brief: rawInput.brief?.trim() ?? "",
+    existingDraft: rawInput.existingDraft?.trim() || undefined,
+    tone: rawInput.tone ?? settings.toneDefault,
+    extraInstruction: combinedInstruction || undefined,
+    count: rawInput.count ?? settings.draftCount,
+    maxLength,
+    useEmoji: rawInput.useEmoji ?? settings.useEmoji,
+    blockedTerms: settings.blockedTerms.length ? settings.blockedTerms : undefined,
+    model: settings.aiModel || undefined,
+  };
+
+  const response = await fetchBackend(`${baseUrl}/v1/generate-post`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(input),
+  });
+  const body = await response.json().catch(() => ({})) as {
+    error?: { message?: string };
+    posts?: GeneratePostResponse["posts"];
+    usage?: GeneratePostResponse["usage"];
+    model?: GeneratePostResponse["model"];
+    tokenUsage?: GeneratePostResponse["tokenUsage"];
+  };
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("This backend does not support AI Post yet. Deploy the current backend build, then try again.");
+    }
+    throw new Error(body.error?.message || `Backend request failed with HTTP ${response.status}.`);
+  }
+  if (!Array.isArray(body.posts) || !body.usage) {
+    throw new Error("Backend response is incomplete.");
+  }
+
+  return {
+    posts: body.posts.map((post) => ({
+      ...post,
+      text: truncateReply(post.text, input.maxLength),
+    })),
+    usage: body.usage,
+    model: body.model ?? input.model ?? "unknown",
+    tokenUsage: body.tokenUsage,
+  };
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   console.info("Extcom AI Reply installed");
 });
@@ -459,7 +575,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         // compromised page cannot redirect the token to an arbitrary backend.
         const settings = await getSettings();
         const data = await generateReply(message.input, settings);
-        const historyId = await recordGeneration(message.input, data, settings);
+        const historyId = await recordGeneration(message.input, data);
+        sendResponse({ ok: true, data, historyId } satisfies RuntimeResponse);
+        return;
+      }
+      if (message?.type === "GENERATE_POST") {
+        const settings = await getSettings();
+        const data = await generatePost(message.input, settings);
+        const historyId = await recordPostGeneration(message.input, data);
         sendResponse({ ok: true, data, historyId } satisfies RuntimeResponse);
         return;
       }

@@ -1,6 +1,6 @@
 # Privacy Policy — Extcom AI Reply
 
-Effective date: 2026-07-11
+Effective date: 2026-07-13
 
 Extcom AI Reply is a self-hosted browser extension. There is no company
 server, no account system, and no telemetry. This page describes exactly
@@ -8,15 +8,16 @@ what data the extension touches and where it goes.
 
 ## What the extension does
 
-Extcom AI Reply adds an "AI Reply" button to posts on X/Twitter. When you
-click it, the extension reads the visible content of that specific post
+Extcom AI Reply adds "AI Reply" to posts and "AI Post" to X/Twitter's
+standalone composer. When you click AI Reply, the extension reads the visible content of that specific post
 (and, where detected, its immediate reply-chain context) and sends it to a
 backend server that you deploy and control, along with the generation
 settings you've chosen (tone, reply length, and similar). That backend
 calls an AI provider (OpenRouter or OpenAI) using an API key you supply,
-and returns draft replies. You review each draft and manually insert and
-post it — the extension never posts, clicks a Reply/Post button, or takes
-any action on your behalf.
+and returns draft replies. When you click AI Post, the brief you type and
+any existing text in that composer are sent through the same self-hosted
+backend to generate standalone post drafts. You review and manually insert
+every draft — the extension never clicks X's final Reply/Post button.
 
 ## Data the extension reads
 
@@ -24,6 +25,8 @@ any action on your behalf.
   specific post you click "AI Reply" on. This only happens when you click
   the button — the extension does not scan your timeline in the
   background.
+- The brief entered in the AI Post panel and existing text in that specific
+  standalone composer, only after you click AI Post and request generation.
 - Nothing outside the currently active X/Twitter tab. The extension has no
   access to any other tab, any other website, your browsing history, or
   your X/Twitter login credentials.
@@ -64,10 +67,10 @@ connection to any AI provider.
 
 - No account creation, login, or signup, anywhere in the extension.
 - No telemetry, analytics, or crash reporting.
-- No auto-posting. Every reply requires you to review the draft and press
-  Post yourself.
+- No auto-posting. Every reply or standalone post requires you to review the
+  draft and press Post yourself.
 - No background scraping of your timeline, DMs, or any content you have
-  not explicitly clicked "AI Reply" on.
+  not explicitly selected through AI Reply or AI Post.
 - No selling or sharing of data — the extension developer never receives
   any data to sell or share.
 

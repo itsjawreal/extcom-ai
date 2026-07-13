@@ -4,6 +4,7 @@ import test from "node:test";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { adminTokensRoute } from "./adminTokens.js";
 import { generateReplyRoute } from "./generateReply.js";
+import { generatePostRoute } from "./generatePost.js";
 import { meRoute } from "./me.js";
 import { modelsRoute } from "./models.js";
 import { testModelRoute } from "./testModel.js";
@@ -479,4 +480,73 @@ test("POST /v1/generate-reply does not let a hung pricing lookup delay the respo
   } finally {
     globalThis.fetch = previousFetch;
   }
+});
+
+test("POST /v1/generate-post requires auth", async () => {
+  const captured = captureResponse();
+  await generatePostRoute(request(JSON.stringify({ brief: "topic", mode: "fresh", tone: "smart" })), captured.response);
+  assert.equal(captured.statusCode, 401);
+});
+
+test("POST /v1/generate-post returns standalone post drafts and consumes one quota unit", async () => {
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const captured = captureResponse();
+  let receivedMode: string | undefined;
+
+  await generatePostRoute(
+    request(
+      JSON.stringify({ brief: "A take about open source", mode: "fresh", language: "brief", tone: "auto", count: 2 }),
+      { authorization: `Bearer ${token}` },
+    ),
+    captured.response,
+    async (input) => {
+      receivedMode = input.mode;
+      return { texts: ["first standalone post", "second standalone post"], tone: "smart", model: "test/model" };
+    },
+  );
+
+  assert.equal(captured.statusCode, 200);
+  assert.equal(receivedMode, "fresh");
+  assert.deepEqual(jsonBody(captured), {
+    posts: [
+      { id: "post_1", text: "first standalone post", tone: "smart" },
+      { id: "post_2", text: "second standalone post", tone: "smart" },
+    ],
+    usage: { remainingToday: rateLimitInternals.PLAN_LIMITS.pro.perDay - 1, plan: "pro" },
+    model: "test/model",
+  });
+});
+
+test("POST /v1/generate-post rejects unsafe instructions before consuming quota", async () => {
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const captured = captureResponse();
+  await generatePostRoute(
+    request(
+      JSON.stringify({ brief: "topic", mode: "fresh", tone: "smart", extraInstruction: "auto-post this for me" }),
+      { authorization: `Bearer ${token}` },
+    ),
+    captured.response,
+  );
+  assert.equal(captured.statusCode, 422);
+  assert.equal(peekRateLimit(token, "pro").remainingToday, rateLimitInternals.PLAN_LIMITS.pro.perDay);
+});
+
+test("POST /v1/generate-post refunds quota when generation fails", async () => {
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const captured = captureResponse();
+  await generatePostRoute(
+    request(
+      JSON.stringify({ brief: "topic", mode: "fresh", tone: "smart" }),
+      { authorization: `Bearer ${token}` },
+    ),
+    captured.response,
+    async () => {
+      throw new Error("provider failed");
+    },
+  );
+  assert.equal(captured.statusCode, 500);
+  assert.equal(peekRateLimit(token, "pro").remainingToday, rateLimitInternals.PLAN_LIMITS.pro.perDay);
 });
