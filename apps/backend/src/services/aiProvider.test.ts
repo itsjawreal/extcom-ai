@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generateWithOpenRouter, providerInternals } from "./aiProvider.js";
+import { generateReplies, generateWithOpenRouter, providerInternals } from "./aiProvider.js";
 import { resetModelCatalogCache } from "./modelCatalog.js";
 
 // generateWithOpenRouter now also looks up the model's supported_parameters
@@ -131,6 +131,50 @@ test("computeMaxTokens scales with maxLength and count, floored and capped", () 
     useEmoji: false,
   });
   assert.equal(extreme, 20_000);
+});
+
+test("blocked-term matching is case-insensitive without false substring matches", () => {
+  assert.equal(providerInternals.containsBlockedTerm("No BITCOIN here", "bitcoin"), true);
+  assert.equal(providerInternals.containsBlockedTerm("classic pump and dump setup", "Pump And Dump"), true);
+  assert.equal(providerInternals.containsBlockedTerm("a better solution", "sol"), false);
+  assert.equal(providerInternals.containsBlockedTerm("SOL looks strong", "sol"), true);
+});
+
+test("generation retries once after a blocked output and reports both attempts' usage", async () => {
+  const previousProvider = process.env.AI_DEFAULT_PROVIDER;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.AI_DEFAULT_PROVIDER = "openai";
+  process.env.OPENAI_API_KEY = "test-key";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    const text = calls === 1 ? "Bitcoin is flying" : "the market is flying";
+    return new Response(JSON.stringify({
+      output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ replies: [{ text }] }) }] }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const result = await generateReplies({
+      postText: "Post",
+      tone: "smart",
+      count: 1,
+      maxLength: 220,
+      useEmoji: false,
+      blockedTerms: ["bitcoin"],
+    });
+    assert.equal(calls, 2);
+    assert.deepEqual(result.texts, ["the market is flying"]);
+    assert.deepEqual(result.usage, { promptTokens: 20, completionTokens: 10 });
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousProvider === undefined) delete process.env.AI_DEFAULT_PROVIDER;
+    else process.env.AI_DEFAULT_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
 });
 
 test("OpenRouter is the default provider and requires its server-side key", async () => {

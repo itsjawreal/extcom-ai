@@ -42,6 +42,44 @@ export class ProviderError extends Error {
   }
 }
 
+function normalizeForBlockedTerm(value: string): string {
+  return value.normalize("NFKC").toLowerCase();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function containsBlockedTerm(text: string, term: string): boolean {
+  const normalizedText = normalizeForBlockedTerm(text);
+  const normalizedTerm = normalizeForBlockedTerm(term.trim());
+  if (!normalizedTerm) return false;
+
+  // A single word should not ban an unrelated larger word (e.g. "sol"
+  // must not reject "solution"). Phrases and punctuation-heavy rules use
+  // exact substring matching so user-entered wording stays predictable.
+  if (/^[\p{L}\p{N}_]+$/u.test(normalizedTerm)) {
+    return new RegExp(
+      `(?:^|[^\\p{L}\\p{N}_])${escapeRegExp(normalizedTerm)}(?=$|[^\\p{L}\\p{N}_])`,
+      "u",
+    ).test(normalizedText);
+  }
+  return normalizedText.includes(normalizedTerm);
+}
+
+function findBlockedTerm(texts: string[], blockedTerms: string[] | undefined): string | undefined {
+  return blockedTerms?.find((term) => texts.some((text) => containsBlockedTerm(text, term)));
+}
+
+function combineUsage(first: TokenUsage | null, next: TokenUsage | null): TokenUsage | null {
+  if (!first) return next;
+  if (!next) return first;
+  return {
+    promptTokens: first.promptTokens + next.promptTokens,
+    completionTokens: first.completionTokens + next.completionTokens,
+  };
+}
+
 // max_tokens/max_output_tokens has to scale with the requested reply length
 // or long-form (X Premium) requests get cut off mid-reply — or mid-JSON,
 // which breaks parsing entirely. 2.2 chars/token is a conservative floor
@@ -321,11 +359,33 @@ export async function generateWithOpenRouter(
   return { ...parsed, model, usage };
 }
 
-export async function generateReplies(input: GenerateReplyRequest): Promise<GenerateResult> {
+async function generateOnce(input: GenerateReplyRequest): Promise<GenerateResult> {
   const provider = process.env.AI_DEFAULT_PROVIDER || "openrouter";
   if (provider === "openrouter") return generateWithOpenRouter(input);
   if (provider === "openai") return generateWithOpenAI(input);
   throw new ProviderError(`Unsupported AI provider: ${provider}.`, 503);
 }
 
-export const providerInternals = { extractOutputText, parseReplies, computeMaxTokens };
+export async function generateReplies(input: GenerateReplyRequest): Promise<GenerateResult> {
+  const attempts = input.blockedTerms?.length ? 2 : 1;
+  let accumulatedUsage: TokenUsage | null = null;
+  let violation: string | undefined;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const result = await generateOnce(input);
+    accumulatedUsage = combineUsage(accumulatedUsage, result.usage);
+    violation = findBlockedTerm(result.texts, input.blockedTerms);
+    if (!violation) return { ...result, usage: accumulatedUsage };
+  }
+
+  throw new ProviderError(`AI provider repeatedly included a Never mention rule: ${JSON.stringify(violation)}.`);
+}
+
+export const providerInternals = {
+  extractOutputText,
+  parseReplies,
+  computeMaxTokens,
+  containsBlockedTerm,
+  findBlockedTerm,
+  combineUsage,
+};

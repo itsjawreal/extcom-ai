@@ -151,3 +151,27 @@ test("canonicalizes X legacy language codes and treats und as unknown", () => {
   assert.equal(indonesian.sourceLanguage, "id");
   assert.equal(unknown.sourceLanguage, undefined);
 });
+
+test("normalizes and deduplicates blocked terms case-insensitively", () => {
+  const input = validateGenerateRequest({
+    postText: "Post",
+    tone: "smart",
+    blockedTerms: ["  Bitcoin  ", "bitcoin", "pump and dump"],
+  });
+  assert.deepEqual(input.blockedTerms, ["Bitcoin", "pump and dump"]);
+});
+
+test("rejects invalid blocked terms", () => {
+  assert.throws(
+    () => validateGenerateRequest({ postText: "Post", tone: "smart", blockedTerms: Array(51).fill("x") }),
+    /at most 50 items/,
+  );
+  assert.throws(
+    () => validateGenerateRequest({ postText: "Post", tone: "smart", blockedTerms: [""] }),
+    /non-empty string of at most 80 characters/,
+  );
+  assert.throws(
+    () => validateGenerateRequest({ postText: "Post", tone: "smart", blockedTerms: ["x".repeat(81)] }),
+    /non-empty string of at most 80 characters/,
+  );
+});

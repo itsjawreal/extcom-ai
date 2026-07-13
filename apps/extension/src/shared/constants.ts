@@ -44,10 +44,29 @@ export const REPLY_LENGTH_PRESETS = [280, 4_000, 25_000] as const;
 // being corrected up front.
 export const MIN_REPLY_LENGTH = 50;
 export const MAX_REPLY_LENGTH = 25_000;
+export const MAX_BLOCKED_TERMS = 50;
+export const MAX_BLOCKED_TERM_LENGTH = 80;
 
 export function clampReplyLength(value: number): number {
   if (!Number.isFinite(value)) return MIN_REPLY_LENGTH;
   return Math.min(MAX_REPLY_LENGTH, Math.max(MIN_REPLY_LENGTH, Math.round(value)));
+}
+
+export function normalizeBlockedTerms(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const term = item.trim().slice(0, MAX_BLOCKED_TERM_LENGTH);
+    const key = term.normalize("NFKC").toLowerCase();
+    if (!term || seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(term);
+    if (normalized.length === MAX_BLOCKED_TERMS) break;
+  }
+  return normalized;
 }
 
 // Tone/label lookup that also covers the "auto" sentinel — TONE_LABELS
