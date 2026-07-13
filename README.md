@@ -1,4 +1,4 @@
-# Extcom AI Reply
+# Extcom AI
 
 A self-hosted, human-in-the-loop AI writing copilot for X/Twitter. A Chrome
 extension adds **✦ AI Reply** to posts and **✦ AI Post** to X's standalone
@@ -165,7 +165,7 @@ extension folder at all.
 
 ## 3. Connect them
 
-1. Click the **Extcom AI Reply** icon in the toolbar. The popup opens to
+1. Click the **Extcom AI** icon in the toolbar. The popup opens to
    **Home** — connection status, total generations, and total drafts
    inserted. A bottom nav switches between **Home**, **History**, **Tone**,
    and **Advanced**.

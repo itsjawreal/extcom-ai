@@ -1,6 +1,6 @@
 {
   "name": "extcom-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "engines": {
     "node": ">=22"
@@ -11,6 +11,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "build:extension": "npm run build --workspace=@extcom-ai/extension",
+    "package:extension": "bash scripts/package-extension.sh",
     "dev": "npm run dev --workspace=@extcom-ai/extension",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"

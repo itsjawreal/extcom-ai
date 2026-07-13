@@ -46,19 +46,38 @@ ME_BEFORE=$(curl -sf http://localhost:3457/v1/me \
   -H "Authorization: Bearer simtoken")
 echo "$ME_BEFORE"
 echo "--- generate-reply auth + provider path (no API key => 503 expected) ---"
-curl -s -X POST http://localhost:3457/v1/generate-reply \
+REPLY_STATUS=$(curl -s -o "$SIM/generate-reply.json" -w "%{http_code}" \
+  -X POST http://localhost:3457/v1/generate-reply \
   -H "Origin: chrome-extension://abcdefg" \
   -H "Authorization: Bearer simtoken" \
   -H "Content-Type: application/json" \
-  --data '{"postText":"test post","tone":"degen"}'
+  --data '{"postText":"test post","tone":"degen"}')
+cat "$SIM/generate-reply.json"
 echo
+if [[ "$REPLY_STATUS" != "503" ]]; then
+  echo "generate-reply returned HTTP $REPLY_STATUS instead of 503" >&2
+  exit 1
+fi
+echo "--- generate-post auth + provider path (no API key => 503 expected) ---"
+POST_STATUS=$(curl -s -o "$SIM/generate-post.json" -w "%{http_code}" \
+  -X POST http://localhost:3457/v1/generate-post \
+  -H "Origin: chrome-extension://abcdefg" \
+  -H "Authorization: Bearer simtoken" \
+  -H "Content-Type: application/json" \
+  --data '{"brief":"test standalone post","mode":"fresh","tone":"degen"}')
+cat "$SIM/generate-post.json"
+echo
+if [[ "$POST_STATUS" != "503" ]]; then
+  echo "generate-post returned HTTP $POST_STATUS instead of 503" >&2
+  exit 1
+fi
 ME_AFTER=$(curl -sf http://localhost:3457/v1/me \
   -H "Authorization: Bearer simtoken")
 if [[ "$ME_AFTER" != "$ME_BEFORE" ]]; then
-  echo "quota changed after failed provider request" >&2
+  echo "quota changed after failed provider requests" >&2
   exit 1
 fi
-echo "failed provider request refunded quota"
+echo "failed reply and post provider requests refunded quota"
 echo "--- dev token must be rejected in production ---"
 curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:3457/v1/generate-reply \
   -H "Authorization: Bearer dev-local-token" \
