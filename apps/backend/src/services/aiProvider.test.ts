@@ -195,6 +195,40 @@ test("OpenRouter is the default provider and requires its server-side key", asyn
   else process.env.OPENROUTER_API_KEY = previousKey;
 });
 
+test("OpenRouter selects the standalone system and user prompts for Create Post", async () => {
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  resetModelCatalogCache();
+  let requestBody: Record<string, unknown> | undefined;
+  globalThis.fetch = mockCatalogAndCompletion(
+    [{ id: "openrouter/auto", supported_parameters: ["structured_outputs"] }],
+    (body) => { requestBody = body; },
+  );
+
+  try {
+    await generateWithOpenRouter({
+      brief: "Write about shipping open source software",
+      mode: "fresh",
+      language: "brief",
+      tone: "smart",
+      count: 1,
+      maxLength: 280,
+      useEmoji: false,
+    });
+    const messages = requestBody?.messages as Array<{ role?: string; content?: string }>;
+    assert.match(messages[0]?.content ?? "", /standalone post writer/);
+    assert.match(messages[1]?.content ?? "", /Brief \/ topic:\nWrite about shipping open source software/);
+    assert.match(messages[1]?.content ?? "", /Generate 1 complete standalone posts/);
+    assert.doesNotMatch(messages[1]?.content ?? "", /Original post:/);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
+    resetModelCatalogCache();
+  }
+});
+
 test("sends an OpenRouter chat completion with structured output", async () => {
   const previousKey = process.env.OPENROUTER_API_KEY;
   const previousFetch = globalThis.fetch;

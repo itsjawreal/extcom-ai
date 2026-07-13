@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildUserPrompt, SYSTEM_PROMPT } from "./promptBuilder.js";
+import { buildPostPrompt, buildUserPrompt, POST_SYSTEM_PROMPT, SYSTEM_PROMPT } from "./promptBuilder.js";
 
 test("SYSTEM_PROMPT does not bias every reply toward being short", () => {
   // Regression: an unconditional "generate short replies" opening line
@@ -214,4 +214,56 @@ test("buildUserPrompt puts the Persona section first when a persona voice is giv
     "A blunt crypto trader, skeptical of hype.",
   );
   assert.match(prompt, /^Persona — who you are replying as:\nA blunt crypto trader, skeptical of hype\.\n\nOriginal post:/);
+});
+
+test("buildPostPrompt creates standalone fresh-post instructions", () => {
+  const prompt = buildPostPrompt({
+    brief: "Open source AI is having a moment",
+    mode: "fresh",
+    language: "brief",
+    tone: "smart",
+    count: 3,
+    maxLength: 280,
+    useEmoji: false,
+  });
+  assert.match(POST_SYSTEM_PROMPT, /standalone post writer/);
+  assert.match(POST_SYSTEM_PROMPT, /never address an unnamed author/);
+  assert.match(prompt, /Writing mode:\nFresh post/);
+  assert.match(prompt, /Required post language:\nSame language as the source/);
+  assert.match(prompt, /Generate 3 complete standalone posts/);
+  assert.doesNotMatch(prompt, /Original post:/);
+});
+
+test("rewrite preserves source claims and supports English override", () => {
+  const prompt = buildPostPrompt({
+    brief: "Make this cleaner",
+    existingDraft: "Pasar naik 20% hari ini",
+    mode: "rewrite",
+    language: "en",
+    tone: "smart",
+    count: 1,
+    maxLength: 280,
+    useEmoji: false,
+  });
+  assert.match(prompt, /Rewrite — preserve.*factual claims/);
+  assert.match(prompt, /Required post language:\nEnglish \(en\)/);
+  assert.match(prompt, /Pasar naik 20% hari ini/);
+});
+
+test("continue asks for a complete combined post without repetition", () => {
+  const prompt = buildPostPrompt({
+    brief: "Finish the thought",
+    existingDraft: "Builders keep shipping through every cycle",
+    mode: "continue",
+    language: "brief",
+    tone: "degen",
+    count: 1,
+    maxLength: 220,
+    useEmoji: true,
+    blockedTerms: ["wagmi"],
+  });
+  assert.match(prompt, /Continue — extend.*without restating its opening/);
+  assert.match(prompt, /Return the complete combined post/);
+  assert.match(prompt, /Never mention \(absolute output ban\):\n- "wagmi"/);
+  assert.match(prompt, /Include at least one relevant emoji/);
 });

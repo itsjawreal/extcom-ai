@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { adminTokensRoute } from "./routes/adminTokens.js";
 import { generateReplyRoute } from "./routes/generateReply.js";
+import { generatePostRoute } from "./routes/generatePost.js";
 import { healthRoute } from "./routes/health.js";
 import { meRoute } from "./routes/me.js";
 import { modelsRoute } from "./routes/models.js";
@@ -49,6 +50,10 @@ export function createAppServer() {
     }
     if (request.method === "POST" && url.pathname === "/v1/generate-reply") {
       await generateReplyRoute(request, response);
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/v1/generate-post") {
+      await generatePostRoute(request, response);
       return;
     }
     if (request.method === "GET" && url.pathname === "/v1/models") {

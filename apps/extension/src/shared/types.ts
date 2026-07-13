@@ -66,6 +66,22 @@ export type GenerateReplyRequest = ExtractedPostContext & {
   model?: string;
 };
 
+export type GeneratePostMode = "fresh" | "rewrite" | "continue";
+
+export type GeneratePostRequest = {
+  brief: string;
+  existingDraft?: string;
+  mode: GeneratePostMode;
+  language: "brief" | "en";
+  tone: Tone | "auto";
+  extraInstruction?: string;
+  blockedTerms?: string[];
+  count: number;
+  maxLength: number | "auto";
+  useEmoji: boolean;
+  model?: string;
+};
+
 export type ModelOption = {
   id: string;
   name?: string;
@@ -93,6 +109,10 @@ export type GenerateReplyResponse = {
     completionTokens: number;
     estimatedCostUsd?: number;
   };
+};
+
+export type GeneratePostResponse = Omit<GenerateReplyResponse, "replies"> & {
+  posts: GeneratedReply[];
 };
 
 export type ExtensionSettings = {
