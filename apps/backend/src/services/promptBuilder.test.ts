@@ -365,3 +365,14 @@ test("auto tone with an objective asks the model to pick a goal-serving tone", (
   });
   assert.match(prompt, /If the selected tone is Auto, pick the tone that best serves this goal/);
 });
+
+test("both system prompts carry a hook-first rule that spares brevity tones", () => {
+  // Plan §19 Phase A2: a deliberate Default-output change, separate from the
+  // inert objective mechanism.
+  assert.match(SYSTEM_PROMPT, /Lead with the reply's strongest, most specific element/);
+  assert.match(POST_SYSTEM_PROMPT, /opening line must carry the post's strongest specific element/);
+  assert.match(POST_SYSTEM_PROMPT, /timeline preview shows only the first couple of lines/);
+  for (const prompt of [SYSTEM_PROMPT, POST_SYSTEM_PROMPT]) {
+    assert.match(prompt, /one_liner, single_word, short_alpha/);
+  }
+});
