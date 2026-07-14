@@ -70,6 +70,16 @@ export type GenerateReplyRequest = ExtractedPostContext & {
 
 export type GeneratePostMode = "fresh" | "rewrite" | "continue";
 
+// A composer attachment prepared for upload: bounded, re-encoded when needed,
+// stripped of filename/EXIF. Mirrors the backend contract in
+// apps/backend/src/types/index.ts — keep the two in sync.
+export type AttachedImageInput = {
+  dataUrl: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  width: number;
+  height: number;
+};
+
 export type GeneratePostRequest = {
   brief: string;
   existingDraft?: string;
@@ -82,6 +92,9 @@ export type GeneratePostRequest = {
   maxLength: number | "auto";
   useEmoji: boolean;
   model?: string;
+  // Up to 4 prepared composer attachments; bytes are read only after the
+  // user selects Generate and are never persisted anywhere.
+  attachedImages?: AttachedImageInput[];
 };
 
 export type ModelOption = {

@@ -1,4 +1,5 @@
 import {
+  autoIncludeImages,
   clampReplyLength,
   MAX_REPLY_LENGTH,
   MIN_REPLY_LENGTH,
@@ -408,15 +409,10 @@ async function generateReply(
   if (hasImages && !postText && imageMode === "off") {
     throw new Error("This post has no caption. Set Read images to Auto or On to generate a relevant reply.");
   }
-  // Auto stays local and free: images are included when they are the only
-  // content, the caption is short enough that media likely carries context,
-  // or the caption explicitly points at visual/media content.
-  const autoNeedsImages = hasImages && (
-    !postText ||
-    postText.length <= 120 ||
-    /\b(?:image|images|photo|picture|pic|screenshot|screen shot|chart|graph|meme|video|visual|gambar|foto|tangkapan layar|grafik|bagan|imagen|foto|captura|gr[aá]fico|photo|capture|graphique|bild|foto|screenshot|diagramm|immagine|schermata|grafico|imagem|captura|gr[aá]fico)\b/iu.test(postText)
-  );
-  const readImages = imageMode === "on" || (imageMode === "auto" && autoNeedsImages);
+  // Auto stays local and free — the shared heuristic in shared/constants.ts
+  // is also what the AI Post panel uses for composer attachments.
+  const readImages =
+    imageMode === "on" || (imageMode === "auto" && autoIncludeImages(postText, hasImages));
 
   // The panel's max-length field is a free-typed number input (no native
   // min/max enforcement like a range slider), so a manually picked value
@@ -518,6 +514,7 @@ async function generatePost(
     usage?: GeneratePostResponse["usage"];
     model?: GeneratePostResponse["model"];
     tokenUsage?: GeneratePostResponse["tokenUsage"];
+    attachedImageCount?: number;
   };
 
   if (!response.ok) {
@@ -528,6 +525,14 @@ async function generatePost(
   }
   if (!Array.isArray(body.posts) || !body.usage) {
     throw new Error("Backend response is incomplete.");
+  }
+  // A pre-attachment backend ignores unknown request fields, so it would
+  // silently generate text-only. Refuse instead of pretending the model saw
+  // the images (plan section 18.6).
+  if (input.attachedImages?.length && body.attachedImageCount === undefined) {
+    throw new Error(
+      "This backend build does not read attached images yet. Update the backend, or set Read attached images to Off.",
+    );
   }
 
   return {

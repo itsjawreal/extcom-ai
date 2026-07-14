@@ -33,6 +33,7 @@ type OpenRouterCatalogModel = {
   name?: string;
   supported_parameters?: string[];
   pricing?: { prompt?: string; completion?: string };
+  architecture?: { input_modalities?: string[] };
 };
 
 type OpenRouterModelsResponse = { data?: OpenRouterCatalogModel[] };
@@ -117,6 +118,36 @@ export async function modelSupportsParameter(model: string, parameter: string): 
     return entry?.supported_parameters?.includes(parameter) ?? false;
   } catch {
     return false;
+  }
+}
+
+export type VisionCapability = "supported" | "unsupported" | "unknown";
+
+// Conservative direct-OpenAI resolver: there is no machine-readable modality
+// catalog on that path, so only families documented as multimodal count as
+// supported and nothing is ever "confirmed text-only" (plan §18.7 — unknown
+// must not be presented as confirmed either way).
+const OPENAI_VISION_MODEL_PATTERN = /^(?:gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-5|o[134]|chatgpt-4o)/;
+
+// Whether a model can read image inputs. OpenRouter's catalog exposes
+// architecture.input_modalities for every model, so absence of "image" there
+// is a confirmed lack of vision; on the direct-OpenAI path we only ever
+// confirm support, never the lack of it. Lookup failures return "unknown" —
+// callers must treat that as best-effort, not as confirmation.
+export async function modelVisionCapability(
+  model: string,
+  provider: string,
+): Promise<VisionCapability> {
+  if (provider === "openai") {
+    return OPENAI_VISION_MODEL_PATTERN.test(model) ? "supported" : "unknown";
+  }
+  try {
+    const catalog = await getLiveCatalog();
+    const modalities = catalog.find((entry) => entry.id === model)?.architecture?.input_modalities;
+    if (!Array.isArray(modalities)) return "unknown";
+    return modalities.includes("image") ? "supported" : "unsupported";
+  } catch {
+    return "unknown";
   }
 }
 

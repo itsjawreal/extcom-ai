@@ -4,7 +4,9 @@ A self-hosted AI writing copilot for replies, quotes, and standalone posts on
 X/Twitter. The Chrome extension adds two human-in-the-loop workflows:
 
 - **✦ AI Reply** drafts replies and quote-post comments from a post's context.
-- **✦ AI Post** creates, rewrites, or continues text in X's standalone composer.
+- **✦ AI Post** creates, rewrites, or continues text in X's standalone composer,
+  and can read images you attached to it (charts, screenshots, memes) as visual
+  context — including caption-style generation for image-only posts.
 
 Your own backend generates every draft with the AI provider key **you** control.
 You choose what to insert, can edit it in X, and **you always press Post yourself**.
@@ -247,6 +249,16 @@ Fresh, Rewrite, or Continue pass can use the inserted text immediately. If you
 edit the composer after generation, insertion stops instead of overwriting your
 newer text.
 
+When the composer has images attached, the panel shows a **Read attached
+images (N)** control (Auto/On/Off, seeded from your saved Read images
+default). With Auto or On, the images are read only when you press Generate,
+resized and stripped of metadata locally, and sent as visual context — so a
+draft about a chart actually reflects the chart, and an image-only composer
+can get a caption-style post with no text typed at all (Fresh mode).
+Rewrite and Continue still require draft text. If you swap or remove images
+after generating, Insert is blocked until you regenerate; Copy stays
+available. The extension never adds, removes, uploads, or posts media.
+
 ### Optional: let it read images in posts
 
 The panel can attach every image in the post (up to 4, X's own per-post max)
@@ -258,7 +270,10 @@ per generation (the control appears only when the post has an image).
 This **requires `AI_DEFAULT_MODEL` to be a vision-capable model** (e.g. a
 multimodal model on OpenRouter, or `gpt-4o`/`gpt-4.1`-class models on
 OpenAI) — non-vision models typically just ignore the image rather than
-erroring. See `docs/API.md` for the exact request shape.
+erroring. For AI Post composer attachments specifically, a model the backend
+can confirm is text-only is rejected up front with a clear error instead of
+silently generating without the image. See `docs/API.md` for the exact
+request shape.
 
 ### Reply chain context
 

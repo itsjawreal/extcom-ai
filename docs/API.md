@@ -174,18 +174,52 @@ Generates complete standalone X posts rather than replies.
 `mode` is `fresh`, `rewrite`, or `continue`; rewrite/continue require a
 non-empty `existingDraft`. `language` is `brief` (follow the brief/draft) or
 `en`. `brief` accepts up to 5,000 characters, `existingDraft` up to 25,000,
-and at least one must be non-empty. Tone, count, length, emoji, model,
-authentication, quota, token usage, and cost behave exactly like
-`/v1/generate-reply`.
+and at least one must be non-empty — unless `mode` is `fresh` and
+`attachedImages` contains at least one valid entry (image-only generation).
+Tone, count, length, emoji, model, authentication, quota, token usage, and
+cost behave exactly like `/v1/generate-reply`.
+
+### `attachedImages` (optional)
+
+Images the user attached to X's composer, sent as visual context for the
+generated post:
+
+```json
+{
+  "attachedImages": [
+    { "dataUrl": "data:image/png;base64,...", "mimeType": "image/png", "width": 1280, "height": 720 }
+  ]
+}
+```
+
+- Up to 4 entries; JPEG, PNG, or WebP only.
+- `dataUrl` must be a canonical base64 data URL whose MIME matches
+  `mimeType`; decoded bytes are verified against the format's file signature.
+- Limits: 1.25 MiB decoded bytes per image, 4 MiB per request. This route
+  alone accepts request bodies up to 8 MiB; every other route keeps the
+  32 KiB ceiling.
+- Image bytes are forwarded to the configured AI provider and never stored,
+  logged, or persisted anywhere on the backend.
+- Requests with attachments fail fast with `MODEL_VISION_UNSUPPORTED` when
+  the selected model is confirmed text-only.
+
+Attachment-specific error codes: `UNSUPPORTED_IMAGE_TYPE`,
+`INVALID_IMAGE_DATA`, `IMAGE_TOO_LARGE`, `IMAGE_PAYLOAD_TOO_LARGE` (HTTP
+413), and `MODEL_VISION_UNSUPPORTED`.
 
 ```json
 {
   "posts": [{ "id": "post_1", "text": "...", "tone": "smart" }],
   "usage": { "remainingToday": 199, "plan": "pro" },
   "model": "google/gemini-2.5-flash",
-  "tokenUsage": { "promptTokens": 420, "completionTokens": 110, "estimatedCostUsd": 0.00031 }
+  "tokenUsage": { "promptTokens": 420, "completionTokens": 110, "estimatedCostUsd": 0.00031 },
+  "attachedImageCount": 1
 }
 ```
+
+`attachedImageCount` echoes how many validated attachments were part of the
+generation (absent for text-only requests). Only the count is ever returned
+or recorded — never image bytes.
 
 ## `GET /v1/me`
 

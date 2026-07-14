@@ -45,6 +45,12 @@ function findLiveComposer(initialRoot: HTMLElement): { root: HTMLElement; editab
   return replacement;
 }
 
+// Lets callers that need the composer's DOM (e.g. attachment discovery)
+// follow the same root-replacement reconciliation the text snapshot uses.
+export function resolveLiveComposerRoot(initialRoot: HTMLElement): HTMLElement | null {
+  return findLiveComposer(initialRoot)?.root ?? null;
+}
+
 export function readStandaloneComposerSnapshot(root: HTMLElement): { available: boolean; text: string } {
   const live = findLiveComposer(root);
   if (!live) return { available: false, text: "" };

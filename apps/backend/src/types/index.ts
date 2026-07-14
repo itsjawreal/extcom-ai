@@ -60,6 +60,19 @@ export type GenerateReplyRequest = {
 
 export type GeneratePostMode = "fresh" | "rewrite" | "continue";
 
+// An image the user attached to X's standalone composer, prepared by the
+// extension (resized/re-encoded/bounded) and sent as a base64 data URL.
+// Deliberately separate from GenerateReplyRequest.imageUrls: those are
+// X-hosted HTTPS URLs from an existing post, these are user-local bytes and
+// carry stricter validation (see services/attachedImages.ts).
+export type AttachedImageInput = {
+  dataUrl: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  // Informational; the backend validates bytes, not these dimensions.
+  width: number;
+  height: number;
+};
+
 export type GeneratePostRequest = {
   // A topic/instruction supplied by the user. It may be empty only when an
   // existing composer draft supplies the source material.
@@ -75,6 +88,10 @@ export type GeneratePostRequest = {
   maxLength: number | "auto";
   useEmoji: boolean;
   model?: string;
+  // Up to 4 composer attachments (X's own per-post max). Only valid for
+  // Create Post; image-only fresh mode is allowed when at least one entry
+  // passes validation. Never persisted or logged.
+  attachedImages?: AttachedImageInput[];
 };
 
 export type GenerationRequest = GenerateReplyRequest | GeneratePostRequest;
@@ -115,6 +132,9 @@ export type GeneratedPost = GeneratedReply;
 
 export type GeneratePostResponse = Omit<GenerateReplyResponse, "replies"> & {
   posts: GeneratedPost[];
+  // How many validated composer attachments were part of this generation.
+  // Only the count is ever echoed or recorded — never bytes or data URLs.
+  attachedImageCount?: number;
 };
 
 export type ApiErrorCode =
@@ -128,4 +148,9 @@ export type ApiErrorCode =
   | "RATE_LIMITED"
   | "UNSAFE_REQUEST"
   | "ADMIN_DISABLED"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "UNSUPPORTED_IMAGE_TYPE"
+  | "IMAGE_TOO_LARGE"
+  | "IMAGE_PAYLOAD_TOO_LARGE"
+  | "INVALID_IMAGE_DATA"
+  | "MODEL_VISION_UNSUPPORTED";

@@ -67,6 +67,7 @@ Rules:
 - Write like a real person composing directly on X, not a formal report or marketing bot. Match the requested tone and vary hooks, structure, and angle across multiple drafts.
 - Follow the requested mode exactly: Fresh develops the source into a new post; Rewrite preserves its core meaning and factual claims while improving expression; Continue extends the draft without repeating its opening and returns the complete combined post.
 - Never invent concrete facts, quotes, statistics, links, personal experiences, or news that the brief/draft did not provide.
+- Attached images are media the user will publish together with this post — treat their visible content as source material, like the brief. Ground any claim about them in what is actually legible; never guess exact chart values, tickers, names, or small text you cannot read, and never mention that an AI looked at the image.
 - Do not use hashtags unless requested. Do not make financial guarantees or claim insider information.
 - Do not harass, threaten, dox, impersonate, target protected groups, or produce spam.
 - Never instruct software to publish or auto-post.
@@ -203,11 +204,17 @@ export function buildPostPrompt(input: GeneratePostRequest, personaVoice?: strin
     ? input.blockedTerms.map((term) => `- ${JSON.stringify(term)}`).join("\n")
     : "None";
 
+  const imageCount = input.attachedImages?.length ?? 0;
+  const briefFallback = input.existingDraft || !imageCount
+    ? "None — use the existing draft as source material."
+    : "None — write the post from the attached image(s) below.";
+
   return `${personaSection}Brief / topic:
-${input.brief || "None — use the existing draft as source material."}
+${input.brief || briefFallback}
 
 Existing composer draft:
 ${input.existingDraft || "None"}
+${imageCount ? `\nAttached media (${imageCount} image${imageCount > 1 ? "s" : ""}, shown below):\nThe user is publishing ${imageCount > 1 ? "these images" : "this image"} with the post. Use what ${imageCount > 1 ? "they visibly show" : "it visibly shows"} as source material for the post.\n` : ""}
 
 Writing mode:
 ${postModeGuidance(input)}

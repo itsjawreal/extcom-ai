@@ -2,9 +2,16 @@ import { insertQuoteIntoComposer, insertReplyIntoComposer } from "./replyCompose
 import {
   insertPostIntoComposer,
   readStandaloneComposerSnapshot,
+  resolveLiveComposerRoot,
 } from "./postComposer";
+import {
+  discoverComposerAttachments,
+  fingerprintAttachments,
+  prepareAttachedImages,
+} from "./composerAttachments";
 import { POST_COMPOSER_SESSION_ATTRIBUTE, type StandaloneComposer } from "./postComposerObserver";
 import {
+  autoIncludeImages,
   clampReplyLength,
   MAX_REPLY_LENGTH,
   MIN_REPLY_LENGTH,
@@ -17,6 +24,7 @@ import {
   toneLabel,
 } from "../shared/constants";
 import type {
+  AttachedImageInput,
   ExtractedPostContext,
   GeneratePostMode,
   GeneratePostResponse,
@@ -1425,7 +1433,27 @@ type PostPanelDraft = {
   post: GeneratedReply;
   historyId?: string;
   expectedComposerText: string;
+  // Content fingerprint of the attachments this draft was generated with.
+  // Present only when images were actually sent; Insert/Replace re-checks it
+  // so text written for one image never lands next to another (plan §18.9).
+  attachmentFingerprint?: string;
 };
+
+// Shows the Read attached images control only while the composer actually
+// has supported attachments (plan §18.3), and keeps its count current.
+function refreshPostAttachmentRow(panel: HTMLElement, composerRoot: HTMLElement): void {
+  const row = panel.querySelector<HTMLElement>("[data-attachment-row]");
+  if (!row) return;
+  const liveRoot = resolveLiveComposerRoot(composerRoot) ?? composerRoot;
+  const count = discoverComposerAttachments(liveRoot).images.length;
+  const label = row.querySelector<HTMLElement>("[data-attachment-label]");
+  if (label) label.textContent = count ? `Read attached images (${count})` : "Read attached images";
+  if (row.hidden !== (count === 0)) {
+    animatePanelHeight(panel, () => {
+      row.hidden = count === 0;
+    });
+  }
+}
 
 function setPostMode(panel: HTMLElement, mode: GeneratePostMode): void {
   panel.querySelectorAll<HTMLButtonElement>("[data-post-mode]").forEach((button) => {
@@ -1488,11 +1516,40 @@ async function requestPostDrafts(
   const composerSnapshot = readStandaloneComposerSnapshot(composerRoot);
   if (!composerSnapshot.available) throw new Error("Post composer is no longer open. Open a new composer and try again.");
   const existingDraft = composerSnapshot.text;
-  if (!existingDraft) {
+
+  const liveRoot = resolveLiveComposerRoot(composerRoot) ?? composerRoot;
+  const discovered = discoverComposerAttachments(liveRoot).images;
+  const imageMode = readReadImages(panel) ?? "auto";
+  // Every mode may use attached media as context (rewrite/continue grounding,
+  // plan §18.2); only generation with an empty composer is fresh-specific.
+  const includeImages = imageMode === "on" ||
+    (imageMode === "auto" && autoIncludeImages(existingDraft, discovered.length > 0));
+
+  if (!existingDraft && !(mode === "fresh" && includeImages && discovered.length)) {
+    if (mode !== "fresh" && discovered.length) {
+      throw new Error(
+        `${mode === "rewrite" ? "Rewrite" : "Continue"} edits composer text, so images alone aren't enough. Type a draft first, or switch to Fresh for an image-only post.`,
+      );
+    }
+    if (mode === "fresh" && discovered.length && !includeImages) {
+      throw new Error(
+        'Type a topic in the composer, or set "Read attached images" to Auto or On to generate from the attached image.',
+      );
+    }
     throw new Error(`Type a topic or draft in X's "What's happening?" composer first.`);
   }
   const maxLength = readMaxLength(panel);
   assertContinueHasLengthRoom(mode, existingDraft, maxLength);
+
+  // Attachment bytes are read only here, after the user pressed Generate.
+  let attachedImages: AttachedImageInput[] | undefined;
+  let attachmentFingerprint: string | undefined;
+  if (includeImages && discovered.length) {
+    showStatus(panel, `Preparing ${discovered.length} image${discovered.length > 1 ? "s" : ""}…`);
+    const prepared = await prepareAttachedImages(discovered);
+    attachedImages = prepared.images;
+    attachmentFingerprint = prepared.fingerprint;
+  }
 
   const toneSelect = panel.querySelector<HTMLSelectElement>("[data-tone-select]");
   const tone = (toneSelect?.value || undefined) as Tone | "auto" | undefined;
@@ -1511,6 +1568,7 @@ async function requestPostDrafts(
       maxLength,
       useEmoji: readUseEmoji(panel),
       extraInstruction: readExtraInstruction(panel),
+      attachedImages,
     },
   });
 
@@ -1519,6 +1577,7 @@ async function requestPostDrafts(
       post,
       historyId: response.historyId,
       expectedComposerText: existingDraft,
+      attachmentFingerprint,
     })),
     response: response.data,
     requestedTone: tone,
@@ -1526,6 +1585,16 @@ async function requestPostDrafts(
 }
 
 async function insertPostDraft(panel: HTMLElement, composerRoot: HTMLElement, item: PostPanelDraft): Promise<void> {
+  // Never insert text generated for different media (plan §18.9). Copy stays
+  // available for stale drafts because it does not touch the composer.
+  if (item.attachmentFingerprint !== undefined) {
+    const liveRoot = resolveLiveComposerRoot(composerRoot) ?? composerRoot;
+    const current = await fingerprintAttachments(discoverComposerAttachments(liveRoot).images);
+    if (current !== item.attachmentFingerprint) {
+      showStatus(panel, "Attached images changed. Regenerate for the current composer.", "error");
+      return;
+    }
+  }
   try {
     const liveComposerRoot = await insertPostIntoComposer(composerRoot, item.expectedComposerText, item.post.text);
     if (item.historyId) {
@@ -1734,6 +1803,12 @@ function bindPostPanelControls(panel: HTMLElement): void {
     if (!button) return;
     setPostMode(panel, button.dataset.postMode as GeneratePostMode);
   });
+  panel.querySelector("[data-images-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-images]");
+    if (!button) return;
+    panel.dataset.controlsTouched = "true";
+    setReadImagesGroup(panel, button.dataset.images as ReadImagesMode);
+  });
   panel.querySelector("[data-post-language-group]")?.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-post-language]");
     if (!button) return;
@@ -1779,6 +1854,15 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
             <button type="button" data-post-mode="continue" aria-pressed="false">Continue</button>
           </div>
           <span class="eks-control-hint">Fresh uses the composer as an idea; Rewrite and Continue treat it as a draft.</span>
+        </div>
+        <div class="eks-count-label" data-attachment-row hidden>
+          <span data-attachment-label>Read attached images</span>
+          <div class="eks-count-group" data-images-group role="group" aria-label="Read attached composer images">
+            <button type="button" data-images="auto" aria-pressed="true">Auto</button>
+            <button type="button" data-images="on" aria-pressed="false">On</button>
+            <button type="button" data-images="off" aria-pressed="false">Off</button>
+          </div>
+          <span class="eks-control-hint">Attached images are read and sent to your backend/AI provider only when you press Generate. They are never uploaded, changed, or posted by the extension.</span>
         </div>
         <div class="eks-tone-label">
           Tone
@@ -1858,6 +1942,17 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
   renderUsage(panel);
   syncPanelTheme();
   void initPanelSettings(panel);
+  refreshPostAttachmentRow(panel, composer.root);
+  // Attachments can be added/removed while the panel is open; poll cheaply
+  // instead of observing X's whole composer subtree. The timer dies with the
+  // panel element.
+  const attachmentTimer = window.setInterval(() => {
+    if (!panel.isConnected) {
+      window.clearInterval(attachmentTimer);
+      return;
+    }
+    refreshPostAttachmentRow(panel, activePostComposerRoot ?? composer.root);
+  }, 1_500);
   panel.querySelector<HTMLButtonElement>("[data-generate-button]")?.addEventListener("click", () => {
     void generatePostsForPanel(panel, activePostComposerRoot ?? composer.root);
   });

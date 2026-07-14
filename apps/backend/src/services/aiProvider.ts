@@ -325,7 +325,12 @@ export async function generateWithOpenAI(
     "",
   );
   const personaVoice = await getPersonaVoice();
-  const imageUrls = isGeneratePostRequest(input) ? undefined : input.imageUrls;
+  // Reply requests carry X-hosted HTTPS imageUrls; post requests carry
+  // validated composer-attachment data URLs (services/attachedImages.ts).
+  // Both providers accept either form in the same content block.
+  const imageUrls = isGeneratePostRequest(input)
+    ? input.attachedImages?.map((image) => image.dataUrl)
+    : input.imageUrls;
   // Low detail keeps image cost/latency small (~85 flat tokens per image vs.
   // several hundred at high detail) — enough for a reply to reference what
   // an image shows without needing pixel-level precision. Cost scales
@@ -436,7 +441,11 @@ export async function generateWithOpenRouter(
   if (process.env.APP_URL) headers["HTTP-Referer"] = process.env.APP_URL;
 
   const personaVoice = await getPersonaVoice();
-  const imageUrls = isGeneratePostRequest(input) ? undefined : input.imageUrls;
+  // See generateWithOpenAI: post requests contribute validated composer
+  // attachments as data URLs, reply requests keep X-hosted HTTPS URLs.
+  const imageUrls = isGeneratePostRequest(input)
+    ? input.attachedImages?.map((image) => image.dataUrl)
+    : input.imageUrls;
   const model = input.model || process.env.AI_DEFAULT_MODEL || "openrouter/auto";
   // Without this, a reasoning-capable model (e.g. google/gemini-2.5-pro) can
   // spend most of max_tokens on invisible internal reasoning before ever

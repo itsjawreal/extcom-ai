@@ -1006,3 +1006,56 @@ test("sends a tone schema and resolves the AI's pick when tone is auto", async (
     else process.env.OPENROUTER_API_KEY = previousKey;
   }
 });
+
+test("post requests forward validated composer attachments to the provider in order", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENAI_API_KEY = "test-key";
+  const dataUrls = [
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
+    "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+  ];
+  let requestBody: Record<string, unknown> | undefined;
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(JSON.stringify({
+      output: [{
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: JSON.stringify({ replies: [{ text: "caption" }] }),
+        }],
+      }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    await generateWithOpenAI({
+      brief: "",
+      mode: "fresh",
+      language: "brief",
+      tone: "smart",
+      count: 1,
+      maxLength: 220,
+      useEmoji: false,
+      attachedImages: dataUrls.map((dataUrl, index) => ({
+        dataUrl,
+        mimeType: index === 0 ? "image/png" as const : "image/jpeg" as const,
+        width: 100,
+        height: 100,
+      })),
+    });
+    const input = requestBody?.input as Array<{ content: Array<Record<string, unknown>> }>;
+    assert.ok(Array.isArray(input), "image requests must use structured input");
+    const content = input[0]?.content ?? [];
+    assert.equal(content[0]?.type, "input_text");
+    assert.deepEqual(
+      content.filter((part) => part.type === "input_image").map((part) => part.image_url),
+      dataUrls,
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});

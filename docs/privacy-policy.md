@@ -27,6 +27,14 @@ every draft — the extension never clicks X's final Reply/Post button.
   background.
 - The text in that specific standalone X composer, only after you click AI
   Post and request generation.
+- Images you attached to that same composer, only when the AI Post panel's
+  "Read attached images" control includes them and only at the moment you
+  press Generate. The bytes are resized/re-encoded locally (filename and
+  EXIF metadata are stripped), sent solely to your configured backend and
+  from there to your configured AI provider, and are never stored — not in
+  extension storage or history, not on the backend, not in logs. Setting
+  the control to Off prevents attachment bytes from ever being read. The
+  extension never adds, removes, uploads, or posts media.
 - Nothing outside the currently active X/Twitter tab. The extension has no
   access to any other tab, any other website, your browsing history, or
   your X/Twitter login credentials.
