@@ -56,7 +56,7 @@ function objectiveSection(objective: EngagementObjective | undefined, outputNoun
   if (!objective) return "";
   return `\nEngagement goal for every ${outputNoun}:
 ${objective} — ${OBJECTIVE_GUIDANCE[objective]}
-This goal shapes angle and structure only. It never overrides the safety rules, Never mention rules, emoji preference, required language, or character limit. If the selected tone is Auto, pick the tone that best serves this goal for this specific ${outputNoun}.
+This goal shapes angle and structure only. It never overrides the safety rules, Never mention rules, emoji preference, required language, or character limit. The character limit always wins over this goal: deliver the goal's mechanic *within* the limit by compressing — at a tight limit, a complete short hook, question, or takeaway beats a longer one that gets cut off mid-sentence. If the selected tone is Auto, pick the tone that best serves this goal for this specific ${outputNoun}.
 `;
 }
 
