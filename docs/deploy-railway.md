@@ -8,10 +8,26 @@
 
 ## Build
 
-Railway detects the root `Dockerfile` automatically — no `railway.toml` is
-required. If you want to pin the builder explicitly, copy
-[`docs/examples/railway.toml.example`](examples/railway.toml.example) to the
-repo root as `railway.toml`.
+The root [`railway.toml`](../railway.toml) pins the Dockerfile builder and
+deployment healthcheck. Railway combines it with the service settings from its
+dashboard; config in the repository takes precedence for those fields.
+
+```toml
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "node dist/server.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+```
+
+The explicit start command matches the final Docker image layout. It also
+overrides Railway's JavaScript-monorepo auto-import default, which otherwise
+tries `npm run start --workspace=...`; the production image intentionally does
+not contain `/app/package.json`, so that generated npm command crashes with
+`ENOENT`.
 
 ## Environment variables
 
