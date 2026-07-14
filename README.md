@@ -4,7 +4,9 @@ A self-hosted AI writing copilot for replies, quotes, and standalone posts on
 X/Twitter. The Chrome extension adds two human-in-the-loop workflows:
 
 - **✦ AI Reply** drafts replies and quote-post comments from a post's context.
-- **✦ AI Post** creates, rewrites, or continues text in X's standalone composer.
+- **✦ AI Post** creates, rewrites, or continues text in X's standalone composer,
+  and can read images you attached to it (charts, screenshots, memes) as visual
+  context — including caption-style generation for image-only posts.
 
 Your own backend generates every draft with the AI provider key **you** control.
 You choose what to insert, can edit it in X, and **you always press Post yourself**.
