@@ -1526,6 +1526,16 @@ async function requestPostDrafts(
     (imageMode === "auto" && autoIncludeImages(existingDraft, discovered.length > 0));
 
   if (!existingDraft && !(mode === "fresh" && includeImages && discovered.length)) {
+    if (mode !== "fresh" && discovered.length) {
+      throw new Error(
+        `${mode === "rewrite" ? "Rewrite" : "Continue"} edits composer text, so images alone aren't enough. Type a draft first, or switch to Fresh for an image-only post.`,
+      );
+    }
+    if (mode === "fresh" && discovered.length && !includeImages) {
+      throw new Error(
+        'Type a topic in the composer, or set "Read attached images" to Auto or On to generate from the attached image.',
+      );
+    }
     throw new Error(`Type a topic or draft in X's "What's happening?" composer first.`);
   }
   const maxLength = readMaxLength(panel);
