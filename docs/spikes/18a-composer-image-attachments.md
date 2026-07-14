@@ -283,3 +283,9 @@ version and date. Conclude with one of:
 Remaining before release sign-off: modal composer (/compose/post) spot check
 and an explicit On-vs-Off comparison on the same chart; reply/quote
 regression suite already covered by automated tests.
+
+### Modal composer spot check (2026-07-15)
+
+`/compose/post` dialog: AI Post button injected, Read attached images control
+appears with attachments, generation grounded in the attached media, behavior
+identical to the inline composer. ✅ All §18.14 acceptance gates verified.
