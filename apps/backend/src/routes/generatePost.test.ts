@@ -151,3 +151,60 @@ test("deduplicates Never mention rules case-insensitively", () => {
   });
   assert.deepEqual(input.blockedTerms, ["Bitcoin", "pump and dump"]);
 });
+
+function pngAttachment(): Record<string, unknown> {
+  const bytes = Buffer.alloc(64);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
+  return {
+    dataUrl: `data:image/png;base64,${bytes.toString("base64")}`,
+    mimeType: "image/png",
+    width: 100,
+    height: 100,
+  };
+}
+
+test("image-only fresh mode is valid with attachments and no text", () => {
+  const input = validateGeneratePostRequest({
+    brief: "",
+    mode: "fresh",
+    tone: "auto",
+    attachedImages: [pngAttachment()],
+  });
+  assert.equal(input.brief, "");
+  assert.equal(input.attachedImages?.length, 1);
+});
+
+test("fresh mode without text still fails when attachments are absent or empty", () => {
+  for (const attachedImages of [undefined, []]) {
+    assert.throws(
+      () => validateGeneratePostRequest({ brief: "", mode: "fresh", tone: "auto", attachedImages }),
+      /Either brief or existingDraft must be provided/,
+    );
+  }
+});
+
+test("rewrite and continue still require text even with attachments", () => {
+  for (const mode of ["rewrite", "continue"] as const) {
+    assert.throws(
+      () => validateGeneratePostRequest({
+        brief: "",
+        mode,
+        tone: "smart",
+        attachedImages: [pngAttachment()],
+      }),
+      new RegExp(`${mode} mode requires existingDraft`),
+    );
+  }
+});
+
+test("invalid attachments are rejected with typed image errors", () => {
+  assert.throws(
+    () => validateGeneratePostRequest({
+      brief: "topic",
+      mode: "fresh",
+      tone: "smart",
+      attachedImages: [{ ...pngAttachment(), mimeType: "image/gif" }],
+    }),
+    /mimeType must be image\/jpeg, image\/png, or image\/webp/,
+  );
+});
