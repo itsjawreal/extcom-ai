@@ -209,4 +209,62 @@ version and date. Conclude with one of:
 
 ## Results
 
-_(pending — run the matrix and paste probe output here)_
+### Scenario 1 — Home inline composer, 2 images via picker (2026-07-14)
+
+```json
+{
+  "url": "https://x.com/home",
+  "at": "2026-07-14T19:12:39.600Z",
+  "composers": [
+    {
+      "kind": "inline",
+      "fileInputs": [
+        {
+          "anchor": "div[data-testid=\"toolBar\"] > div[data-testid=\"ScrollSnap-SwipeableList\"] > div[data-testid=\"ScrollSnap-List\"] > input[data-testid=\"fileInput\"]",
+          "accept": "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime",
+          "multiple": true,
+          "fileCount": 0,
+          "files": []
+        }
+      ],
+      "previews": [
+        {
+          "scheme": "blob",
+          "anchor": "div[data-testid=\"attachments\"]",
+          "natural": "720x1600",
+          "srcPrefix": "blob:https://x.com/6ccc223c-...",
+          "readable": true,
+          "bytesRead": 101130,
+          "sig": "jpeg",
+          "fingerprint": "7e8baf065ca11eea"
+        },
+        {
+          "scheme": "blob",
+          "anchor": "div[data-testid=\"attachments\"]",
+          "natural": "1070x602",
+          "srcPrefix": "blob:https://x.com/80514fab-...",
+          "readable": true,
+          "bytesRead": 211191,
+          "sig": "jpeg",
+          "fingerprint": "18fd15102e4bf431"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Conclusion: **BLOB**
+
+- X's `input[data-testid="fileInput"]` exists (accept includes jpeg/png/webp/
+  gif/mp4/mov, `multiple`) but is cleared after ingest (`fileCount: 0`) — the
+  `File` transport is not available.
+- Attachment previews are `blob:` `<img>` elements inside
+  `div[data-testid="attachments"]`, fully readable via `fetch(blobUrl)` with
+  valid image signatures and stable fingerprints. Resolve blobs at Generate
+  time; never send a raw `blob:` URL to the backend.
+- Confirmed scoping anchor for discovery: `[data-testid="attachments"]`
+  within the composer root.
+- Remaining matrix rows (modal composer, drag-drop, 4 images, blob lifetime,
+  remove/replace, SPA nav) still worth running before the Phase F canary, but
+  the transport decision is settled.

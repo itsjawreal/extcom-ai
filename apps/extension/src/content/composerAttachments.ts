@@ -63,11 +63,11 @@ function isLikelyAttachmentImage(img: HTMLImageElement): boolean {
 // Discovers supported image attachments inside one composer root, in X's
 // display order, capped at MAX_ATTACHED_IMAGES.
 //
-// NOTE (plan §18.4): the discovery anchors below follow X's current markup
-// but MUST be confirmed against the Phase A spike results
-// (docs/spikes/18a-composer-image-attachments.md) before this ships. The
-// spike decides whether file inputs stay populated or previews are the only
-// byte source.
+// Spike-confirmed (docs/spikes/18a-composer-image-attachments.md, 2026-07-14):
+// X clears input[data-testid="fileInput"] after ingesting a selection, so
+// the byte source is the blob: preview <img> inside
+// div[data-testid="attachments"]. The file-input path stays as a
+// future-proof first preference in case X changes that behavior.
 export function discoverComposerAttachments(root: HTMLElement): ComposerAttachmentSnapshot {
   const images: ComposerImageAttachment[] = [];
   const seen = new Set<string>();
@@ -83,7 +83,11 @@ export function discoverComposerAttachments(root: HTMLElement): ComposerAttachme
   }
 
   if (!images.length) {
-    for (const img of root.querySelectorAll<HTMLImageElement>("img")) {
+    // Prefer the spike-confirmed attachment container; fall back to the
+    // whole composer root only when X's markup drifts and the container
+    // disappears, so the size/ancestor filters still have a chance.
+    const previewScope = root.querySelector<HTMLElement>('[data-testid="attachments"]') ?? root;
+    for (const img of previewScope.querySelectorAll<HTMLImageElement>("img")) {
       const src = img.currentSrc || img.src;
       const scheme = src.split(":")[0];
       if (scheme !== "blob" && scheme !== "data" && scheme !== "https") continue;
