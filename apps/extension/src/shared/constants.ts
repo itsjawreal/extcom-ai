@@ -103,3 +103,15 @@ export const DEFAULT_SETTINGS_PARTIAL = {
   toneDefault: "degen",
   defaultInstruction: "",
 } as const;
+
+// Shared Auto heuristic for image reading (replies and post attachments):
+// include images when they are the only content, the text is short enough
+// that media likely carries the context, or the text explicitly points at
+// visual/media content.
+const VISUAL_CONTENT_PATTERN = /\b(?:image|images|photo|picture|pic|screenshot|screen shot|chart|graph|meme|video|visual|gambar|foto|tangkapan layar|grafik|bagan|imagen|captura|gr[aá]fico|capture|graphique|bild|diagramm|immagine|schermata|grafico|imagem)\b/iu;
+
+export function autoIncludeImages(text: string, hasImages: boolean): boolean {
+  if (!hasImages) return false;
+  const trimmed = text.trim();
+  return !trimmed || trimmed.length <= 120 || VISUAL_CONTENT_PATTERN.test(trimmed);
+}
