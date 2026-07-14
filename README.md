@@ -259,6 +259,20 @@ Rewrite and Continue still require draft text. If you swap or remove images
 after generating, Insert is blocked until you regenerate; Copy stays
 available. The extension never adds, removes, uploads, or posts media.
 
+### Pick an engagement goal
+
+Both panels have a **Goal** row — `Default / Viral / Replies / Debate /
+Value` — that sets what the output should *achieve*, independently of the
+tone that sets how it sounds, so any combination works (Viral × Funny,
+Replies × Smart Money). **Viral** leads with a hook in the first line, best
+effort — it never promises reach. **Replies** ends every draft with exactly
+one easy-to-answer question. **Debate** takes a defensible stance that
+invites pushback without hostility. **Value** delivers a complete,
+save-worthy takeaway. **Default** changes nothing and behaves exactly like
+before the control existed. Set a saved default in Tone → Defaults
+(**Engagement goal**) or override it per generation in the panel; goals
+respect your character limit, emoji, language, and Never-mention rules.
+
 ### Optional: let it read images in posts
 
 The panel can attach every image in the post (up to 4, X's own per-post max)
