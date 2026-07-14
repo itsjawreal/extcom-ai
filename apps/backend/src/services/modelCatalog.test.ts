@@ -8,6 +8,7 @@ import {
   isCustomModelAllowed,
   MODEL_ALLOWLIST_UNAVAILABLE_MESSAGE,
   modelSupportsParameter,
+  modelVisionCapability,
   resetModelCatalogCache,
 } from "./modelCatalog.js";
 
@@ -335,5 +336,46 @@ test("modelSupportsParameter returns false (not a throw) when the catalog can't 
     assert.equal(await modelSupportsParameter("google/gemini-2.5-pro", "reasoning"), false);
   } finally {
     globalThis.fetch = previousFetch;
+  }
+});
+
+test("modelVisionCapability reads OpenRouter input modalities and stays conservative elsewhere", async () => {
+  resetModelCatalogCache();
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({
+      data: [
+        { id: "vision/model", architecture: { input_modalities: ["text", "image"] } },
+        { id: "text/only", architecture: { input_modalities: ["text"] } },
+        { id: "legacy/no-arch" },
+      ],
+    }), { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+
+  try {
+    assert.equal(await modelVisionCapability("vision/model", "openrouter"), "supported");
+    assert.equal(await modelVisionCapability("text/only", "openrouter"), "unsupported");
+    assert.equal(await modelVisionCapability("legacy/no-arch", "openrouter"), "unknown");
+    assert.equal(await modelVisionCapability("missing/model", "openrouter"), "unknown");
+    // Direct OpenAI has no modality catalog: confirm support only, never
+    // confirmed absence.
+    assert.equal(await modelVisionCapability("gpt-5.4-nano", "openai"), "supported");
+    assert.equal(await modelVisionCapability("some-custom-model", "openai"), "unknown");
+  } finally {
+    globalThis.fetch = previousFetch;
+    resetModelCatalogCache();
+  }
+});
+
+test("modelVisionCapability returns unknown when the catalog is unreachable", async () => {
+  resetModelCatalogCache();
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new Error("offline");
+  }) as typeof fetch;
+  try {
+    assert.equal(await modelVisionCapability("vision/model", "openrouter"), "unknown");
+  } finally {
+    globalThis.fetch = previousFetch;
+    resetModelCatalogCache();
   }
 });

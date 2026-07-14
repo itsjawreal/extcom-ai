@@ -5,6 +5,7 @@ import {
   assertModelAllowed,
   getModelPricing,
   MODEL_ALLOWLIST_UNAVAILABLE_MESSAGE,
+  modelVisionCapability,
 } from "../services/modelCatalog.js";
 import { consumeRateLimit, refundRateLimit } from "../services/rateLimit.js";
 import { assertSafeRequest } from "../services/safety.js";
@@ -176,6 +177,19 @@ export async function generatePostRoute(
     input = validateGeneratePostRequest(await readJsonBody(request, GENERATE_POST_MAX_BODY_BYTES));
     assertSafeRequest(input.extraInstruction);
     await assertModelAllowed(input.model);
+    if (input.attachedImages?.length) {
+      // Fail before consuming quota or provider tokens when the model is
+      // confirmed text-only (plan §18.7). "unknown" proceeds best-effort.
+      const provider = process.env.AI_DEFAULT_PROVIDER || "openrouter";
+      const model = input.model || process.env.AI_DEFAULT_MODEL ||
+        (provider === "openai" ? "gpt-5.4-nano" : "openrouter/auto");
+      if ((await modelVisionCapability(model, provider)) === "unsupported") {
+        throw new ImageValidationError(
+          "MODEL_VISION_UNSUPPORTED",
+          `Model ${model} cannot read images. Choose a vision-capable model or set Read attached images to Off.`,
+        );
+      }
+    }
   } catch (error) {
     if (error instanceof ImageValidationError) {
       sendError(response, error.status, error.code, error.message);

@@ -16,7 +16,11 @@ export class ImageValidationError extends Error {
   constructor(
     readonly code: Extract<
       ApiErrorCode,
-      "UNSUPPORTED_IMAGE_TYPE" | "IMAGE_TOO_LARGE" | "IMAGE_PAYLOAD_TOO_LARGE" | "INVALID_IMAGE_DATA"
+      | "UNSUPPORTED_IMAGE_TYPE"
+      | "IMAGE_TOO_LARGE"
+      | "IMAGE_PAYLOAD_TOO_LARGE"
+      | "INVALID_IMAGE_DATA"
+      | "MODEL_VISION_UNSUPPORTED"
     >,
     message: string,
     readonly status: number = 400,
