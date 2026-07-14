@@ -283,3 +283,85 @@ test("continue asks for a complete combined post without repetition", () => {
   assert.match(prompt, /Never mention \(absolute output ban\):\n- "wagmi"/);
   assert.match(prompt, /Include at least one relevant emoji/);
 });
+
+test("prompts without an objective contain no engagement-goal section", () => {
+  // Plan §19.8 inert-when-absent gate: the objective mechanism must leave
+  // objective-less prompts byte-identical to the pre-objective output,
+  // including section spacing around the tone block.
+  const replyPrompt = buildUserPrompt({
+    postText: "Post",
+    replyLanguage: "post",
+    tone: "smart",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  const postPrompt = buildPostPrompt({
+    brief: "topic",
+    mode: "fresh",
+    language: "brief",
+    tone: "smart",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  for (const prompt of [replyPrompt, postPrompt]) {
+    assert.doesNotMatch(prompt, /Engagement goal/);
+  }
+  assert.match(replyPrompt, /short clauses, not one long analyst run-on sentence\.\n\nRequired reply language:/);
+  assert.match(postPrompt, /short clauses, not one long analyst run-on sentence\.\n\nRequired post language:/);
+});
+
+test("each objective adds its guidance exactly once, after the tone section", () => {
+  const base = {
+    postText: "Post",
+    replyLanguage: "post" as const,
+    tone: "smart" as const,
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  };
+  const expectations: Array<[string, RegExp]> = [
+    ["viral", /viral — Maximize shareability .*first line must stand alone as a hook/],
+    ["replies", /replies — Maximize direct replies\. .*exactly one genuine, low-barrier question/],
+    ["debate", /debate — Provoke substantive disagreement\. .*one honest opening for pushback/],
+    ["value", /value — Maximize bookmarks and saves\. .*immediately usable takeaway/],
+  ];
+  for (const [objective, pattern] of expectations) {
+    const prompt = buildUserPrompt({ ...base, objective: objective as never });
+    assert.match(prompt, pattern);
+    assert.equal(prompt.match(/Engagement goal/g)?.length, 1);
+    // Ordering: tone section first, then goal, then language.
+    assert.match(prompt, /Selected tone:\n[\s\S]*\nEngagement goal for every reply:\n[\s\S]*Required reply language:/);
+    // The override hierarchy stays stated inside the section.
+    assert.match(prompt, /never overrides the safety rules, Never mention rules, emoji preference, required language, or character limit/);
+  }
+});
+
+test("post prompts carry the objective with post wording", () => {
+  const prompt = buildPostPrompt({
+    brief: "topic",
+    mode: "fresh",
+    language: "brief",
+    tone: "funny",
+    objective: "value",
+    count: 2,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  assert.match(prompt, /Engagement goal for every post:\nvalue — /);
+  assert.match(prompt, /Selected tone:\n[\s\S]*\nEngagement goal for every post:\n[\s\S]*Required post language:/);
+});
+
+test("auto tone with an objective asks the model to pick a goal-serving tone", () => {
+  const prompt = buildUserPrompt({
+    postText: "Post",
+    replyLanguage: "post",
+    tone: "auto",
+    objective: "viral",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  assert.match(prompt, /If the selected tone is Auto, pick the tone that best serves this goal/);
+});

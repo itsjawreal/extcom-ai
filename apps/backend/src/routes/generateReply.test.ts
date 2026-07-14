@@ -175,3 +175,20 @@ test("rejects invalid blocked terms", () => {
     /non-empty string of at most 80 characters/,
   );
 });
+
+test("objective is optional and validated against the known list", () => {
+  const absent = validateGenerateRequest({ postText: "Post", tone: "smart", count: 1 });
+  assert.equal(absent.objective, undefined);
+
+  const set = validateGenerateRequest({ postText: "Post", tone: "smart", count: 1, objective: "viral" });
+  assert.equal(set.objective, "viral");
+
+  assert.throws(
+    () => validateGenerateRequest({ postText: "Post", tone: "smart", count: 1, objective: "spam" }),
+    /objective must be omitted or one of: viral, replies, debate, value\./,
+  );
+  assert.throws(
+    () => validateGenerateRequest({ postText: "Post", tone: "smart", count: 1, objective: 3 }),
+    /objective must be omitted or one of/,
+  );
+});

@@ -27,6 +27,12 @@ export const TONES = [
 
 export type Tone = (typeof TONES)[number];
 
+// What the output should achieve, orthogonal to tone (how it should sound).
+// Absent means no engagement goal: the prompt gains no goal section at all.
+export const ENGAGEMENT_OBJECTIVES = ["viral", "replies", "debate", "value"] as const;
+
+export type EngagementObjective = (typeof ENGAGEMENT_OBJECTIVES)[number];
+
 export type GenerateReplyRequest = {
   postText: string;
   // BCP 47 language tag captured from X's tweetText element, when available.
@@ -43,6 +49,8 @@ export type GenerateReplyRequest = {
   // applied consistently across every reply in the batch — the resolved
   // tone (never "auto") is echoed back per-reply in GeneratedReply.tone.
   tone: Tone | "auto";
+  // Engagement goal for this batch; combines freely with any tone.
+  objective?: EngagementObjective;
   extraInstruction?: string;
   // User-defined words/phrases that must not appear in generated output.
   // Transient request data: never persisted by the backend.
@@ -82,6 +90,8 @@ export type GeneratePostRequest = {
   // "brief" means infer the output language from brief/existingDraft.
   language: "brief" | "en";
   tone: Tone | "auto";
+  // Engagement goal for this batch; combines freely with any tone.
+  objective?: EngagementObjective;
   extraInstruction?: string;
   blockedTerms?: string[];
   count: number;

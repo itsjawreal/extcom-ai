@@ -12,6 +12,7 @@ import { assertSafeRequest } from "../services/safety.js";
 import { ImageValidationError, parseAttachedImages } from "../services/attachedImages.js";
 import { readJsonBody, sendError, sendJson } from "../serverUtils.js";
 import {
+  ENGAGEMENT_OBJECTIVES,
   TONES,
   type GeneratePostRequest,
   type GeneratePostResponse,
@@ -89,6 +90,13 @@ export function validateGeneratePostRequest(value: unknown): GeneratePostRequest
     throw new Error(`tone must be "auto" or one of: ${TONES.join(", ")}.`);
   }
 
+  if (
+    body.objective !== undefined &&
+    (typeof body.objective !== "string" || !ENGAGEMENT_OBJECTIVES.includes(body.objective as never))
+  ) {
+    throw new Error(`objective must be omitted or one of: ${ENGAGEMENT_OBJECTIVES.join(", ")}.`);
+  }
+
   const language = body.language === undefined ? "brief" : body.language;
   if (language !== "brief" && language !== "en") {
     throw new Error('language must be "brief" or "en".');
@@ -130,6 +138,7 @@ export function validateGeneratePostRequest(value: unknown): GeneratePostRequest
     mode: body.mode,
     language,
     tone: body.tone as GeneratePostRequest["tone"],
+    objective: body.objective as GeneratePostRequest["objective"],
     count: Number(count),
     maxLength: maxLength === "auto" ? "auto" : Number(maxLength),
     useEmoji,

@@ -208,3 +208,16 @@ test("invalid attachments are rejected with typed image errors", () => {
     /mimeType must be image\/jpeg, image\/png, or image\/webp/,
   );
 });
+
+test("objective is optional and validated against the known list", () => {
+  const absent = validateGeneratePostRequest({ brief: "topic", mode: "fresh", tone: "smart" });
+  assert.equal(absent.objective, undefined);
+
+  const set = validateGeneratePostRequest({ brief: "topic", mode: "fresh", tone: "smart", objective: "replies" });
+  assert.equal(set.objective, "replies");
+
+  assert.throws(
+    () => validateGeneratePostRequest({ brief: "topic", mode: "fresh", tone: "smart", objective: "question" }),
+    /objective must be omitted or one of: viral, replies, debate, value\./,
+  );
+});

@@ -1,6 +1,7 @@
 import {
   TONES,
   isGeneratePostRequest,
+  type EngagementObjective,
   type GenerationRequest,
   type GeneratePostRequest,
   type GenerateReplyRequest,
@@ -33,6 +34,31 @@ const TONE_GUIDANCE: Record<Tone, string> = {
   philosophical: "Zoomed-out and reflective — a bigger-picture musing on what the post implies.",
   coach_motivational: "Drill-sergeant-lite pump-up energy — \"no excuses, let's go\" urgency without cheesiness.",
 };
+
+// Engagement goals (plan §19): what the output should achieve, orthogonal to
+// tone. Each entry states concrete mechanics, not vibes — a goal that just
+// says "make it viral" measurably does nothing.
+const OBJECTIVE_GUIDANCE: Record<EngagementObjective, string> = {
+  viral:
+    "Maximize shareability (best effort — never mention or promise virality in the output itself). The first line must stand alone as a hook: a specific claim, number, or contrarian statement, never setup or throat-clearing — the timeline preview shows only about two lines and decides whether anyone reads on. Commit to one sharp idea instead of several half-developed ones. Prefer concrete nouns and numbers over abstractions. End on a line worth quoting.",
+  replies:
+    "Maximize direct replies. Build brief context, then end with exactly one genuine, low-barrier question that can be answered in a single sentence — ask for opinions or experiences, not homework. The question must grow out of the content, never feel bolted on. If the selected tone already produces a question (e.g. engager_question), still write exactly one question in total, not two.",
+  debate:
+    "Provoke substantive disagreement. Take one defensible, clearly stated contrarian position and deliberately leave one honest opening for pushback. Acknowledge the strongest opposing point in passing rather than strawmanning it. Never hostile, never rage-bait, never punching down. If the selected tone is warm or agreeable, keep that delivery while still committing fully to the stance.",
+  value:
+    "Maximize bookmarks and saves. Deliver a complete, immediately usable takeaway — a framework, a checklist-like structure, or a non-obvious insight — so it is worth saving. Prefer short lines and paragraph breaks over a prose wall when the length allows. Never withhold the payoff or tease a follow-up instead of delivering. With brevity-built tones, compress the takeaway rather than forcing length.",
+};
+
+// Returns "" when no objective is set so prompts stay byte-identical to the
+// pre-objective output (plan §19.8 inert-when-absent gate). The non-empty
+// form supplies its own surrounding blank lines to preserve section spacing.
+function objectiveSection(objective: EngagementObjective | undefined, outputNoun: "reply" | "post"): string {
+  if (!objective) return "";
+  return `\nEngagement goal for every ${outputNoun}:
+${objective} — ${OBJECTIVE_GUIDANCE[objective]}
+This goal shapes angle and structure only. It never overrides the safety rules, Never mention rules, emoji preference, required language, or character limit. If the selected tone is Auto, pick the tone that best serves this goal for this specific ${outputNoun}.
+`;
+}
 
 export const SYSTEM_PROMPT = `You are an expert social reply assistant for X/Twitter.
 
@@ -179,7 +205,7 @@ ${thread}
 
 Selected tone:
 ${toneSection(input.tone)}
-
+${objectiveSection(input.objective, "reply")}
 Required reply language:
 ${languageGuidance(input)}
 
@@ -221,7 +247,7 @@ ${postModeGuidance(input)}
 
 Selected tone:
 ${toneSection(input.tone, "post")}
-
+${objectiveSection(input.objective, "post")}
 Required post language:
 ${postLanguageGuidance(input)}
 
