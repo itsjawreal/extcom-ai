@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generateReplies, generateWithOpenRouter, providerInternals } from "./aiProvider.js";
+import {
+  generateReplies,
+  generateWithOpenAI,
+  generateWithOpenRouter,
+  providerInternals,
+} from "./aiProvider.js";
 import { resetModelCatalogCache } from "./modelCatalog.js";
 
 // generateWithOpenRouter now also looks up the model's supported_parameters
@@ -133,6 +138,51 @@ test("computeMaxTokens scales with maxLength and count, floored and capped", () 
   assert.equal(extreme, 20_000);
 });
 
+test("direct OpenAI requests enforce the portable strict JSON schema", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENAI_API_KEY = "test-key";
+  let requestBody: Record<string, unknown> | undefined;
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(JSON.stringify({
+      output: [{
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: JSON.stringify({ tone: "smart", replies: [{ text: "one" }, { text: "two" }] }),
+        }],
+      }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    await generateWithOpenAI({
+      postText: "Post",
+      tone: "auto",
+      count: 2,
+      maxLength: 220,
+      useEmoji: false,
+    });
+    const format = (requestBody?.text as { format?: Record<string, unknown> })?.format;
+    assert.equal(format?.type, "json_schema");
+    assert.equal(format?.strict, true);
+    const schema = format?.schema as {
+      properties?: {
+        tone?: unknown;
+        replies?: { maxItems?: number; items?: { properties?: { text?: { maxLength?: number } } } };
+      };
+    };
+    assert.ok(schema.properties?.tone);
+    assert.equal(schema.properties?.replies?.maxItems, undefined);
+    assert.equal(schema.properties?.replies?.items?.properties?.text?.maxLength, undefined);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
 test("blocked-term matching is case-insensitive without false substring matches", () => {
   assert.equal(providerInternals.containsBlockedTerm("No BITCOIN here", "bitcoin"), true);
   assert.equal(providerInternals.containsBlockedTerm("classic pump and dump setup", "Pump And Dump"), true);
@@ -174,6 +224,339 @@ test("generation retries once after a blocked output and reports both attempts' 
     else process.env.AI_DEFAULT_PROVIDER = previousProvider;
     if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("generation retries invalid JSON once and aggregates paid usage from both attempts", async () => {
+  const previousProvider = process.env.AI_DEFAULT_PROVIDER;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.AI_DEFAULT_PROVIDER = "openai";
+  process.env.OPENAI_API_KEY = "test-key";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    const text = calls === 1
+      ? '{"replies":['
+      : JSON.stringify({ replies: [{ text: "recovered reply" }] });
+    return new Response(JSON.stringify({
+      output: [{ type: "message", content: [{ type: "output_text", text }] }],
+      usage: calls === 1
+        ? { input_tokens: 10, output_tokens: 4 }
+        : { input_tokens: 12, output_tokens: 5 },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const result = await generateReplies({
+      postText: "Post",
+      tone: "smart",
+      count: 1,
+      maxLength: 220,
+      useEmoji: false,
+    });
+    assert.equal(calls, 2);
+    assert.deepEqual(result.texts, ["recovered reply"]);
+    assert.deepEqual(result.usage, { promptTokens: 22, completionTokens: 9 });
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousProvider === undefined) delete process.env.AI_DEFAULT_PROVIDER;
+    else process.env.AI_DEFAULT_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("generation stops after two invalid JSON attempts with an explicit final error", async () => {
+  const previousProvider = process.env.AI_DEFAULT_PROVIDER;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.AI_DEFAULT_PROVIDER = "openai";
+  process.env.OPENAI_API_KEY = "test-key";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({
+      output: [{ type: "message", content: [{ type: "output_text", text: '{"replies":[' }] }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    await assert.rejects(
+      generateReplies({ postText: "Post", tone: "smart", count: 1, maxLength: 220, useEmoji: false }),
+      /invalid JSON after 2 attempts/,
+    );
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousProvider === undefined) delete process.env.AI_DEFAULT_PROVIDER;
+    else process.env.AI_DEFAULT_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("generation retries a transient network failure once", async () => {
+  const previousProvider = process.env.AI_DEFAULT_PROVIDER;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.AI_DEFAULT_PROVIDER = "openai";
+  process.env.OPENAI_API_KEY = "test-key";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) throw new TypeError("network down");
+    return new Response(JSON.stringify({
+      output: [{
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: JSON.stringify({ replies: [{ text: "network recovered" }] }),
+        }],
+      }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const result = await generateReplies({
+      postText: "Post",
+      tone: "smart",
+      count: 1,
+      maxLength: 220,
+      useEmoji: false,
+    });
+    assert.equal(calls, 2);
+    assert.deepEqual(result.texts, ["network recovered"]);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousProvider === undefined) delete process.env.AI_DEFAULT_PROVIDER;
+    else process.env.AI_DEFAULT_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("generation honors a short Retry-After before retrying a transient provider error", async () => {
+  const previousProvider = process.env.AI_DEFAULT_PROVIDER;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.AI_DEFAULT_PROVIDER = "openai";
+  process.env.OPENAI_API_KEY = "test-key";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response(JSON.stringify({ error: { message: "temporarily busy" } }), {
+        status: 503,
+        headers: { "Content-Type": "application/json", "Retry-After": "0.01" },
+      });
+    }
+    return new Response(JSON.stringify({
+      output: [{
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: JSON.stringify({ replies: [{ text: "provider recovered" }] }),
+        }],
+      }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const result = await generateReplies({
+      postText: "Post",
+      tone: "smart",
+      count: 1,
+      maxLength: 220,
+      useEmoji: false,
+    });
+    assert.equal(calls, 2);
+    assert.deepEqual(result.texts, ["provider recovered"]);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousProvider === undefined) delete process.env.AI_DEFAULT_PROVIDER;
+    else process.env.AI_DEFAULT_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("generation retries an explicitly incomplete provider response", async () => {
+  const previousProvider = process.env.AI_DEFAULT_PROVIDER;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.AI_DEFAULT_PROVIDER = "openai";
+  process.env.OPENAI_API_KEY = "test-key";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response(JSON.stringify({
+        status: "incomplete",
+        usage: { input_tokens: 8, output_tokens: 2 },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      status: "completed",
+      output: [{
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: JSON.stringify({ replies: [{ text: "complete now" }] }),
+        }],
+      }],
+      usage: { input_tokens: 9, output_tokens: 3 },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const result = await generateReplies({
+      postText: "Post",
+      tone: "smart",
+      count: 1,
+      maxLength: 220,
+      useEmoji: false,
+    });
+    assert.equal(calls, 2);
+    assert.deepEqual(result.texts, ["complete now"]);
+    assert.deepEqual(result.usage, { promptTokens: 17, completionTokens: 5 });
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousProvider === undefined) delete process.env.AI_DEFAULT_PROVIDER;
+    else process.env.AI_DEFAULT_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("generation does not retry an explicit model refusal", async () => {
+  const previousProvider = process.env.AI_DEFAULT_PROVIDER;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.AI_DEFAULT_PROVIDER = "openai";
+  process.env.OPENAI_API_KEY = "test-key";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({
+      status: "completed",
+      output: [{
+        type: "message",
+        content: [{ type: "refusal", refusal: "Request refused" }],
+      }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    await assert.rejects(
+      generateReplies({ postText: "Post", tone: "smart", count: 1, maxLength: 220, useEmoji: false }),
+      /Request refused/,
+    );
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousProvider === undefined) delete process.env.AI_DEFAULT_PROVIDER;
+    else process.env.AI_DEFAULT_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("generation does not retry permanent provider errors or an excessive Retry-After", async () => {
+  const previousProvider = process.env.AI_DEFAULT_PROVIDER;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.AI_DEFAULT_PROVIDER = "openai";
+  process.env.OPENAI_API_KEY = "test-key";
+
+  try {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ error: { message: "invalid key" } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+    await assert.rejects(
+      generateReplies({ postText: "Post", tone: "smart", count: 1, maxLength: 220, useEmoji: false }),
+      /invalid key/,
+    );
+    assert.equal(calls, 1);
+
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ error: { message: "rate limited" } }), {
+        status: 429,
+        headers: { "Content-Type": "application/json", "Retry-After": "60" },
+      });
+    };
+    await assert.rejects(
+      generateReplies({ postText: "Post", tone: "smart", count: 1, maxLength: 220, useEmoji: false }),
+      /rate limited\. Retry after about 60 seconds/,
+    );
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousProvider === undefined) delete process.env.AI_DEFAULT_PROVIDER;
+    else process.env.AI_DEFAULT_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("Retry-After parser accepts seconds and HTTP dates", () => {
+  assert.equal(providerInternals.parseRetryAfterMs("1.5", 0), 1_500);
+  assert.equal(
+    providerInternals.parseRetryAfterMs("Thu, 01 Jan 1970 00:00:03 GMT", 1_000),
+    2_000,
+  );
+  assert.equal(providerInternals.parseRetryAfterMs("not-a-date", 0), undefined);
+});
+
+test("OpenRouter retries a length-stopped completion and aggregates its usage", async () => {
+  const previousProvider = process.env.AI_DEFAULT_PROVIDER;
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.AI_DEFAULT_PROVIDER = "openrouter";
+  process.env.OPENROUTER_API_KEY = "test-key";
+  resetModelCatalogCache();
+  let completionCalls = 0;
+  globalThis.fetch = async (input) => {
+    if (String(input).includes("/models")) {
+      return new Response(JSON.stringify({
+        data: [{ id: "openrouter/auto", supported_parameters: ["structured_outputs"] }],
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    completionCalls += 1;
+    return new Response(JSON.stringify({
+      choices: [{
+        finish_reason: completionCalls === 1 ? "length" : "stop",
+        message: { content: JSON.stringify({ replies: [{ text: "complete reply" }] }) },
+      }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const result = await generateReplies({
+      postText: "Post",
+      tone: "smart",
+      count: 1,
+      maxLength: 220,
+      useEmoji: false,
+    });
+    assert.equal(completionCalls, 2);
+    assert.deepEqual(result.texts, ["complete reply"]);
+    assert.deepEqual(result.usage, { promptTokens: 20, completionTokens: 10 });
+  } finally {
+    globalThis.fetch = previousFetch;
+    resetModelCatalogCache();
+    if (previousProvider === undefined) delete process.env.AI_DEFAULT_PROVIDER;
+    else process.env.AI_DEFAULT_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
   }
 });
 
@@ -266,6 +649,7 @@ test("sends an OpenRouter chat completion with structured output", async () => {
       (requestBody?.response_format as { type?: string })?.type,
       "json_schema",
     );
+    assert.deepEqual(requestBody?.plugins, [{ id: "response-healing" }]);
   } finally {
     globalThis.fetch = previousFetch;
     if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
