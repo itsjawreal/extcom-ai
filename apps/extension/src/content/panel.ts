@@ -152,6 +152,11 @@ function getContentTooltip(): HTMLElement {
   const existing = document.getElementById(TOOLTIP_ID);
   if (existing) {
     applyCurrentXTheme(existing);
+    // Tooltip and panel share the maximum z-index, so paint order falls back
+    // to DOM order. Panels are appended to body on every open — a tooltip
+    // created before the current panel would render behind it. Keep the
+    // tooltip as body's last child so it always paints on top.
+    if (existing !== document.body.lastElementChild) document.body.append(existing);
     return existing;
   }
   const tooltip = document.createElement("div");
