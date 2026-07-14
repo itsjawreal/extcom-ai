@@ -96,6 +96,7 @@ Rules:
 - Follow the requested mode exactly: Fresh develops the source into a new post; Rewrite preserves its core meaning and factual claims while improving expression; Continue extends the draft without repeating its opening and returns the complete combined post.
 - Never invent concrete facts, quotes, statistics, links, personal experiences, or news that the brief/draft did not provide.
 - Attached images are media the user will publish together with this post — treat their visible content as source material, like the brief. Ground any claim about them in what is actually legible; never guess exact chart values, tickers, names, or small text you cannot read, and never mention that an AI looked at the image.
+- If the user message includes a "Quoted post" section, the draft is quote-tweet commentary published directly above that post: add the user's own take, reaction, or context — never merely paraphrase or summarize content the reader can already see below it, never address the quoted author as if replying to them, and never invent details beyond the quoted text and its images.
 - Do not use hashtags unless requested. Do not make financial guarantees or claim insider information.
 - Do not harass, threaten, dox, impersonate, target protected groups, or produce spam.
 - Never instruct software to publish or auto-post.
@@ -169,17 +170,38 @@ function postLanguageGuidance(input: GeneratePostRequest): string {
   if (input.language === "en") {
     return "English (en) — explicit user override. Write every draft in natural, conversational English even when the source uses another language.";
   }
-  return "Same language as the source brief/existing draft. Infer it only from that source, then write directly like a native speaker on social media, matching its register. Never make the result feel translated from English. If brief and existing draft differ, follow the existing draft's language.";
+  const quotedFallback = input.quotedPost
+    ? " When brief and existing draft are both absent, infer the language from the quoted post instead."
+    : "";
+  return `Same language as the source brief/existing draft. Infer it only from that source, then write directly like a native speaker on social media, matching its register. Never make the result feel translated from English. If brief and existing draft differ, follow the existing draft's language.${quotedFallback}`;
 }
 
 function postModeGuidance(input: GeneratePostRequest): string {
+  const quoted = Boolean(input.quotedPost);
   if (input.mode === "rewrite") {
-    return "Rewrite — preserve the source draft's core meaning, factual claims, and point of view. Improve wording, flow, hook, and structure without adding unsupported claims.";
+    return `Rewrite — preserve the source draft's core meaning, factual claims, and point of view. Improve wording, flow, hook, and structure without adding unsupported claims.${quoted ? " Keep the rewritten take consistent with the quoted post it comments on." : ""}`;
   }
   if (input.mode === "continue") {
-    return "Continue — extend the existing draft naturally without restating its opening. Return the complete combined post (original plus continuation), polished as one coherent final draft.";
+    return `Continue — extend the existing draft naturally without restating its opening. Return the complete combined post (original plus continuation), polished as one coherent final draft.${quoted ? " The continuation must stay consistent with the quoted post the draft comments on." : ""}`;
   }
-  return "Fresh post — use the brief and/or existing draft only as source material, then compose a new standalone post from scratch.";
+  return quoted
+    ? "Fresh post — compose the user's own quote-tweet commentary on the quoted post below, using the brief and/or existing draft as the angle when present."
+    : "Fresh post — use the brief and/or existing draft only as source material, then compose a new standalone post from scratch.";
+}
+
+// Returns "" when no quoted post is present so non-quote prompts stay
+// byte-identical (same inert-when-absent contract as objectiveSection).
+function quotedPostSection(quoted: GeneratePostRequest["quotedPost"]): string {
+  if (!quoted) return "";
+  const author = [quoted.authorName, quoted.authorHandle].filter(Boolean).join(" ") || "Unknown";
+  const imageNote = quoted.imageUrls?.length
+    ? `\n(${quoted.imageUrls.length} image${quoted.imageUrls.length > 1 ? "s" : ""} from the quoted post ${quoted.imageUrls.length > 1 ? "are" : "is"} attached below as visual context.)`
+    : "";
+  const languageNote = quoted.sourceLanguage ? `\nLanguage detected by X on the quoted post: ${quoted.sourceLanguage}` : "";
+  return `\nQuoted post (every draft will be published as a quote-tweet directly above it):
+Author: ${author}
+${quoted.text || "(No caption text — an image-only post.)"}${imageNote}${languageNote}
+`;
 }
 
 // personaVoice comes from PERSONA.md (services/persona.ts) — an optional,
@@ -233,9 +255,13 @@ export function buildPostPrompt(input: GeneratePostRequest, personaVoice?: strin
     : "None";
 
   const imageCount = input.attachedImages?.length ?? 0;
-  const briefFallback = input.existingDraft || !imageCount
+  const briefFallback = input.existingDraft
     ? "None — use the existing draft as source material."
-    : "None — write the post from the attached image(s) below.";
+    : imageCount
+      ? "None — write the post from the attached image(s) below."
+      : input.quotedPost
+        ? "None — write the user's own take on the quoted post below."
+        : "None — use the existing draft as source material.";
 
   return `${personaSection}Brief / topic:
 ${input.brief || briefFallback}
@@ -243,7 +269,7 @@ ${input.brief || briefFallback}
 Existing composer draft:
 ${input.existingDraft || "None"}
 ${imageCount ? `\nAttached media (${imageCount} image${imageCount > 1 ? "s" : ""}, shown below):\nThe user is publishing ${imageCount > 1 ? "these images" : "this image"} with the post. Use what ${imageCount > 1 ? "they visibly show" : "it visibly shows"} as source material for the post.\n` : ""}
-
+${quotedPostSection(input.quotedPost)}
 Writing mode:
 ${postModeGuidance(input)}
 

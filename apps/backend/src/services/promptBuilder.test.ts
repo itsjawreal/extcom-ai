@@ -376,3 +376,87 @@ test("both system prompts carry a hook-first rule that spares brevity tones", ()
     assert.match(prompt, /one_liner, single_word, short_alpha/);
   }
 });
+
+test("post prompts without a quoted post contain no quote section", () => {
+  const prompt = buildPostPrompt({
+    brief: "topic",
+    mode: "fresh",
+    language: "brief",
+    tone: "smart",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+  });
+  assert.doesNotMatch(prompt, /Quoted post/);
+  assert.doesNotMatch(POST_SYSTEM_PROMPT, /undefined/);
+});
+
+test("a quoted post adds commentary context, quote-aware mode, and language fallback", () => {
+  const prompt = buildPostPrompt({
+    brief: "",
+    mode: "fresh",
+    language: "brief",
+    tone: "smart",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+    quotedPost: {
+      text: "Nanweng River unfolds like a magnificent scroll",
+      authorName: "China Says",
+      authorHandle: "@China_says",
+      imageUrls: [
+        "https://pbs.twimg.com/media/a?format=jpg&name=small",
+        "https://pbs.twimg.com/media/b?format=jpg&name=small",
+      ],
+      sourceLanguage: "en",
+    },
+  });
+  assert.match(prompt, /Quoted post \(every draft will be published as a quote-tweet directly above it\):/);
+  assert.match(prompt, /Author: China Says @China_says/);
+  assert.match(prompt, /Nanweng River unfolds/);
+  assert.match(prompt, /2 images from the quoted post are attached below/);
+  assert.match(prompt, /Language detected by X on the quoted post: en/);
+  assert.match(prompt, /compose the user's own quote-tweet commentary/);
+  assert.match(prompt, /infer the language from the quoted post instead/);
+  assert.match(prompt, /None — write the user's own take on the quoted post below\./);
+  // Section order: quoted post before writing mode.
+  assert.match(prompt, /Quoted post [\s\S]*Writing mode:/);
+});
+
+test("quote-aware rewrite and continue stay consistent with the quoted post", () => {
+  const base = {
+    brief: "",
+    existingDraft: "my hot take on this",
+    language: "brief" as const,
+    tone: "smart" as const,
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+    quotedPost: { text: "original tweet", authorHandle: "@x" },
+  };
+  const rewrite = buildPostPrompt({ ...base, mode: "rewrite" });
+  assert.match(rewrite, /Keep the rewritten take consistent with the quoted post/);
+  const cont = buildPostPrompt({ ...base, mode: "continue" });
+  assert.match(cont, /continuation must stay consistent with the quoted post/);
+});
+
+test("an image-only quoted post is described as such", () => {
+  const prompt = buildPostPrompt({
+    brief: "",
+    mode: "fresh",
+    language: "brief",
+    tone: "smart",
+    count: 1,
+    maxLength: 220,
+    useEmoji: false,
+    quotedPost: { text: "", authorHandle: "@x", imageUrls: ["https://pbs.twimg.com/media/a"] },
+  });
+  assert.match(prompt, /\(No caption text — an image-only post\.\)/);
+  assert.match(prompt, /1 image from the quoted post is attached below/);
+});
+
+test("POST_SYSTEM_PROMPT defines quote-tweet commentary semantics", () => {
+  assert.match(POST_SYSTEM_PROMPT, /quote-tweet commentary published directly above that post/);
+  assert.match(POST_SYSTEM_PROMPT, /never merely paraphrase or summarize/);
+  assert.match(POST_SYSTEM_PROMPT, /never address the quoted author as if replying/);
+});

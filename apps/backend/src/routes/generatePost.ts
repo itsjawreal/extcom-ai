@@ -65,12 +65,63 @@ function parseBlockedTerms(value: unknown): string[] | undefined {
   return terms.length ? terms : undefined;
 }
 
+function parseQuotedPost(value: unknown): GeneratePostRequest["quotedPost"] {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("quotedPost must be an object.");
+  }
+  const record = value as Record<string, unknown>;
+
+  if (typeof record.text !== "string" || record.text.length > 10_000) {
+    throw new Error("quotedPost.text must be a string of at most 10000 characters.");
+  }
+  const text = record.text.trim();
+  const authorHandle = optionalString(record.authorHandle, 100, "quotedPost.authorHandle");
+  const authorName = optionalString(record.authorName, 200, "quotedPost.authorName");
+
+  let imageUrls: string[] | undefined;
+  if (record.imageUrls !== undefined) {
+    if (!Array.isArray(record.imageUrls) || record.imageUrls.length > 4) {
+      throw new Error("quotedPost.imageUrls must contain at most 4 items.");
+    }
+    imageUrls = record.imageUrls.map((item) => {
+      if (typeof item === "string" && item.length <= 2_000) {
+        try {
+          if (new URL(item).protocol === "https:") return item;
+        } catch {
+          // fall through to the shared error below
+        }
+      }
+      throw new Error("Each quotedPost.imageUrls item must be a valid https URL.");
+    });
+    if (!imageUrls.length) imageUrls = undefined;
+  }
+
+  let sourceLanguage: string | undefined;
+  if (record.sourceLanguage !== undefined && record.sourceLanguage !== "") {
+    if (typeof record.sourceLanguage !== "string" || record.sourceLanguage.length > 35) {
+      throw new Error("quotedPost.sourceLanguage must be a valid BCP 47 language tag.");
+    }
+    try {
+      sourceLanguage = Intl.getCanonicalLocales(record.sourceLanguage)[0];
+    } catch {
+      throw new Error("quotedPost.sourceLanguage must be a valid BCP 47 language tag.");
+    }
+  }
+
+  // A quoted post carrying no readable content at all adds nothing to the
+  // prompt — treat it as absent rather than emitting an empty section.
+  if (!text && !imageUrls && !authorHandle && !authorName) return undefined;
+  return { text, authorHandle, authorName, imageUrls, sourceLanguage };
+}
+
 export function validateGeneratePostRequest(value: unknown): GeneratePostRequest {
   if (!value || typeof value !== "object") throw new Error("Request body must be an object.");
   const body = value as Record<string, unknown>;
   const brief = optionalString(body.brief, 5_000, "brief");
   const existingDraft = optionalString(body.existingDraft, 25_000, "existingDraft");
   const attachedImages = parseAttachedImages(body.attachedImages);
+  const quotedPost = parseQuotedPost(body.quotedPost);
 
   if (body.mode !== "fresh" && body.mode !== "rewrite" && body.mode !== "continue") {
     throw new Error('mode must be "fresh", "rewrite", or "continue".');
@@ -78,9 +129,10 @@ export function validateGeneratePostRequest(value: unknown): GeneratePostRequest
   if ((body.mode === "rewrite" || body.mode === "continue") && !existingDraft) {
     throw new Error(`${body.mode} mode requires existingDraft.`);
   }
-  // Image-only fresh is a supported flow (caption an attached image); the
-  // text-editing modes always need composer text to edit.
-  if (!brief && !existingDraft && !(body.mode === "fresh" && attachedImages)) {
+  // Image-only and quote-only fresh are supported flows (caption an attached
+  // image / comment on a quoted post); the text-editing modes always need
+  // composer text to edit.
+  if (!brief && !existingDraft && !(body.mode === "fresh" && (attachedImages || quotedPost))) {
     throw new Error("Either brief or existingDraft must be provided.");
   }
   if (
@@ -146,6 +198,7 @@ export function validateGeneratePostRequest(value: unknown): GeneratePostRequest
     blockedTerms: parseBlockedTerms(body.blockedTerms),
     model: optionalString(body.model, 200, "model"),
     attachedImages,
+    quotedPost,
   };
 }
 

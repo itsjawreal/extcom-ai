@@ -81,6 +81,21 @@ export type AttachedImageInput = {
   height: number;
 };
 
+// The tweet being quoted when generating inside X's quote composer (plan
+// §20), extracted by the extension from the composer's preview card.
+// Mirrors the extension contract in apps/extension/src/shared/types.ts.
+export type QuotedPostInput = {
+  // May be "" for an image-only quoted tweet.
+  text: string;
+  authorHandle?: string;
+  authorName?: string;
+  // Up to 4 https X CDN URLs of the quoted tweet's own media — forwarded to
+  // the provider like reply imageUrls, distinct from attachedImages.
+  imageUrls?: string[];
+  // BCP 47 tag when X exposed one on the preview.
+  sourceLanguage?: string;
+};
+
 export type GeneratePostRequest = {
   // A topic/instruction supplied by the user. It may be empty only when an
   // existing composer draft supplies the source material.
@@ -102,6 +117,9 @@ export type GeneratePostRequest = {
   // Create Post; image-only fresh mode is allowed when at least one entry
   // passes validation. Never persisted or logged.
   attachedImages?: AttachedImageInput[];
+  // Present only for quote-composer generations (plan §20). Fresh mode with
+  // an empty composer is allowed when this is present. Never persisted.
+  quotedPost?: QuotedPostInput;
 };
 
 export type GenerationRequest = GenerateReplyRequest | GeneratePostRequest;

@@ -326,10 +326,14 @@ export async function generateWithOpenAI(
   );
   const personaVoice = await getPersonaVoice();
   // Reply requests carry X-hosted HTTPS imageUrls; post requests carry
-  // validated composer-attachment data URLs (services/attachedImages.ts).
-  // Both providers accept either form in the same content block.
+  // validated composer-attachment data URLs (services/attachedImages.ts)
+  // plus, for quote composers, the quoted tweet's own https CDN URLs (plan
+  // §20). Both providers accept every form in the same content block.
   const imageUrls = isGeneratePostRequest(input)
-    ? input.attachedImages?.map((image) => image.dataUrl)
+    ? [
+        ...(input.attachedImages?.map((image) => image.dataUrl) ?? []),
+        ...(input.quotedPost?.imageUrls ?? []),
+      ]
     : input.imageUrls;
   // Low detail keeps image cost/latency small (~85 flat tokens per image vs.
   // several hundred at high detail) — enough for a reply to reference what
@@ -442,9 +446,13 @@ export async function generateWithOpenRouter(
 
   const personaVoice = await getPersonaVoice();
   // See generateWithOpenAI: post requests contribute validated composer
-  // attachments as data URLs, reply requests keep X-hosted HTTPS URLs.
+  // attachments as data URLs plus the quoted tweet's https media (plan §20),
+  // reply requests keep X-hosted HTTPS URLs.
   const imageUrls = isGeneratePostRequest(input)
-    ? input.attachedImages?.map((image) => image.dataUrl)
+    ? [
+        ...(input.attachedImages?.map((image) => image.dataUrl) ?? []),
+        ...(input.quotedPost?.imageUrls ?? []),
+      ]
     : input.imageUrls;
   const model = input.model || process.env.AI_DEFAULT_MODEL || "openrouter/auto";
   // Without this, a reasoning-capable model (e.g. google/gemini-2.5-pro) can

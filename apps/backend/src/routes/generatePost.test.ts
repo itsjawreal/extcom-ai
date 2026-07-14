@@ -221,3 +221,69 @@ test("objective is optional and validated against the known list", () => {
     /objective must be omitted or one of: viral, replies, debate, value\./,
   );
 });
+
+test("quotedPost is validated and enables quote-only fresh generation", () => {
+  const input = validateGeneratePostRequest({
+    brief: "",
+    mode: "fresh",
+    tone: "smart",
+    quotedPost: {
+      text: "  original tweet  ",
+      authorHandle: "@x",
+      authorName: "X Person",
+      imageUrls: ["https://pbs.twimg.com/media/a?format=jpg&name=small"],
+      sourceLanguage: "en",
+    },
+  });
+  assert.equal(input.quotedPost?.text, "original tweet");
+  assert.equal(input.quotedPost?.authorHandle, "@x");
+  assert.deepEqual(input.quotedPost?.imageUrls, ["https://pbs.twimg.com/media/a?format=jpg&name=small"]);
+  assert.equal(input.quotedPost?.sourceLanguage, "en");
+});
+
+test("quote-only rewrite and continue still require existingDraft", () => {
+  assert.throws(
+    () => validateGeneratePostRequest({
+      brief: "",
+      mode: "rewrite",
+      tone: "smart",
+      quotedPost: { text: "original tweet" },
+    }),
+    /rewrite mode requires existingDraft/,
+  );
+});
+
+test("malformed quotedPost fields are rejected", () => {
+  assert.throws(
+    () => validateGeneratePostRequest({ brief: "t", mode: "fresh", tone: "smart", quotedPost: "text" }),
+    /quotedPost must be an object/,
+  );
+  assert.throws(
+    () => validateGeneratePostRequest({
+      brief: "t", mode: "fresh", tone: "smart",
+      quotedPost: { text: "x", imageUrls: ["http://insecure.example/a"] },
+    }),
+    /valid https URL/,
+  );
+  assert.throws(
+    () => validateGeneratePostRequest({
+      brief: "t", mode: "fresh", tone: "smart",
+      quotedPost: { text: "x", imageUrls: Array(5).fill("https://pbs.twimg.com/media/a") },
+    }),
+    /at most 4 items/,
+  );
+  assert.throws(
+    () => validateGeneratePostRequest({
+      brief: "t", mode: "fresh", tone: "smart",
+      quotedPost: { text: "x", sourceLanguage: "not a tag!!" },
+    }),
+    /BCP 47/,
+  );
+});
+
+test("an empty quotedPost object is treated as absent", () => {
+  assert.throws(
+    () => validateGeneratePostRequest({ brief: "", mode: "fresh", tone: "smart", quotedPost: { text: "" } }),
+    /Either brief or existingDraft must be provided/,
+  );
+});
