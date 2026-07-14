@@ -268,3 +268,18 @@ version and date. Conclude with one of:
 - Remaining matrix rows (modal composer, drag-drop, 4 images, blob lifetime,
   remove/replace, SPA nav) still worth running before the Phase F canary, but
   the transport decision is settled.
+
+## Phase F canary (2026-07-15, local backend + real X session)
+
+- Image-only Fresh with Read attached images On/Auto: generated posts are
+  relevant to the attached media. ✅
+- 4 attachments: generation succeeds, output relevant and grounded. ✅
+- Fresh + images + Off, and Rewrite/Continue without text: rejected with the
+  mode-specific guidance messages. ✅
+- Stale-media guard: after changing attachments, Insert is blocked with
+  "Attached images changed. Regenerate for the current composer."; a fresh
+  generate against the new media produces relevant output. ✅
+
+Remaining before release sign-off: modal composer (/compose/post) spot check
+and an explicit On-vs-Off comparison on the same chart; reply/quote
+regression suite already covered by automated tests.
