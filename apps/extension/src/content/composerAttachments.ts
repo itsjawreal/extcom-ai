@@ -1,3 +1,4 @@
+import { findQuotedPreview } from "./composerQuote";
 import type { AttachedImageInput } from "../shared/types";
 
 // Client-side limits; the backend enforces the same numbers authoritatively
@@ -87,7 +88,13 @@ export function discoverComposerAttachments(root: HTMLElement): ComposerAttachme
     // whole composer root only when X's markup drifts and the container
     // disappears, so the size/ancestor filters still have a chance.
     const previewScope = root.querySelector<HTMLElement>('[data-testid="attachments"]') ?? root;
+    // A quote composer mounts the quoted tweet's preview — including that
+    // tweet's own https media images — inside this same container (spike
+    // 20-A). Those are the quoted author's media, not the user's
+    // attachments; they belong to quotedPost.imageUrls, never here.
+    const quotedPreview = findQuotedPreview(root);
     for (const img of previewScope.querySelectorAll<HTMLImageElement>("img")) {
+      if (quotedPreview?.contains(img)) continue;
       const src = img.currentSrc || img.src;
       const scheme = src.split(":")[0];
       if (scheme !== "blob" && scheme !== "data" && scheme !== "https") continue;

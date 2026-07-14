@@ -9,6 +9,7 @@ import {
   fingerprintAttachments,
   prepareAttachedImages,
 } from "./composerAttachments";
+import { extractQuotedPost, findQuotedPreview } from "./composerQuote";
 import { POST_COMPOSER_SESSION_ATTRIBUTE, type StandaloneComposer } from "./postComposerObserver";
 import {
   autoIncludeImages,
@@ -1569,7 +1570,18 @@ async function requestPostDrafts(
   const includeImages = imageMode === "on" ||
     (imageMode === "auto" && autoIncludeImages(existingDraft, discovered.length > 0));
 
-  if (!existingDraft && !(mode === "fresh" && includeImages && discovered.length)) {
+  // Read the quoted tweet (if this is a quote composer) at Generate time,
+  // like attachments — the §20.2 matrix allows an empty-composer Fresh to
+  // generate commentary from the quoted post alone.
+  const quotedPreview = findQuotedPreview(liveRoot);
+  const quotedPost = quotedPreview ? extractQuotedPost(quotedPreview) ?? undefined : undefined;
+
+  if (!existingDraft && !(mode === "fresh" && (quotedPost || (includeImages && discovered.length)))) {
+    if (mode !== "fresh" && quotedPost) {
+      throw new Error(
+        `${mode === "rewrite" ? "Rewrite" : "Continue"} edits composer text. Type your take first, or switch to Fresh to write a comment on the quoted post.`,
+      );
+    }
     if (mode !== "fresh" && discovered.length) {
       throw new Error(
         `${mode === "rewrite" ? "Rewrite" : "Continue"} edits composer text, so images alone aren't enough. Type a draft first, or switch to Fresh for an image-only post.`,
@@ -1614,6 +1626,7 @@ async function requestPostDrafts(
       useEmoji: readUseEmoji(panel),
       extraInstruction: readExtraInstruction(panel),
       attachedImages,
+      quotedPost,
     },
   });
 
@@ -1904,8 +1917,9 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
             <button type="button" data-post-mode="rewrite" aria-pressed="false">Rewrite</button>
             <button type="button" data-post-mode="continue" aria-pressed="false">Continue</button>
           </div>
-          <span class="eks-control-hint">Fresh uses the composer as an idea; Rewrite and Continue treat it as a draft.</span>
+          <span class="eks-control-hint" data-post-mode-hint>Fresh uses the composer as an idea; Rewrite and Continue treat it as a draft.</span>
         </div>
+        <div class="eks-control-hint" data-quote-strip hidden></div>
         <div class="eks-count-label" data-attachment-row hidden>
           <span data-attachment-label>Read attached images</span>
           <div class="eks-count-group" data-images-group role="group" aria-label="Read attached composer images">
@@ -1986,6 +2000,36 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
   setPostMode(panel, "fresh");
   bindPostPanelControls(panel);
   panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
+
+  // Quote composer (plan §20.3): retitle the panel, show what was read from
+  // the quoted preview, and adjust the mode hint. Extraction failure only
+  // downgrades the strip — generation still works from composer text.
+  const quotedPreview = findQuotedPreview(composer.root);
+  if (quotedPreview) {
+    const title = panel.querySelector<HTMLElement>("#eks-post-panel-title");
+    if (title) title.textContent = "AI Quote";
+    const strip = panel.querySelector<HTMLElement>("[data-quote-strip]");
+    const quoted = extractQuotedPost(quotedPreview);
+    if (strip) {
+      strip.hidden = false;
+      if (!quoted) {
+        strip.textContent = "Quoted post not readable — generating from your composer text only.";
+      } else {
+        const who = quoted.authorHandle ?? quoted.authorName ?? "a post";
+        const snippet = quoted.text
+          ? `: “${quoted.text.length > 80 ? `${quoted.text.slice(0, 80)}…` : quoted.text}”`
+          : quoted.imageUrls?.length
+            ? ` (image post, ${quoted.imageUrls.length} image${quoted.imageUrls.length > 1 ? "s" : ""})`
+            : "";
+        strip.textContent = `Quoting ${who}${snippet}`;
+      }
+    }
+    if (quoted) {
+      const modeHint = panel.querySelector<HTMLElement>("[data-post-mode-hint]");
+      if (modeHint) modeHint.textContent = "Fresh writes your take on the quoted post; Rewrite and Continue edit your draft.";
+    }
+  }
+
   panel.querySelector("[data-panel-close]")?.addEventListener("click", () => closePanel());
   document.body.append(panel);
   activePanel = panel;

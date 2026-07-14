@@ -86,6 +86,19 @@ export type AttachedImageInput = {
   height: number;
 };
 
+// The tweet being quoted in X's quote composer, extracted from the preview
+// card at Generate time (plan §20). Mirrors the backend contract — keep in
+// sync with apps/backend/src/types/index.ts.
+export type QuotedPostInput = {
+  // May be "" for an image-only quoted tweet.
+  text: string;
+  authorHandle?: string;
+  authorName?: string;
+  // Up to 4 https X CDN URLs of the quoted tweet's own media.
+  imageUrls?: string[];
+  sourceLanguage?: string;
+};
+
 export type GeneratePostRequest = {
   brief: string;
   existingDraft?: string;
@@ -102,6 +115,8 @@ export type GeneratePostRequest = {
   // Up to 4 prepared composer attachments; bytes are read only after the
   // user selects Generate and are never persisted anywhere.
   attachedImages?: AttachedImageInput[];
+  // Present only when generating inside a quote composer (plan §20).
+  quotedPost?: QuotedPostInput;
 };
 
 export type ModelOption = {
