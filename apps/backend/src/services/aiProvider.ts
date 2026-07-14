@@ -14,20 +14,32 @@ type TokenUsage = { promptTokens: number; completionTokens: number };
 type ParsedReplies = { texts: string[]; tone: Tone };
 type GenerateResult = ParsedReplies & { model: string; usage: TokenUsage | null };
 
-type ResponsesApiContent = { type?: string; text?: string };
+type ResponsesApiContent = { type?: string; text?: string; refusal?: string };
 type ResponsesApiOutput = { type?: string; content?: ResponsesApiContent[] };
 type ResponsesApiResult = {
   output?: ResponsesApiOutput[];
+  status?: string;
   usage?: { input_tokens?: number; output_tokens?: number };
-  error?: { message?: string };
+  error?: { code?: string; message?: string };
 };
 
 type OpenRouterResult = {
   choices?: Array<{
     message?: { content?: string | null };
+    finish_reason?: string | null;
   }>;
   usage?: { prompt_tokens?: number; completion_tokens?: number };
-  error?: { message?: string };
+  error?: {
+    code?: number;
+    message?: string;
+    metadata?: { error_type?: string };
+  };
+};
+
+type ProviderErrorOptions = {
+  retryable?: boolean;
+  retryAfterMs?: number;
+  usage?: TokenUsage | null;
 };
 
 // A provider or a test mock may not send usage at all — never crash on it,
@@ -41,10 +53,100 @@ export class ProviderError extends Error {
   constructor(
     message: string,
     readonly statusCode = 502,
+    readonly options: ProviderErrorOptions = {},
   ) {
     super(message);
     this.name = "ProviderError";
   }
+
+  get retryable(): boolean {
+    return this.options.retryable === true;
+  }
+
+  get retryAfterMs(): number | undefined {
+    return this.options.retryAfterMs;
+  }
+
+  get usage(): TokenUsage | null {
+    return this.options.usage ?? null;
+  }
+}
+
+const MAX_GENERATION_ATTEMPTS = 2;
+const BASE_RETRY_DELAY_MS = 400;
+const MAX_RETRY_DELAY_MS = 5_000;
+const RETRYABLE_HTTP_STATUSES = new Set([408, 409, 429, 500, 502, 503, 504]);
+const RETRYABLE_OPENROUTER_ERROR_TYPES = new Set([
+  "rate_limit_exceeded",
+  "provider_overloaded",
+  "provider_unavailable",
+  "server",
+  "timeout",
+  "unmapped",
+]);
+const RETRYABLE_OPENAI_ERROR_CODES = new Set(["rate_limit_exceeded", "server_error"]);
+
+function parseRetryAfterMs(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1_000);
+  const date = Date.parse(value);
+  if (!Number.isFinite(date)) return undefined;
+  return Math.max(0, date - now);
+}
+
+function providerHttpError(
+  provider: string,
+  response: Response,
+  message: string,
+  usage: TokenUsage | null = null,
+): ProviderError {
+  return new ProviderError(message || `${provider} failed with HTTP ${response.status}.`, 502, {
+    retryable: RETRYABLE_HTTP_STATUSES.has(response.status),
+    retryAfterMs: parseRetryAfterMs(response.headers.get("Retry-After")),
+    usage,
+  });
+}
+
+async function fetchProvider(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    const timedOut = error instanceof Error &&
+      (error.name === "TimeoutError" || error.name === "AbortError");
+    throw new ProviderError(
+      timedOut ? "AI provider request timed out." : "Could not reach AI provider.",
+      502,
+      { retryable: true },
+    );
+  }
+}
+
+function withUsage(error: ProviderError, usage: TokenUsage | null): ProviderError {
+  return new ProviderError(error.message, error.statusCode, {
+    ...error.options,
+    usage: combineUsage(error.usage, usage),
+  });
+}
+
+function retryDelayMs(error: ProviderError | null, completedAttempts: number): number {
+  if (error?.retryAfterMs !== undefined) return error.retryAfterMs;
+  const exponential = BASE_RETRY_DELAY_MS * 2 ** Math.max(0, completedAttempts - 1);
+  const jitter = Math.floor(Math.random() * 150);
+  return Math.min(MAX_RETRY_DELAY_MS, exponential + jitter);
+}
+
+function canRetry(error: ProviderError, completedAttempts: number): boolean {
+  if (!error.retryable || completedAttempts >= MAX_GENERATION_ATTEMPTS) return false;
+  return error.retryAfterMs === undefined || error.retryAfterMs <= MAX_RETRY_DELAY_MS;
+}
+
+async function waitBeforeRetry(
+  error: ProviderError | null,
+  completedAttempts: number,
+): Promise<void> {
+  const delay = retryDelayMs(error, completedAttempts);
+  if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
 }
 
 function normalizeForBlockedTerm(value: string): string {
@@ -111,14 +213,45 @@ function computeMaxTokens(input: GenerationRequest): number {
   return Math.min(MAX_TOKENS_CEILING, Math.max(MIN_TOKENS_FLOOR, estimated));
 }
 
+function buildReplySchema(input: GenerationRequest, enforceProviderLimits: boolean) {
+  const schemaTextMaxLength =
+    (input.maxLength === "auto" ? 280 : input.maxLength) + SCHEMA_LENGTH_BUFFER;
+  return {
+    type: "object",
+    properties: {
+      ...(input.tone === "auto" ? { tone: { type: "string", enum: TONES } } : {}),
+      replies: {
+        type: "array",
+        ...(enforceProviderLimits ? { minItems: input.count, maxItems: input.count } : {}),
+        items: {
+          type: "object",
+          properties: {
+            text: {
+              type: "string",
+              ...(enforceProviderLimits ? { maxLength: schemaTextMaxLength } : {}),
+            },
+          },
+          required: ["text"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: input.tone === "auto" ? ["tone", "replies"] : ["replies"],
+    additionalProperties: false,
+  };
+}
+
 function extractOutputText(result: ResponsesApiResult): string {
   for (const item of result.output ?? []) {
     if (item.type !== "message") continue;
     for (const content of item.content ?? []) {
       if (content.type === "output_text" && content.text) return content.text;
+      if (content.type === "refusal") {
+        throw new ProviderError(content.refusal || "AI provider refused the request.");
+      }
     }
   }
-  throw new ProviderError("AI provider returned no text output.");
+  throw new ProviderError("AI provider returned no text output.", 502, { retryable: true });
 }
 
 // Matches promptBuilder.ts's own auto-mode ceiling and the extension's
@@ -137,16 +270,16 @@ function parseReplies(
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new ProviderError("AI provider returned invalid JSON.");
+    throw new ProviderError("AI provider returned invalid JSON.", 502, { retryable: true });
   }
 
   if (!parsed || typeof parsed !== "object" || !("replies" in parsed)) {
-    throw new ProviderError("AI provider response is missing replies.");
+    throw new ProviderError("AI provider response is missing replies.", 502, { retryable: true });
   }
 
   const replies = (parsed as { replies?: unknown }).replies;
   if (!Array.isArray(replies)) {
-    throw new ProviderError("AI provider replies must be an array.");
+    throw new ProviderError("AI provider replies must be an array.", 502, { retryable: true });
   }
 
   const texts = replies
@@ -159,7 +292,9 @@ function parseReplies(
     .slice(0, expectedCount);
 
   if (texts.length !== expectedCount || new Set(texts).size !== texts.length) {
-    throw new ProviderError("AI provider returned incomplete or duplicate replies.");
+    throw new ProviderError("AI provider returned incomplete or duplicate replies.", 502, {
+      retryable: true,
+    });
   }
 
   // Manual tone: trust the request, no need for the model to echo it back.
@@ -213,7 +348,7 @@ export async function generateWithOpenAI(
       ]
     : buildGenerationPrompt(input, personaVoice);
 
-  const response = await fetch(`${baseUrl}/responses`, {
+  const response = await fetchProvider(`${baseUrl}/responses`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -225,20 +360,54 @@ export async function generateWithOpenAI(
       input: requestInput,
       max_output_tokens: computeMaxTokens(input),
       reasoning: { effort: "none" },
+      text: {
+        format: {
+          type: "json_schema",
+          name: "reply_options",
+          strict: true,
+          // The direct OpenAI schema deliberately uses the portable strict
+          // subset. Exact count and text length remain enforced by
+          // parseReplies()/sanitizeReply() after generation.
+          schema: buildReplySchema(input, false),
+        },
+      },
     }),
     signal: AbortSignal.timeout(30_000),
   });
 
   const result = (await response.json().catch(() => ({}))) as ResponsesApiResult;
+  const usage = extractTokenUsage(result.usage?.input_tokens, result.usage?.output_tokens);
   if (!response.ok) {
-    throw new ProviderError(
+    throw providerHttpError(
+      "AI provider",
+      response,
       result.error?.message || `AI provider failed with HTTP ${response.status}.`,
+      usage,
     );
   }
 
-  const parsed = parseReplies(extractOutputText(result), input.count, input.tone, input.maxLength);
-  const usage = extractTokenUsage(result.usage?.input_tokens, result.usage?.output_tokens);
-  return { ...parsed, model, usage };
+  if (result.status === "failed") {
+    throw new ProviderError(result.error?.message || "AI provider generation failed.", 502, {
+      retryable:
+        typeof result.error?.code === "string" &&
+        RETRYABLE_OPENAI_ERROR_CODES.has(result.error.code),
+      usage,
+    });
+  }
+  if (result.status === "incomplete") {
+    throw new ProviderError("AI provider returned incomplete output.", 502, {
+      retryable: true,
+      usage,
+    });
+  }
+
+  try {
+    const parsed = parseReplies(extractOutputText(result), input.count, input.tone, input.maxLength);
+    return { ...parsed, model, usage };
+  } catch (error) {
+    if (error instanceof ProviderError) throw withUsage(error, usage);
+    throw error;
+  }
 }
 
 export async function generateWithOpenRouter(
@@ -252,6 +421,13 @@ export async function generateWithOpenRouter(
   const baseUrl = (
     process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1"
   ).replace(/\/$/, "");
+  let useResponseHealing = false;
+  try {
+    useResponseHealing = new URL(baseUrl).hostname === "openrouter.ai";
+  } catch {
+    // A malformed/custom base URL will fail normally at fetch time. Do not
+    // add an OpenRouter-only plugin parameter to unknown compatible APIs.
+  }
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
     "Content-Type": "application/json",
@@ -274,8 +450,6 @@ export async function generateWithOpenRouter(
   // below means sending an unsupported parameter makes the whole request
   // unroutable, not just ignored, so this has to be conditional.
   const supportsReasoningControl = await modelSupportsParameter(model, "reasoning");
-  const schemaTextMaxLength =
-    (input.maxLength === "auto" ? 280 : input.maxLength) + SCHEMA_LENGTH_BUFFER;
   // Low detail keeps image cost/latency small (~85 flat tokens per image vs.
   // several hundred at high detail) — enough for a reply to reference what
   // an image shows without needing pixel-level precision. Cost scales
@@ -292,7 +466,7 @@ export async function generateWithOpenRouter(
       ]
     : buildGenerationPrompt(input, personaVoice);
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetchProvider(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers,
     body: JSON.stringify({
@@ -309,61 +483,69 @@ export async function generateWithOpenRouter(
         json_schema: {
           name: "reply_options",
           strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              // Only present (and required) when the caller asked for
-              // tone: "auto" — a manually-picked tone doesn't need the
-              // model to echo it back, so the schema for that path stays
-              // exactly as it was before this feature existed.
-              ...(input.tone === "auto" ? { tone: { type: "string", enum: TONES } } : {}),
-              replies: {
-                type: "array",
-                minItems: input.count,
-                maxItems: input.count,
-                items: {
-                  type: "object",
-                  properties: {
-                    // Padded above the real target (sanitizeReply() below
-                    // still trims to the true limit). Some providers
-                    // grammar-constrain generation to a strict schema's
-                    // maxLength and cut the string exactly there — mid-word,
-                    // with no ellipsis — confirmed live at 1000/1000 chars
-                    // ending on ".. backst". Since our own truncation only
-                    // fires when text.length exceeds the target, a string
-                    // arriving pre-cut exactly at the target slips through
-                    // untouched. The buffer gives room to finish the
-                    // sentence naturally so our own sentence/word-boundary
-                    // truncation is what actually decides where it ends.
-                    text: { type: "string", maxLength: schemaTextMaxLength },
-                  },
-                  required: ["text"],
-                  additionalProperties: false,
-                },
-              },
-            },
-            required: input.tone === "auto" ? ["tone", "replies"] : ["replies"],
-            additionalProperties: false,
-          },
+          // OpenRouter supports the count and padded-length constraints used
+          // here. sanitizeReply() still enforces the real requested limit.
+          schema: buildReplySchema(input, true),
         },
       },
+      ...(useResponseHealing ? { plugins: [{ id: "response-healing" }] } : {}),
       provider: { require_parameters: true },
     }),
     signal: AbortSignal.timeout(30_000),
   });
 
   const result = (await response.json().catch(() => ({}))) as OpenRouterResult;
+  const usage = extractTokenUsage(result.usage?.prompt_tokens, result.usage?.completion_tokens);
   if (!response.ok) {
-    throw new ProviderError(
+    throw providerHttpError(
+      "OpenRouter",
+      response,
       result.error?.message || `OpenRouter failed with HTTP ${response.status}.`,
+      usage,
+    );
+  }
+
+  if (result.error) {
+    const errorType = result.error.metadata?.error_type;
+    throw new ProviderError(result.error.message || "OpenRouter generation failed.", 502, {
+      retryable:
+        (typeof result.error.code === "number" && RETRYABLE_HTTP_STATUSES.has(result.error.code)) ||
+        (typeof errorType === "string" && RETRYABLE_OPENROUTER_ERROR_TYPES.has(errorType)),
+      retryAfterMs: parseRetryAfterMs(response.headers.get("Retry-After")),
+      usage,
+    });
+  }
+
+  const finishReason = result.choices?.[0]?.finish_reason;
+  if (finishReason === "content_filter") {
+    throw new ProviderError("AI provider blocked the output under its content policy.", 502, {
+      usage,
+    });
+  }
+  if (finishReason === "length" || finishReason === "error") {
+    throw new ProviderError(
+      finishReason === "length"
+        ? "AI provider stopped before finishing the output."
+        : "AI provider stopped with a generation error.",
+      502,
+      { retryable: true, usage },
     );
   }
 
   const content = result.choices?.[0]?.message?.content;
-  if (!content) throw new ProviderError("OpenRouter returned no text output.");
-  const parsed = parseReplies(content, input.count, input.tone, input.maxLength);
-  const usage = extractTokenUsage(result.usage?.prompt_tokens, result.usage?.completion_tokens);
-  return { ...parsed, model, usage };
+  if (!content) {
+    throw new ProviderError("OpenRouter returned no text output.", 502, {
+      retryable: true,
+      usage,
+    });
+  }
+  try {
+    const parsed = parseReplies(content, input.count, input.tone, input.maxLength);
+    return { ...parsed, model, usage };
+  } catch (error) {
+    if (error instanceof ProviderError) throw withUsage(error, usage);
+    throw error;
+  }
 }
 
 async function generateOnce(input: GenerationRequest): Promise<GenerateResult> {
@@ -374,18 +556,44 @@ async function generateOnce(input: GenerationRequest): Promise<GenerateResult> {
 }
 
 export async function generateReplies(input: GenerationRequest): Promise<GenerateResult> {
-  const attempts = input.blockedTerms?.length ? 2 : 1;
   let accumulatedUsage: TokenUsage | null = null;
   let violation: string | undefined;
 
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const result = await generateOnce(input);
+  for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt += 1) {
+    let result: GenerateResult;
+    try {
+      result = await generateOnce(input);
+    } catch (error) {
+      if (!(error instanceof ProviderError)) throw error;
+      accumulatedUsage = combineUsage(accumulatedUsage, error.usage);
+      if (canRetry(error, attempt)) {
+        await waitBeforeRetry(error, attempt);
+        continue;
+      }
+
+      const baseMessage = error.message.replace(/[.\s]+$/, "");
+      const message = error.retryable && attempt > 1
+        ? `${baseMessage} after ${attempt} attempts.`
+        : error.retryable && error.retryAfterMs !== undefined && error.retryAfterMs > MAX_RETRY_DELAY_MS
+          ? `${baseMessage}. Retry after about ${Math.ceil(error.retryAfterMs / 1_000)} seconds.`
+          : error.message;
+      throw new ProviderError(message, error.statusCode, {
+        ...error.options,
+        usage: accumulatedUsage,
+      });
+    }
+
     accumulatedUsage = combineUsage(accumulatedUsage, result.usage);
     violation = findBlockedTerm(result.texts, input.blockedTerms);
     if (!violation) return { ...result, usage: accumulatedUsage };
+    if (attempt < MAX_GENERATION_ATTEMPTS) await waitBeforeRetry(null, attempt);
   }
 
-  throw new ProviderError(`AI provider repeatedly included a Never mention rule: ${JSON.stringify(violation)}.`);
+  throw new ProviderError(
+    `AI provider repeatedly included a Never mention rule: ${JSON.stringify(violation)}.`,
+    502,
+    { usage: accumulatedUsage },
+  );
 }
 
 export const providerInternals = {
@@ -395,4 +603,6 @@ export const providerInternals = {
   containsBlockedTerm,
   findBlockedTerm,
   combineUsage,
+  parseRetryAfterMs,
+  canRetry,
 };

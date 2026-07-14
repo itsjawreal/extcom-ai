@@ -346,6 +346,54 @@ test("provider failure refunds reserved quota", async () => {
   );
 });
 
+test("a successful internal provider retry consumes only one backend quota unit", async () => {
+  resetRateLimits();
+  const token = authInternals.DEFAULT_DEV_TOKEN;
+  const previousProvider = process.env.AI_DEFAULT_PROVIDER;
+  const previousKey = process.env.OPENAI_API_KEY;
+  const previousModel = process.env.AI_DEFAULT_MODEL;
+  const previousFetch = globalThis.fetch;
+  process.env.AI_DEFAULT_PROVIDER = "openai";
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.AI_DEFAULT_MODEL = "gpt-5.4-nano";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    const text = calls === 1
+      ? '{"replies":['
+      : JSON.stringify({ replies: [{ text: "recovered" }] });
+    return new Response(JSON.stringify({
+      output: [{ type: "message", content: [{ type: "output_text", text }] }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const captured = captureResponse();
+    await generateReplyRoute(
+      request(
+        JSON.stringify({ postText: "Post", tone: "smart", count: 1 }),
+        { authorization: `Bearer ${token}` },
+      ),
+      captured.response,
+    );
+
+    assert.equal(captured.statusCode, 200);
+    assert.equal(calls, 2);
+    assert.equal(
+      peekRateLimit(token, "pro").remainingToday,
+      rateLimitInternals.PLAN_LIMITS.pro.perDay - 1,
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousProvider === undefined) delete process.env.AI_DEFAULT_PROVIDER;
+    else process.env.AI_DEFAULT_PROVIDER = previousProvider;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+    if (previousModel === undefined) delete process.env.AI_DEFAULT_MODEL;
+    else process.env.AI_DEFAULT_MODEL = previousModel;
+  }
+});
+
 test("POST /v1/generate-reply includes the resolved model even when the provider reports no usage", async () => {
   resetRateLimits();
   const token = authInternals.DEFAULT_DEV_TOKEN;

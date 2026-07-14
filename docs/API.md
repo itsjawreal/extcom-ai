@@ -109,6 +109,18 @@ surfaced live as `"AI provider returned invalid JSON"` for
 `AI_DEFAULT_MODEL`, and don't assume an error means the model itself can
 never work here.
 
+Provider reliability is bounded rather than open-ended. Requests to the
+official OpenRouter API use strict structured output plus its
+`response-healing` plugin; direct OpenAI Responses requests use a strict
+portable JSON schema. If a provider still returns malformed JSON, no/partial
+output, duplicate/missing drafts, a network failure, or a transient
+`408`/`409`/`429`/`5xx`, the backend waits briefly and tries once more (two
+total attempts). A short provider `Retry-After` value is honored; a long one
+is returned to the caller instead of holding the request open. Authentication,
+payment, validation, refusal, and content-policy errors are never retried. A
+successful internal retry consumes one Extcom rate-limit unit, while provider
+token usage from both paid attempts is combined in the response.
+
 `useEmoji` is a boolean (default
 `true`); when `false` it's a hard override that beats any emoji habit implied
 by the selected tone. `imageUrls` is optional (array of `http(s)://` URLs,
