@@ -1916,23 +1916,27 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
     <div class="eks-panel-body">
       <div class="eks-settings-card">
         <div class="eks-count-label" data-post-mode-row>
-          Mode
+          <span class="eks-image-label-heading">
+            <span>Mode</span>
+            <button type="button" class="eks-tooltip-info" data-post-mode-info aria-label="About generation modes" data-tooltip="Fresh uses the composer as an idea; Rewrite and Continue treat it as a draft.">i</button>
+          </span>
           <div class="eks-count-group eks-post-mode-group" data-post-mode-group role="group" aria-label="Post generation mode">
             <button type="button" data-post-mode="fresh" aria-pressed="true">Fresh</button>
             <button type="button" data-post-mode="rewrite" aria-pressed="false">Rewrite</button>
             <button type="button" data-post-mode="continue" aria-pressed="false">Continue</button>
           </div>
-          <span class="eks-control-hint" data-post-mode-hint>Fresh uses the composer as an idea; Rewrite and Continue treat it as a draft.</span>
         </div>
         <div class="eks-control-hint" data-quote-strip hidden></div>
         <div class="eks-count-label" data-attachment-row hidden>
-          <span data-attachment-label>Read attached images</span>
+          <span class="eks-image-label-heading">
+            <span data-attachment-label>Read attached images</span>
+            <button type="button" class="eks-tooltip-info" aria-label="About reading attached images" data-tooltip="Attached images are read and sent to your backend/AI provider only when you press Generate. They are never uploaded, changed, or posted by the extension.">i</button>
+          </span>
           <div class="eks-count-group" data-images-group role="group" aria-label="Read attached composer images">
             <button type="button" data-images="auto" aria-pressed="true">Auto</button>
             <button type="button" data-images="on" aria-pressed="false">On</button>
             <button type="button" data-images="off" aria-pressed="false">Off</button>
           </div>
-          <span class="eks-control-hint">Attached images are read and sent to your backend/AI provider only when you press Generate. They are never uploaded, changed, or posted by the extension.</span>
         </div>
         <div class="eks-tone-label">
           Tone
@@ -2030,8 +2034,8 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
       }
     }
     if (quoted) {
-      const modeHint = panel.querySelector<HTMLElement>("[data-post-mode-hint]");
-      if (modeHint) modeHint.textContent = "Fresh writes your take on the quoted post; Rewrite and Continue edit your draft.";
+      const modeInfo = panel.querySelector<HTMLElement>("[data-post-mode-info]");
+      if (modeInfo) modeInfo.dataset.tooltip = "Fresh writes your take on the quoted post; Rewrite and Continue edit your draft.";
     }
   }
 
