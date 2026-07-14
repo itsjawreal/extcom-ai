@@ -26,6 +26,11 @@ export type Tone =
 
 export type ReadImagesMode = "auto" | "off" | "on";
 
+// Engagement goal — what the output should achieve, orthogonal to tone.
+// Mirrors the backend's EngagementObjective; absent means no goal section
+// in the prompt (today's behavior).
+export type EngagementObjective = "viral" | "replies" | "debate" | "value";
+
 export type ContentKind = "reply" | "quote" | "post";
 
 export type GeneratedReply = {
@@ -56,6 +61,7 @@ export type GenerateReplyRequest = ExtractedPostContext & {
   // applied consistently across every reply in the batch — the resolved
   // tone (never "auto") is echoed back per-reply in GeneratedReply.tone.
   tone: Tone | "auto";
+  objective?: EngagementObjective;
   extraInstruction?: string;
   blockedTerms?: string[];
   count: number;
@@ -86,6 +92,7 @@ export type GeneratePostRequest = {
   mode: GeneratePostMode;
   language: "brief" | "en";
   tone: Tone | "auto";
+  objective?: EngagementObjective;
   extraInstruction?: string;
   blockedTerms?: string[];
   count: number;
@@ -139,6 +146,9 @@ export type ExtensionSettings = {
   draftCount: number;
   useEmoji: boolean;
   readImages: ReadImagesMode;
+  // Saved default engagement goal; "none" keeps today's behavior. The
+  // panels open with this value and can override it per-session.
+  objectiveDefault: EngagementObjective | "none";
   // Pinned tones shown as quick-pick chips in the popup and the on-page
   // panel, on top of the full tone dropdown. Capped at 5, "auto" excluded
   // (it's already always the first dropdown option).
@@ -168,6 +178,8 @@ export type HistoryEntry = {
   postText: string;
   postUrl?: string;
   tone: Tone;
+  // Engagement goal used for this generation, when one was set.
+  objective?: EngagementObjective;
   drafts: string[];
   inserted: boolean;
   // Only set once inserted — which composer the draft was inserted into.

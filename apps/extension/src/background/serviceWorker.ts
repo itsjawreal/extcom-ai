@@ -9,6 +9,7 @@ import {
 import type {
   ContentKind,
   ConnectionStatus,
+  EngagementObjective,
   ExtensionSettings,
   GeneratePostRequest,
   GeneratePostResponse,
@@ -30,6 +31,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   draftCount: 3,
   useEmoji: true,
   readImages: "auto",
+  objectiveDefault: "none",
   favoriteTones: [],
   blockedTerms: [],
   aiModel: "",
@@ -80,9 +82,31 @@ function normalizeReadImagesMode(value: unknown, fallback: ReadImagesMode): Read
   return value === "auto" || value === "off" || value === "on" ? value : fallback;
 }
 
+const VALID_OBJECTIVES = new Set<EngagementObjective>(["viral", "replies", "debate", "value"]);
+
+function normalizeObjectiveDefault(value: unknown): EngagementObjective | "none" {
+  return typeof value === "string" && VALID_OBJECTIVES.has(value as EngagementObjective)
+    ? (value as EngagementObjective)
+    : "none";
+}
+
+// The panel always sends an explicit goal ("none" included) so a deliberate
+// Default choice is never overridden by a saved non-"none" setting; only a
+// missing value (stale content script) falls back to the saved default.
+function resolveObjective(
+  value: unknown,
+  fallback: EngagementObjective | "none",
+): EngagementObjective | undefined {
+  if (typeof value === "string" && VALID_OBJECTIVES.has(value as EngagementObjective)) {
+    return value as EngagementObjective;
+  }
+  if (value === undefined && fallback !== "none") return fallback;
+  return undefined;
+}
+
 // "model" is deliberately excluded — it's a popup-level (Advanced tab)
 // setting only, not something the on-page panel can override per-generation.
-type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji" | "model" | "blockedTerms"> & {
+type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" | "useEmoji" | "model" | "blockedTerms" | "objective"> & {
   tone?: Tone | "auto";
   count?: number;
   maxLength?: number | "auto";
@@ -90,16 +114,20 @@ type GenerateInput = Omit<GenerateReplyRequest, "tone" | "count" | "maxLength" |
   // boolean keeps stale content scripts from the previous extension build
   // compatible until the X tab is refreshed.
   readImages?: ReadImagesMode | boolean;
+  // "none" is a deliberate Default choice in the panel; absent falls back to
+  // the saved objectiveDefault (see resolveObjective).
+  objective?: EngagementObjective | "none";
 };
 
 // The same popup-level defaults used for replies also apply to standalone
 // posts. The composer may override them for one generation, but never the
 // model or local blocklist.
-type GeneratePostInput = Omit<GeneratePostRequest, "tone" | "count" | "maxLength" | "useEmoji" | "model" | "blockedTerms"> & {
+type GeneratePostInput = Omit<GeneratePostRequest, "tone" | "count" | "maxLength" | "useEmoji" | "model" | "blockedTerms" | "objective"> & {
   tone?: Tone | "auto";
   count?: number;
   maxLength?: number | "auto";
   useEmoji?: boolean;
+  objective?: EngagementObjective | "none";
 };
 
 type RuntimeMessage =
@@ -138,6 +166,7 @@ async function getSettings(): Promise<ExtensionSettings> {
     useEmoji: typeof stored.useEmoji === "boolean" ? stored.useEmoji : DEFAULT_SETTINGS.useEmoji,
     // Migrate the old boolean setting in place: true = On, false = Off.
     readImages: normalizeReadImagesMode(stored.readImages, DEFAULT_SETTINGS.readImages),
+    objectiveDefault: normalizeObjectiveDefault(stored.objectiveDefault),
     favoriteTones: normalizeFavoriteTones(stored.favoriteTones),
     blockedTerms: normalizeBlockedTerms(stored.blockedTerms),
     aiModel: String(stored.aiModel ?? DEFAULT_SETTINGS.aiModel),
@@ -221,6 +250,7 @@ async function testModel(model: string, settings: ExtensionSettings): Promise<vo
 async function saveSettings(settings: Partial<ExtensionSettings>): Promise<ExtensionSettings> {
   const next = { ...(await getSettings()), ...settings };
   next.readImages = normalizeReadImagesMode(next.readImages, DEFAULT_SETTINGS.readImages);
+  next.objectiveDefault = normalizeObjectiveDefault(next.objectiveDefault);
   next.blockedTerms = normalizeBlockedTerms(next.blockedTerms);
   await chrome.storage.local.set(next);
   return next;
@@ -267,6 +297,7 @@ async function recordGeneration(
     // "smart" fallback only matters if replies were somehow empty, since
     // input.tone/settings.toneDefault could themselves literally be "auto".
     tone: data.replies[0]?.tone ?? "smart",
+    objective: input.objective && input.objective !== "none" ? input.objective : undefined,
     drafts: data.replies.map((reply) => reply.text),
     inserted: false,
     model: data.model,
@@ -304,6 +335,7 @@ async function recordPostGeneration(
     // to sourceText. This also makes rollback to an older popup harmless.
     postText: sourceText,
     tone: data.posts[0]?.tone ?? "smart",
+    objective: input.objective && input.objective !== "none" ? input.objective : undefined,
     drafts: data.posts.map((post) => post.text),
     inserted: false,
     model: data.model,
@@ -425,6 +457,7 @@ async function generateReply(
 
   const input: GenerateReplyRequest = {
     ...rawInput,
+    objective: resolveObjective(rawInput.objective, settings.objectiveDefault),
     tone: rawInput.tone ?? settings.toneDefault,
     extraInstruction: combinedInstruction || undefined,
     count: rawInput.count ?? settings.draftCount,
@@ -491,6 +524,7 @@ async function generatePost(
     ...rawInput,
     brief: rawInput.brief?.trim() ?? "",
     existingDraft: rawInput.existingDraft?.trim() || undefined,
+    objective: resolveObjective(rawInput.objective, settings.objectiveDefault),
     tone: rawInput.tone ?? settings.toneDefault,
     extraInstruction: combinedInstruction || undefined,
     count: rawInput.count ?? settings.draftCount,

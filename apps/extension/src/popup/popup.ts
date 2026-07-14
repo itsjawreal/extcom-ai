@@ -12,6 +12,7 @@ import {
 } from "../shared/constants";
 import type {
   ConnectionStatus,
+  EngagementObjective,
   ExtensionSettings,
   HistoryEntry,
   ModelOption,
@@ -80,6 +81,8 @@ const useEmojiGroup = document.getElementById("use-emoji") as HTMLElement;
 const useEmojiButtons = Array.from(useEmojiGroup.querySelectorAll<HTMLButtonElement>("button"));
 const readImagesGroup = document.getElementById("read-images") as HTMLElement;
 const readImagesButtons = Array.from(readImagesGroup.querySelectorAll<HTMLButtonElement>("button"));
+const engagementGoalGroup = document.getElementById("engagement-goal") as HTMLElement;
+const engagementGoalButtons = Array.from(engagementGoalGroup.querySelectorAll<HTMLButtonElement>("button"));
 const saveAdvancedButton = document.getElementById("save-advanced") as HTMLButtonElement;
 const statusToneNode = document.getElementById("status-tone") as HTMLParagraphElement;
 const statusAdvancedNode = document.getElementById("status-advanced") as HTMLParagraphElement;
@@ -115,6 +118,7 @@ let modelLoadId = 0;
 let draftCount = 3;
 let useEmoji = true;
 let readImages: ReadImagesMode = "auto";
+let objectiveDefault: EngagementObjective | "none" = "none";
 let maxLengthMode: "auto" | "manual" = "manual";
 let latestUsageStats: UsageStats = { totalGenerations: 0, totalInserted: 0, history: [] };
 let historyFilter: HistoryFilter = "all";
@@ -363,6 +367,13 @@ function setReadImages(value: ReadImagesMode): void {
   }
 }
 
+function setObjectiveDefault(value: EngagementObjective | "none"): void {
+  objectiveDefault = value;
+  for (const button of engagementGoalButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.goal === value));
+  }
+}
+
 function setMaxLengthMode(mode: "auto" | "manual"): void {
   maxLengthMode = mode;
   for (const button of maxLengthModeButtons) {
@@ -393,6 +404,16 @@ readImagesGroup.addEventListener("click", (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-images]");
   if (!button) return;
   setReadImages(button.dataset.images === "on" ? "on" : button.dataset.images === "off" ? "off" : "auto");
+  saveToneSettings();
+});
+
+engagementGoalGroup.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-goal]");
+  if (!button?.dataset.goal) return;
+  const goal = button.dataset.goal;
+  setObjectiveDefault(
+    goal === "viral" || goal === "replies" || goal === "debate" || goal === "value" ? goal : "none",
+  );
   saveToneSettings();
 });
 
@@ -831,6 +852,7 @@ async function loadSettings(statusNode: HTMLElement): Promise<void> {
   setDraftCount(response.settings.draftCount);
   setUseEmoji(response.settings.useEmoji);
   setReadImages(response.settings.readImages);
+  setObjectiveDefault(response.settings.objectiveDefault ?? "none");
   favoriteTones = response.settings.favoriteTones ?? [];
   renderFavoriteTonesGrid();
   renderQuickTones();
@@ -874,6 +896,7 @@ async function saveSettings(
       draftCount,
       useEmoji,
       readImages,
+      objectiveDefault,
       favoriteTones,
       blockedTerms: readBlockedTerms(),
       aiModel: pendingAiModelValue,

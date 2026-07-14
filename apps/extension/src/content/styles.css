@@ -316,6 +316,17 @@
   gap: 4px;
 }
 
+/* Five goal pills need to share the row: let them shrink evenly and wrap
+   only when the panel is genuinely too narrow. */
+.eks-goal-group {
+  flex-wrap: wrap;
+}
+
+.eks-goal-group button {
+  flex: 1 1 auto;
+  padding: 8px 8px;
+}
+
 .eks-count-group button {
   background: transparent;
   border: 1px solid var(--eks-border);

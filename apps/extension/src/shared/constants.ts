@@ -1,4 +1,4 @@
-import type { Tone } from "./types";
+import type { EngagementObjective, Tone } from "./types";
 
 export const TONE_LABELS: Record<Tone, string> = {
   degen: "Degen",
@@ -28,6 +28,16 @@ export const TONE_LABELS: Record<Tone, string> = {
 };
 
 export const TONE_AUTO_LABEL = "Auto (AI picks)";
+
+// Engagement-goal pills, in display order. "none" keeps today's behavior
+// (no goal section sent) and is the default everywhere.
+export const OBJECTIVE_LABELS: Record<"none" | EngagementObjective, string> = {
+  none: "Default",
+  viral: "Viral",
+  replies: "Replies",
+  debate: "Debate",
+  value: "Value",
+};
 
 // Reply-length landmarks shown above the slider, matching X's own post
 // limits per plan: Free (280), Premium (4,000), Premium+ (25,000).

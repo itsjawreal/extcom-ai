@@ -15,6 +15,7 @@ import {
   clampReplyLength,
   MAX_REPLY_LENGTH,
   MIN_REPLY_LENGTH,
+  OBJECTIVE_LABELS,
   REPLY_LENGTH_PRESETS,
   REPLY_LENGTH_SLIDER_MAX,
   replyLengthToSliderPosition,
@@ -25,6 +26,7 @@ import {
 } from "../shared/constants";
 import type {
   AttachedImageInput,
+  EngagementObjective,
   ExtractedPostContext,
   GeneratePostMode,
   GeneratePostResponse,
@@ -998,6 +1000,35 @@ function readUseEmoji(panel: HTMLElement): boolean | undefined {
   return active ? active.dataset.emoji === "on" : undefined;
 }
 
+function setGoalGroup(panel: HTMLElement, value: EngagementObjective | "none"): void {
+  panel.querySelectorAll<HTMLButtonElement>("[data-goal-group] button").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.goal === value));
+  });
+}
+
+// Always returns an explicit value ("none" included) so the service worker
+// never mistakes a deliberate Default choice for a missing field and applies
+// the saved objectiveDefault over it.
+function readGoal(panel: HTMLElement): EngagementObjective | "none" {
+  const active = panel.querySelector<HTMLButtonElement>('[data-goal-group] button[aria-pressed="true"]');
+  const value = active?.dataset.goal;
+  return value === "viral" || value === "replies" || value === "debate" || value === "value" ? value : "none";
+}
+
+function goalRowMarkup(noun: "reply" | "post"): string {
+  const buttons = (Object.entries(OBJECTIVE_LABELS) as Array<[string, string]>)
+    .map(([value, label]) => `<button type="button" data-goal="${value}" aria-pressed="${value === "none"}">${label}</button>`)
+    .join("");
+  return `
+          <div class="eks-count-label" data-goal-row>
+            <span class="eks-image-label-heading">
+              <span>Goal</span>
+              <button type="button" class="eks-tooltip-info" data-goal-info aria-label="About engagement goals" data-tooltip="What this ${noun} should achieve, combinable with any tone. Viral leads with a hook (best effort), Replies ends with one easy question, Debate takes a stance that invites pushback, Value delivers a save-worthy takeaway. Default changes nothing.">i</button>
+            </span>
+            <div class="eks-count-group eks-goal-group" data-goal-group role="group" aria-label="Engagement goal">${buttons}</div>
+          </div>`;
+}
+
 function setReadImagesGroup(panel: HTMLElement, value: ReadImagesMode): void {
   panel.querySelectorAll<HTMLButtonElement>("[data-images-group] button").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.images === value));
@@ -1101,6 +1132,7 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
         maxReplyLength?: number | "auto";
         useEmoji?: boolean;
         readImages?: ReadImagesMode;
+        objectiveDefault?: EngagementObjective | "none";
         favoriteTones?: Tone[];
       };
     }>({ type: "GET_SETTINGS" });
@@ -1127,6 +1159,9 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
       }
       if (response.settings.readImages) {
         setReadImagesGroup(panel, response.settings.readImages);
+      }
+      if (response.settings.objectiveDefault) {
+        setGoalGroup(panel, response.settings.objectiveDefault);
       }
     }
     // The quick-tone chips themselves aren't a "current value" to protect
@@ -1159,9 +1194,10 @@ async function generateRepliesForPanel(
     const readImages = readReadImages(panel);
     const replyLanguage = readReplyLanguage(panel);
     const extraInstruction = readExtraInstruction(panel);
+    const objective = readGoal(panel);
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse; historyId?: string }>({
       type: "GENERATE_REPLY",
-      input: { ...context, tone, count, useEmoji, maxLength, readImages, replyLanguage, extraInstruction },
+      input: { ...context, tone, count, useEmoji, maxLength, readImages, replyLanguage, extraInstruction, objective },
     });
     animatePanelHeight(panel, () => renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context));
     renderUsage(panel, response.data.usage, tone === "auto" ? response.data.replies[0]?.tone : undefined);
@@ -1267,6 +1303,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
             </div>
           </div>
         </div>
+        ${goalRowMarkup("reply")}
         <details class="eks-extra-details">
           <summary>Add instruction for this reply</summary>
           <textarea data-extra-instruction rows="2" placeholder="e.g. mention the airdrop"></textarea>
@@ -1397,6 +1434,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     if (!button) return;
     panel.dataset.controlsTouched = "true";
     setReadImagesGroup(panel, button.dataset.images === "on" ? "on" : button.dataset.images === "off" ? "off" : "auto");
+  });
+
+  panel.querySelector("[data-goal-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-goal]");
+    if (!button?.dataset.goal) return;
+    panel.dataset.controlsTouched = "true";
+    setGoalGroup(panel, button.dataset.goal as EngagementObjective | "none");
   });
 
   // Take manual control of the disclosure toggle instead of letting the
@@ -1564,6 +1608,7 @@ async function requestPostDrafts(
       mode,
       language: readPostLanguage(panel),
       tone,
+      objective: readGoal(panel),
       count: countOverride ?? readDraftCount(panel),
       maxLength,
       useEmoji: readUseEmoji(panel),
@@ -1809,6 +1854,12 @@ function bindPostPanelControls(panel: HTMLElement): void {
     panel.dataset.controlsTouched = "true";
     setReadImagesGroup(panel, button.dataset.images as ReadImagesMode);
   });
+  panel.querySelector("[data-goal-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-goal]");
+    if (!button?.dataset.goal) return;
+    panel.dataset.controlsTouched = "true";
+    setGoalGroup(panel, button.dataset.goal as EngagementObjective | "none");
+  });
   panel.querySelector("[data-post-language-group]")?.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-post-language]");
     if (!button) return;
@@ -1916,6 +1967,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
             </div>
           </div>
         </div>
+        ${goalRowMarkup("post")}
         <details class="eks-extra-details">
           <summary>Add instruction for this post</summary>
           <textarea data-extra-instruction rows="2" maxlength="500" placeholder="e.g. end with a question"></textarea>
@@ -1933,6 +1985,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
 
   setPostMode(panel, "fresh");
   bindPostPanelControls(panel);
+  panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
   panel.querySelector("[data-panel-close]")?.addEventListener("click", () => closePanel());
   document.body.append(panel);
   activePanel = panel;
