@@ -287,3 +287,15 @@ test("an empty quotedPost object is treated as absent", () => {
     /Either brief or existingDraft must be provided/,
   );
 });
+
+test("quoted author metadata alone cannot enable quote-only fresh generation", () => {
+  assert.throws(
+    () => validateGeneratePostRequest({
+      brief: "",
+      mode: "fresh",
+      tone: "smart",
+      quotedPost: { text: "", authorHandle: "@image_only", authorName: "Image Only" },
+    }),
+    /Either brief or existingDraft must be provided/,
+  );
+});

@@ -325,11 +325,16 @@ async function recordPostGeneration(
   data: GeneratePostResponse,
 ): Promise<string> {
   const historyId = crypto.randomUUID();
-  const sourceText = truncateForHistory(input.brief.trim() || input.existingDraft?.trim() || "");
+  const isQuote = Boolean(input.quotedPost);
+  // Keep quoted tweet contents transient. A label gives quote-only history
+  // entries a useful title without persisting the target's text or author.
+  const sourceText = truncateForHistory(
+    input.brief.trim() || input.existingDraft?.trim() || (isQuote ? "Quoted post" : ""),
+  );
   const entry: HistoryEntry = {
     id: historyId,
     createdAt: new Date().toISOString(),
-    contentKind: "post",
+    contentKind: isQuote ? "quote" : "post",
     sourceText,
     // Keep the legacy field populated until every history consumer has moved
     // to sourceText. This also makes rollback to an older popup harmless.

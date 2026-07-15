@@ -109,9 +109,10 @@ function parseQuotedPost(value: unknown): GeneratePostRequest["quotedPost"] {
     }
   }
 
-  // A quoted post carrying no readable content at all adds nothing to the
-  // prompt — treat it as absent rather than emitting an empty section.
-  if (!text && !imageUrls && !authorHandle && !authorName) return undefined;
+  // Author fields are metadata, not source material. A quote with neither
+  // readable text nor an enabled image cannot ground generation; treating it
+  // as absent prevents image-only + Off from generating from a name alone.
+  if (!text && !imageUrls) return undefined;
   return { text, authorHandle, authorName, imageUrls, sourceLanguage };
 }
 
@@ -239,7 +240,9 @@ export async function generatePostRoute(
     input = validateGeneratePostRequest(await readJsonBody(request, GENERATE_POST_MAX_BODY_BYTES));
     assertSafeRequest(input.extraInstruction);
     await assertModelAllowed(input.model);
-    if (input.attachedImages?.length) {
+    const hasAttachedImages = Boolean(input.attachedImages?.length);
+    const hasQuotedImages = Boolean(input.quotedPost?.imageUrls?.length);
+    if (hasAttachedImages || hasQuotedImages) {
       // Fail before consuming quota or provider tokens when the model is
       // confirmed text-only (plan §18.7). "unknown" proceeds best-effort.
       const provider = process.env.AI_DEFAULT_PROVIDER || "openrouter";
@@ -248,7 +251,7 @@ export async function generatePostRoute(
       if ((await modelVisionCapability(model, provider)) === "unsupported") {
         throw new ImageValidationError(
           "MODEL_VISION_UNSUPPORTED",
-          `Model ${model} cannot read images. Choose a vision-capable model or set Read attached images to Off.`,
+          `Model ${model} cannot read images. Choose a vision-capable model or set Read images to Off.`,
         );
       }
     }

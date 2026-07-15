@@ -924,6 +924,51 @@ test("sends one content block per image when imageUrls has multiple entries", as
   }
 });
 
+test("forwards quoted-post images as vision content for AI Quote", async () => {
+  resetModelCatalogCache();
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  let requestBody: Record<string, unknown> | undefined;
+
+  globalThis.fetch = mockCatalogAndCompletion(
+    [{ id: "vision/model", supported_parameters: ["structured_outputs"] }],
+    (body) => { requestBody = body; },
+  );
+
+  try {
+    await generateWithOpenRouter({
+      brief: "",
+      mode: "fresh",
+      language: "brief",
+      tone: "smart",
+      count: 1,
+      maxLength: 220,
+      useEmoji: false,
+      model: "vision/model",
+      quotedPost: {
+        text: "Chart update",
+        authorHandle: "@chart",
+        imageUrls: ["https://pbs.twimg.com/media/quote.jpg"],
+      },
+    });
+
+    const messages = requestBody?.messages as Array<{ role: string; content: unknown }>;
+    const userContent = messages.find((message) => message.role === "user")?.content as Array<{
+      type: string;
+      image_url?: { url: string };
+    }>;
+    assert.deepEqual(
+      userContent.filter((block) => block.type === "image_url").map((block) => block.image_url?.url),
+      ["https://pbs.twimg.com/media/quote.jpg"],
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
+  }
+});
+
 test("scales max_tokens and the JSON schema's text length for a long-form request", async () => {
   const previousKey = process.env.OPENROUTER_API_KEY;
   const previousFetch = globalThis.fetch;

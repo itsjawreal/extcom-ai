@@ -9,7 +9,7 @@ import {
   fingerprintAttachments,
   prepareAttachedImages,
 } from "./composerAttachments";
-import { extractQuotedPost, findQuotedPreview } from "./composerQuote";
+import { extractQuotedPost, findQuotedPreview, fingerprintQuotedPost } from "./composerQuote";
 import { POST_COMPOSER_SESSION_ATTRIBUTE, type StandaloneComposer } from "./postComposerObserver";
 import {
   autoIncludeImages,
@@ -1487,17 +1487,36 @@ type PostPanelDraft = {
   // Present only when images were actually sent; Insert/Replace re-checks it
   // so text written for one image never lands next to another (plan §18.9).
   attachmentFingerprint?: string;
+  // null binds a normal AI Post draft to a non-quote composer; a string
+  // binds AI Quote output to the exact quoted text + author seen at Generate.
+  quotedPostFingerprint: string | null;
 };
 
-// Shows the Read attached images control only while the composer actually
-// has supported attachments (plan §18.3), and keeps its count current.
+// Shows one image control for every visual source available to AI Post/Quote.
+// Quoted media and user attachments remain separately discovered, but the
+// user's Auto/On/Off choice applies to both under one compact control.
 function refreshPostAttachmentRow(panel: HTMLElement, composerRoot: HTMLElement): void {
   const row = panel.querySelector<HTMLElement>("[data-attachment-row]");
   if (!row) return;
   const liveRoot = resolveLiveComposerRoot(composerRoot) ?? composerRoot;
-  const count = discoverComposerAttachments(liveRoot).images.length;
+  const attachedCount = discoverComposerAttachments(liveRoot).images.length;
+  const quotedPreview = findQuotedPreview(liveRoot);
+  const quotedCount = quotedPreview ? extractQuotedPost(quotedPreview)?.imageUrls?.length ?? 0 : 0;
+  const count = attachedCount + quotedCount;
   const label = row.querySelector<HTMLElement>("[data-attachment-label]");
-  if (label) label.textContent = count ? `Read attached images (${count})` : "Read attached images";
+  if (label) {
+    label.textContent = quotedCount && attachedCount
+      ? "Read images (quoted + attached)"
+      : quotedCount
+        ? `Read quoted images (${quotedCount})`
+        : attachedCount
+          ? `Read attached images (${attachedCount})`
+          : "Read images";
+  }
+  const info = row.querySelector<HTMLElement>("[data-images-info]");
+  if (info) {
+    info.dataset.tooltip = "Auto reads available quoted and attached images for an empty/short composer or when its text refers to visual content. On always sends all available images; Off never sends any image. Images are read only after you press Generate.";
+  }
   if (row.hidden !== (count === 0)) {
     animatePanelHeight(panel, () => {
       row.hidden = count === 0;
@@ -1569,32 +1588,47 @@ async function requestPostDrafts(
 
   const liveRoot = resolveLiveComposerRoot(composerRoot) ?? composerRoot;
   const discovered = discoverComposerAttachments(liveRoot).images;
-  const imageMode = readReadImages(panel) ?? "auto";
-  // Every mode may use attached media as context (rewrite/continue grounding,
-  // plan §18.2); only generation with an empty composer is fresh-specific.
-  const includeImages = imageMode === "on" ||
-    (imageMode === "auto" && autoIncludeImages(existingDraft, discovered.length > 0));
-
-  // Read the quoted tweet (if this is a quote composer) at Generate time,
-  // like attachments — the §20.2 matrix allows an empty-composer Fresh to
-  // generate commentary from the quoted post alone.
+  // Read quoted context at Generate time, like attachments. Keep image
+  // discovery separate so one Auto/On/Off decision can be applied to both.
   const quotedPreview = findQuotedPreview(liveRoot);
-  const quotedPost = quotedPreview ? extractQuotedPost(quotedPreview) ?? undefined : undefined;
+  const extractedQuotedPost = quotedPreview ? extractQuotedPost(quotedPreview) ?? undefined : undefined;
+  const quotedImageCount = extractedQuotedPost?.imageUrls?.length ?? 0;
+  const imageMode = readReadImages(panel) ?? "auto";
+  const availableImageCount = discovered.length + quotedImageCount;
+  // Every mode may use visual context. Auto reuses the existing heuristic,
+  // now with hasImages covering both quoted media and user attachments.
+  const includeImages = imageMode === "on" ||
+    (imageMode === "auto" && autoIncludeImages(existingDraft, availableImageCount > 0));
 
-  if (!existingDraft && !(mode === "fresh" && (quotedPost || (includeImages && discovered.length)))) {
-    if (mode !== "fresh" && quotedPost) {
+  // Off (and Auto when the heuristic says no) removes only image URLs; quote
+  // text/author/language remain useful context. The service worker/backend
+  // therefore cannot accidentally send a quoted image behind the toggle.
+  const quotedPost = extractedQuotedPost
+    ? { ...extractedQuotedPost, imageUrls: includeImages ? extractedQuotedPost.imageUrls : undefined }
+    : undefined;
+  const quotedPostFingerprint = extractedQuotedPost ? fingerprintQuotedPost(extractedQuotedPost) : null;
+  const quotedTextAvailable = Boolean(extractedQuotedPost?.text.trim());
+  const includedImageCount = includeImages ? availableImageCount : 0;
+
+  if (!existingDraft && !(mode === "fresh" && (quotedTextAvailable || includedImageCount > 0))) {
+    if (mode !== "fresh" && extractedQuotedPost) {
       throw new Error(
         `${mode === "rewrite" ? "Rewrite" : "Continue"} edits composer text. Type your take first, or switch to Fresh to write a comment on the quoted post.`,
       );
     }
-    if (mode !== "fresh" && discovered.length) {
+    if (mode !== "fresh" && availableImageCount) {
       throw new Error(
         `${mode === "rewrite" ? "Rewrite" : "Continue"} edits composer text, so images alone aren't enough. Type a draft first, or switch to Fresh for an image-only post.`,
       );
     }
-    if (mode === "fresh" && discovered.length && !includeImages) {
+    if (mode === "fresh" && quotedImageCount && !quotedTextAvailable && !includeImages) {
       throw new Error(
-        'Type a topic in the composer, or set "Read attached images" to Auto or On to generate from the attached image.',
+        'This quoted post has no text. Set Read quoted images to Auto or On, or type a topic in the composer.',
+      );
+    }
+    if (mode === "fresh" && availableImageCount && !includeImages) {
+      throw new Error(
+        'Type a topic in the composer, or set Read images to Auto or On to generate from the available image.',
       );
     }
     throw new Error(`Type a topic or draft in X's "What's happening?" composer first.`);
@@ -1641,6 +1675,7 @@ async function requestPostDrafts(
       historyId: response.historyId,
       expectedComposerText: existingDraft,
       attachmentFingerprint,
+      quotedPostFingerprint,
     })),
     response: response.data,
     requestedTone: tone,
@@ -1658,10 +1693,22 @@ async function insertPostDraft(panel: HTMLElement, composerRoot: HTMLElement, it
       return;
     }
   }
+  const liveRoot = resolveLiveComposerRoot(composerRoot) ?? composerRoot;
+  const livePreview = findQuotedPreview(liveRoot);
+  const liveQuotedPost = livePreview ? extractQuotedPost(livePreview) : null;
+  const liveQuoteFingerprint = liveQuotedPost ? fingerprintQuotedPost(liveQuotedPost) : null;
+  if (liveQuoteFingerprint !== item.quotedPostFingerprint) {
+    showStatus(panel, "Quoted post changed. Regenerate for the current quote before inserting.", "error");
+    return;
+  }
   try {
     const liveComposerRoot = await insertPostIntoComposer(composerRoot, item.expectedComposerText, item.post.text);
     if (item.historyId) {
-      sendRuntimeMessageQuietly({ type: "RECORD_INSERT", historyId: item.historyId, kind: "post" });
+      sendRuntimeMessageQuietly({
+        type: "RECORD_INSERT",
+        historyId: item.historyId,
+        kind: item.quotedPostFingerprint === null ? "post" : "quote",
+      });
     }
     activePostComposerRoot = liveComposerRoot;
     const liveAnchor = liveComposerRoot.querySelector<HTMLButtonElement>(".eks-ai-post-button");
@@ -1926,13 +1973,12 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
             <button type="button" data-post-mode="continue" aria-pressed="false">Continue</button>
           </div>
         </div>
-        <div class="eks-control-hint" data-quote-strip hidden></div>
         <div class="eks-count-label" data-attachment-row hidden>
           <span class="eks-image-label-heading">
             <span data-attachment-label>Read attached images</span>
-            <button type="button" class="eks-tooltip-info" aria-label="About reading attached images" data-tooltip="Attached images are read and sent to your backend/AI provider only when you press Generate. They are never uploaded, changed, or posted by the extension.">i</button>
+            <button type="button" class="eks-tooltip-info" data-images-info aria-label="About reading images" data-tooltip="Auto reads available quoted and attached images when they help. On always sends all available images; Off never sends any image. Images are read only after you press Generate.">i</button>
           </span>
-          <div class="eks-count-group" data-images-group role="group" aria-label="Read attached composer images">
+          <div class="eks-count-group" data-images-group role="group" aria-label="Read images for generation">
             <button type="button" data-images="auto" aria-pressed="true">Auto</button>
             <button type="button" data-images="on" aria-pressed="false">On</button>
             <button type="button" data-images="off" aria-pressed="false">Off</button>
@@ -2010,32 +2056,19 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
   bindPostPanelControls(panel);
   panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
 
-  // Quote composer (plan §20.3): retitle the panel, show what was read from
-  // the quoted preview, and adjust the mode hint. Extraction failure only
-  // downgrades the strip — generation still works from composer text.
+  // Quote composer (plan §20.3): the title identifies the quote-aware mode,
+  // while the existing Mode info tooltip explains its behavior without
+  // repeating quoted content inside an already compact settings card.
   const quotedPreview = findQuotedPreview(composer.root);
   if (quotedPreview) {
     const title = panel.querySelector<HTMLElement>("#eks-post-panel-title");
     if (title) title.textContent = "AI Quote";
-    const strip = panel.querySelector<HTMLElement>("[data-quote-strip]");
     const quoted = extractQuotedPost(quotedPreview);
-    if (strip) {
-      strip.hidden = false;
-      if (!quoted) {
-        strip.textContent = "Quoted post not readable — generating from your composer text only.";
-      } else {
-        const who = quoted.authorHandle ?? quoted.authorName ?? "a post";
-        const snippet = quoted.text
-          ? `: “${quoted.text.length > 80 ? `${quoted.text.slice(0, 80)}…` : quoted.text}”`
-          : quoted.imageUrls?.length
-            ? ` (image post, ${quoted.imageUrls.length} image${quoted.imageUrls.length > 1 ? "s" : ""})`
-            : "";
-        strip.textContent = `Quoting ${who}${snippet}`;
-      }
-    }
     if (quoted) {
       const modeInfo = panel.querySelector<HTMLElement>("[data-post-mode-info]");
-      if (modeInfo) modeInfo.dataset.tooltip = "Fresh writes your take on the quoted post; Rewrite and Continue edit your draft.";
+      if (modeInfo) {
+        modeInfo.dataset.tooltip = "Quoted text and author are read automatically; image reading follows the image control. Fresh writes your take on the quote; Rewrite and Continue edit your composer draft.";
+      }
     }
   }
 

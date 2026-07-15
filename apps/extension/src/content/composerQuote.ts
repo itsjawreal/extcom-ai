@@ -92,3 +92,17 @@ export function extractQuotedPost(preview: HTMLElement): QuotedPostContext | nul
     sourceLanguage: sourceLanguage && sourceLanguage !== "und" ? sourceLanguage : undefined,
   };
 }
+
+// Lightweight target identity for the Generate -> Insert safety check. X
+// locks a quote target in normal use, but composer roots can be replaced by
+// React; binding drafts to text + author prevents a stale panel from writing
+// commentary above a different quoted post after an unexpected replacement.
+// Media is deliberately excluded: the quote target identity is still stable
+// if X swaps thumbnail variants while the panel is open.
+export function fingerprintQuotedPost(quoted: QuotedPostContext): string {
+  return JSON.stringify([
+    cleanText(quoted.text) ?? "",
+    cleanText(quoted.authorHandle) ?? "",
+    cleanText(quoted.authorName) ?? "",
+  ]);
+}
