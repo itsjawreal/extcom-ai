@@ -259,6 +259,15 @@ Rewrite and Continue still require draft text. If you swap or remove images
 after generating, Insert is blocked until you regenerate; Copy stays
 available. The extension never adds, removes, uploads, or posts media.
 
+When you open X's Quote composer, the button becomes **AI Quote**. Fresh can
+write a take directly from the quoted post even when your composer is empty;
+Rewrite and Continue edit text you already typed. The image row adapts to
+**Read quoted images (N)** or **Read images (quoted + attached)**. Auto/On/Off
+applies to every available quoted and attached image, so Off sends no image
+at all while quoted text and author remain context. Quote context is used only
+for that generation and is not stored in history. Insert is blocked if the
+quote target changes after generation, and publishing remains manual.
+
 ### Pick an engagement goal
 
 Both panels have a **Goal** row — `Default / Viral / Replies / Debate /

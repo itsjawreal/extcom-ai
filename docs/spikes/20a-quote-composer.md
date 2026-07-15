@@ -175,6 +175,8 @@ Findings:
    `[data-testid="tweetText"]` with `lang` attr (→ `sourceLanguage`),
    `[data-testid="User-Name"]` spans (display name ×2, `@handle`, `·`),
    `time` element, `Tweet-User-Avatar`.
+   Attachment discovery must explicitly exclude this avatar testid: its
+   40×40 image otherwise passes the generic attachment-size threshold.
 4. `linksToStatus: false` — the preview is not a status link; identity must
    come from content (text+handle fingerprint), not URL.
 5. The probe reported **two near-identical dialogs** (one extra `mask`
@@ -262,9 +264,10 @@ Findings:
   `[data-testid="attachments"]` subtree contains `[data-testid="tweetText"]`
   or (`[data-testid="User-Name"]` and a `time` element). Pending scenario 5
   control confirmation that a plain modal never matches.
-- **Quoted preview subtree** = the innermost `attachments` descendant
-  containing those nodes; attachment discovery must skip every `<img>`
-  inside it.
+- **Attachment ownership boundary**: quoted primary media is under
+  `tweetPhoto`, and every other quote-card asset is HTTPS; the user's own
+  composer previews remain `blob:`/`data:`. In a quote composer, attachment
+  discovery accepts local schemes (or a real File) and rejects remote HTTPS.
 - **Extraction**: text = `[data-testid="tweetText"]` (+ `lang`); author =
   `[data-testid="User-Name"]` spans (display name, `@handle`); media =
   `[data-testid="tweetPhoto"] img` https URLs (upgrade `name=tiny`).
