@@ -172,6 +172,9 @@
   border-top: 1px solid var(--eks-border);
   display: flex;
   flex: none;
+  /* The status line is the footer's first child and spans the full width;
+     wrapping pushes the usage/Generate pair onto their own row below it. */
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 10px;
   padding: 10px 16px;
@@ -737,15 +740,18 @@
 }
 
 .eks-panel-note,
-.eks-panel-status {
-  color: var(--eks-muted);
-  font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  margin: 10px 0 0;
-}
-
+/* Lives inside the always-visible footer so generation errors never hide
+   below the panel body's scroll. Empty status collapses to nothing; a set
+   status takes a full-width row above the usage/Generate row. */
 .eks-panel-status {
   color: var(--eks-accent);
-  min-height: 17px;
+  flex-basis: 100%;
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0;
+}
+
+.eks-panel-status:empty {
+  display: none;
 }
 
 .eks-panel-status[data-state="error"] {

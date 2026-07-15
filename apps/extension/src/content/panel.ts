@@ -1318,9 +1318,9 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       <div data-reply-list></div>
       <p class="eks-panel-note">Reply posting stays manual. Extension never clicks X/Twitter's final publish button.</p>
     </div>
-    <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
     </div>
     <footer class="eks-panel-footer">
+      <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
       <span class="eks-panel-usage" data-usage></span>
       <button type="button" class="eks-generate-fab" data-generate-button>Generate</button>
     </footer>
@@ -2044,9 +2044,9 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
       </div>
       <div data-reply-list></div>
       <p class="eks-panel-note">Posting stays manual. Extension never clicks X/Twitter's final Post button.</p>
-      <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
     </div>
     <footer class="eks-panel-footer">
+      <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
       <span class="eks-panel-usage" data-usage></span>
       <button type="button" class="eks-generate-fab" data-generate-button>Generate</button>
     </footer>
