@@ -1327,6 +1327,9 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   `;
 
   renderContext(panel, input);
+  // Context-extraction failure renders in the context block, but the footer
+  // status is the one place every error is guaranteed visible — mirror it.
+  if ("error" in input) showStatus(panel, input.error, "error");
   panel.querySelector(".eks-panel-close")?.addEventListener("click", () => closePanel());
   panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
 
