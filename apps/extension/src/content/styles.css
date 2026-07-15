@@ -216,6 +216,15 @@
    the two window controls sit together at the right edge. */
 .eks-reply-panel header strong {
   flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eks-reply-panel .eks-panel-close,
+.eks-reply-panel .eks-panel-minimize {
+  flex: 0 0 auto;
 }
 
 .eks-reply-panel[data-minimized="true"] {
@@ -228,22 +237,25 @@
    never cover their controls. */
 .eks-restore-fab {
   align-items: center;
-  /* Match the chunky look of X's own rail bubbles (Grok/Messages): same
-     ~52px footprint, soft dark fill instead of a thin outlined ring. */
-  background: var(--eks-surface);
-  border: 1px solid var(--eks-border);
-  border-radius: 9999px;
+  /* Probe-measured against X's own rail bubbles (GrokDrawer / chat-drawer,
+     2026-07-16): 55x55, radius 16, translucent 65% fill, 1.25px border,
+     0 2px 8px rgba(0,0,0,0.08) shadow, right edge 20px from the layout
+     edge. color-mix reproduces X's rgba(0,0,0,0.65) in dark themes and the
+     matching translucent white in light. */
+  background: color-mix(in srgb, var(--eks-bg) 65%, transparent);
+  border: 1.25px solid var(--eks-border);
+  border-radius: 16px;
   bottom: 152px;
-  box-shadow: 0 6px 16px var(--eks-shadow);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   color: var(--eks-accent);
   cursor: pointer;
   display: flex;
-  font-size: 22px;
-  height: 52px;
+  font-size: 26px;
+  height: 55px;
   justify-content: center;
   position: fixed;
-  right: 16px;
-  width: 52px;
+  right: 20px;
+  width: 55px;
   z-index: 2147483647;
 }
 
@@ -251,6 +263,16 @@
 .eks-restore-fab:focus-visible {
   background: var(--eks-accent-hover);
   outline: none;
+}
+
+.eks-restore-icon {
+  align-items: center;
+  display: flex;
+  font-size: 33px;
+  height: 33px;
+  justify-content: center;
+  line-height: 1;
+  width: 33px;
 }
 
 .eks-restore-badge {

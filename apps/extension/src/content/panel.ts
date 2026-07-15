@@ -52,6 +52,10 @@ let activePostKey: string | null = null;
 let activePanelKind: "reply" | "post" | null = null;
 let activePostComposerRoot: HTMLElement | null = null;
 let positionQueued = false;
+let restoreFabObserver: MutationObserver | null = null;
+let restoreFabMaintenanceTimer: number | undefined;
+let restoreFabScrollIdleTimer: number | undefined;
+let restoreFabScrolling = false;
 let activeToneList: HTMLElement | null = null;
 let activeTooltipSource: HTMLElement | null = null;
 let tooltipKeyboardNavigation = false;
@@ -458,7 +462,15 @@ async function performInsert(
   kind: "reply" | "quote",
   item: PanelReply,
 ): Promise<void> {
-  if (!activePost) return;
+  if (!activePost?.isConnected) {
+    const target = findReanchorTarget();
+    if (!target) {
+      showStatus(panel, "Original post is no longer available. Copy the draft, or return to the post and reopen AI Reply.", "error");
+      return;
+    }
+    activeAnchor = target.anchor;
+    activePost = target.post;
+  }
   const { reply, historyId } = item;
 
   const filledFailureMessage = kind === "reply"
@@ -641,9 +653,30 @@ async function regenerateSlot(
 
 const RESTORE_FAB_ID = "eks-restore-fab";
 const RESTORE_FAB_MIN_BOTTOM = 152;
+const TARGET_STALE_ATTRIBUTE = "data-target-stale";
 
 function removeRestoreFab(): void {
+  restoreFabObserver?.disconnect();
+  restoreFabObserver = null;
+  if (restoreFabMaintenanceTimer !== undefined) {
+    window.clearTimeout(restoreFabMaintenanceTimer);
+    restoreFabMaintenanceTimer = undefined;
+  }
+  if (restoreFabScrollIdleTimer !== undefined) {
+    window.clearTimeout(restoreFabScrollIdleTimer);
+    restoreFabScrollIdleTimer = undefined;
+  }
+  restoreFabScrolling = false;
   document.getElementById(RESTORE_FAB_ID)?.remove();
+}
+
+function isInFixedLayer(element: HTMLElement): boolean {
+  let current: HTMLElement | null = element;
+  for (let depth = 0; current && depth < 10; depth += 1, current = current.parentElement) {
+    const position = window.getComputedStyle(current).position;
+    if (position === "fixed" || position === "sticky") return true;
+  }
+  return false;
 }
 
 // X parks its own floating rail (Grok bubble, Messages dock) in the same
@@ -651,20 +684,138 @@ function removeRestoreFab(): void {
 // whatever is actually there and sit above the highest one, instead of
 // hardcoding a pixel guess that lands on top of Grok.
 function restoreFabBottom(): number {
-  let minTop = Number.POSITIVE_INFINITY;
-  const railSelector =
-    '[data-testid="GrokDrawer"], [data-testid="DMDrawer"], button[aria-label*="grok" i], a[aria-label*="grok" i]';
-  for (const element of document.querySelectorAll<HTMLElement>(railSelector)) {
+  const explicitCandidates = new Set<HTMLElement>();
+  const fallbackCandidates = new Set<HTMLElement>();
+  // Probe-confirmed (2026-07-16): Grok bubble = GrokDrawer; Messages bubble
+  // lives under chat-drawer-root/chat-drawer-main ("DMDrawer" does not
+  // exist in current markup). The case-insensitive drawer wildcard covers
+  // both spellings plus future renames.
+  const railSelector = [
+    '[data-testid="GrokDrawer"]',
+    '[data-testid="chat-drawer-root"]',
+    '[data-testid="chat-drawer-main"]',
+    '[data-testid*="drawer" i]',
+    '[data-testid*="grok" i]',
+    '[aria-label*="grok" i]',
+    '[aria-label*="message" i]',
+  ].join(", ");
+  document.querySelectorAll<HTMLElement>(railSelector).forEach((element) => explicitCandidates.add(element));
+  // Geometry fallback for renamed/localized X controls: consider only real
+  // interactive elements inside a fixed/sticky layer. This catches a lazy
+  // floating rail without relying on English aria-labels or guessed testids.
+  document.querySelectorAll<HTMLElement>('button, a, [role="button"]').forEach((element) => {
+    // X timelines can contain hundreds of controls. Cheap geometry checks
+    // must happen before getComputedStyle() walks each ancestor; otherwise a
+    // busy minimized timeline would turn rail tracking into needless work.
     const rect = element.getBoundingClientRect();
-    if (!rect.width || !rect.height) continue;
-    // Only the floating cluster hugging the right edge in the lower half of
-    // the viewport competes for this corner.
-    if (rect.right < window.innerWidth - 120) continue;
-    if (rect.top < window.innerHeight * 0.5) continue;
-    minTop = Math.min(minTop, rect.top);
-  }
+    if (!rect.width || !rect.height) return;
+    if (rect.right < window.innerWidth - Math.min(120, window.innerWidth * 0.25)) return;
+    // A collapsed X rail is anchored to the viewport floor. Requiring its
+    // control to end near that floor prevents unrelated sticky sidebar
+    // actions from pushing the restore button toward the top of the page.
+    if (rect.bottom < window.innerHeight - 96) return;
+    // Geometry fallback is for Grok/DM bubbles or their dock bar, not an
+    // entire fixed sidebar/overlay. Explicit Drawer candidates below may be
+    // taller because an opened drawer should legitimately reserve its area.
+    if (rect.height > 96 || rect.width > 420) return;
+    if (isInFixedLayer(element)) fallbackCandidates.add(element);
+  });
+
+  const measureTop = (elements: Iterable<HTMLElement>): number => {
+    let top = Number.POSITIVE_INFINITY;
+    for (const element of elements) {
+      if (element.closest(".eks-reply-panel, .eks-restore-fab, .eks-content-tooltip, .eks-select-list")) continue;
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      // Only controls anchored to the bottom-right rail compete for this
+      // corner. The previous lower-half check was too broad and caught sticky
+      // sidebar controls much higher than Grok/Messages.
+      if (rect.right < window.innerWidth - Math.min(120, window.innerWidth * 0.25)) continue;
+      if (rect.bottom < window.innerHeight - 96) continue;
+      top = Math.min(top, rect.top);
+    }
+    return top;
+  };
+
+  // Never mix guessed geometry with a confirmed Grok/DM selector. Sticky X
+  // controls can move briefly during scrolling and previously made the FAB
+  // bounce before returning to the real rail position.
+  const explicitTop = measureTop(explicitCandidates);
+  const minTop = Number.isFinite(explicitTop) ? explicitTop : measureTop(fallbackCandidates);
   if (!Number.isFinite(minTop)) return RESTORE_FAB_MIN_BOTTOM;
-  return Math.max(RESTORE_FAB_MIN_BOTTOM, Math.round(window.innerHeight - minTop) + 12);
+  return Math.min(
+    Math.max(16, window.innerHeight - 80),
+    Math.max(16, Math.round(window.innerHeight - minTop) + 12),
+  );
+}
+
+function updateRestoreFabLabel(): void {
+  const panel = activePanel;
+  const fab = document.getElementById(RESTORE_FAB_ID);
+  if (!panel || !(fab instanceof HTMLButtonElement)) return;
+  const title = panel.querySelector("#eks-panel-title, #eks-post-panel-title")?.textContent || "AI panel";
+  const draftCount = panel.querySelectorAll(".eks-reply-option").length;
+  const drafts = draftCount ? ` (${draftCount} draft${draftCount > 1 ? "s" : ""})` : "";
+  const unavailable = panel.hasAttribute(TARGET_STALE_ATTRIBUTE) ? "; target unavailable" : "";
+  fab.setAttribute("aria-label", `Restore ${title}${drafts}${unavailable}`);
+}
+
+function positionRestoreFab(): void {
+  const fab = document.getElementById(RESTORE_FAB_ID);
+  if (!(fab instanceof HTMLElement)) return;
+  fab.style.bottom = `${restoreFabBottom()}px`;
+  updateRestoreFabLabel();
+}
+
+function scheduleMinimizedMaintenance(delay = 250): void {
+  if (activePanel?.dataset.minimized !== "true" || restoreFabMaintenanceTimer !== undefined) return;
+  restoreFabMaintenanceTimer = window.setTimeout(() => {
+    restoreFabMaintenanceTimer = undefined;
+    if (activePanel?.dataset.minimized !== "true") return;
+    syncPanelPosition();
+    if (!restoreFabScrolling) positionRestoreFab();
+  }, delay);
+}
+
+function freezeRestoreFabDuringScroll(): void {
+  if (activePanel?.dataset.minimized !== "true") return;
+  restoreFabScrolling = true;
+  if (restoreFabScrollIdleTimer !== undefined) window.clearTimeout(restoreFabScrollIdleTimer);
+  restoreFabScrollIdleTimer = window.setTimeout(() => {
+    restoreFabScrollIdleTimer = undefined;
+    restoreFabScrolling = false;
+    if (activePanel?.dataset.minimized !== "true") return;
+    syncPanelPosition();
+    positionRestoreFab();
+  }, 180);
+}
+
+function startRestoreFabTracking(): void {
+  restoreFabObserver?.disconnect();
+  restoreFabObserver = new MutationObserver(() => scheduleMinimizedMaintenance());
+  restoreFabObserver.observe(document.body, { childList: true, subtree: true });
+  scheduleMinimizedMaintenance(0);
+}
+
+function markActiveTargetUnavailable(message: string): void {
+  const panel = activePanel;
+  if (!panel || panel.hasAttribute(TARGET_STALE_ATTRIBUTE)) return;
+  panel.setAttribute(TARGET_STALE_ATTRIBUTE, message);
+  showStatus(panel, message, "error");
+  updateRestoreFabLabel();
+}
+
+function clearActiveTargetUnavailable(): void {
+  const panel = activePanel;
+  if (!panel?.hasAttribute(TARGET_STALE_ATTRIBUTE)) return;
+  const staleMessage = panel.getAttribute(TARGET_STALE_ATTRIBUTE);
+  panel.removeAttribute(TARGET_STALE_ATTRIBUTE);
+  const status = panel.querySelector<HTMLElement>("[data-panel-status]");
+  if (status && status.textContent === staleMessage) {
+    status.textContent = "";
+    status.removeAttribute("data-state");
+  }
+  updateRestoreFabLabel();
 }
 
 // Grok-style minimized state (plan §21 MVP): the panel element is hidden,
@@ -676,7 +827,6 @@ function minimizeActivePanel(): void {
   if (!panel || panel.dataset.minimized === "true") return;
   closeContentTooltip();
   closeToneList();
-  panel.dataset.minimized = "true";
   removeRestoreFab();
 
   const fab = document.createElement("button");
@@ -684,13 +834,9 @@ function minimizeActivePanel(): void {
   fab.id = RESTORE_FAB_ID;
   fab.className = "eks-restore-fab";
   applyCurrentXTheme(fab);
-  const title = panel.querySelector("#eks-panel-title, #eks-post-panel-title")?.textContent || "AI panel";
   const draftCount = panel.querySelectorAll(".eks-reply-option").length;
-  fab.setAttribute(
-    "aria-label",
-    draftCount ? `Restore ${title} (${draftCount} draft${draftCount > 1 ? "s" : ""})` : `Restore ${title}`,
-  );
   const icon = document.createElement("span");
+  icon.className = "eks-restore-icon";
   icon.setAttribute("aria-hidden", "true");
   icon.textContent = "✦";
   fab.append(icon);
@@ -702,9 +848,15 @@ function minimizeActivePanel(): void {
     fab.append(badge);
   }
   fab.addEventListener("click", () => restoreMinimizedPanel());
-  fab.style.bottom = `${restoreFabBottom()}px`;
   document.body.append(fab);
+  updateRestoreFabLabel();
+  positionRestoreFab();
   fab.focus({ preventScroll: true });
+  panel.dataset.minimized = "true";
+  // `inert` prevents focus/AT interaction without the aria-hidden warning X
+  // can emit when React still owns a focused descendant during a transition.
+  panel.inert = true;
+  startRestoreFabTracking();
 }
 
 function restoreMinimizedPanel(): void {
@@ -712,6 +864,8 @@ function restoreMinimizedPanel(): void {
   const panel = activePanel;
   if (!panel || panel.dataset.minimized !== "true") return;
   delete panel.dataset.minimized;
+  panel.inert = false;
+  syncPanelPosition();
   panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.focus({ preventScroll: true });
 }
 
@@ -767,7 +921,10 @@ function shakePanel(panel: HTMLElement): void {
 export function syncPanelPosition(): void {
   if (!activePanel || !activeAnchor) return;
   if (activePanelKind === "post") {
-    if (activeAnchor.isConnected) return;
+    if (activeAnchor.isConnected) {
+      clearActiveTargetUnavailable();
+      return;
+    }
     const sessionId = activePostComposerRoot?.getAttribute(POST_COMPOSER_SESSION_ATTRIBUTE);
     const root = activePostComposerRoot?.isConnected
       ? activePostComposerRoot
@@ -778,18 +935,28 @@ export function syncPanelPosition(): void {
     if (root && anchor) {
       activePostComposerRoot = root;
       activeAnchor = anchor;
+      clearActiveTargetUnavailable();
+    } else {
+      markActiveTargetUnavailable(
+        "Post composer is no longer open. Existing drafts can still be copied; reopen the composer to generate or insert.",
+      );
     }
     return;
   }
-  if (!activeAnchor.isConnected) {
-    const target = findReanchorTarget();
-    if (!target) {
-      closePanel();
-      return;
-    }
-    activeAnchor = target.anchor;
-    activePost = target.post;
+  if (activeAnchor.isConnected && activePost?.isConnected) {
+    clearActiveTargetUnavailable();
+    return;
   }
+  const target = findReanchorTarget();
+  if (!target) {
+    markActiveTargetUnavailable(
+      "Original post is no longer available. Existing drafts can still be copied; return to the post before inserting.",
+    );
+    return;
+  }
+  activeAnchor = target.anchor;
+  activePost = target.post;
+  clearActiveTargetUnavailable();
 }
 
 function jumpToActivePost(): void {
@@ -816,6 +983,7 @@ function queuePanelPosition(): void {
   window.requestAnimationFrame(() => {
     positionQueued = false;
     syncPanelPosition();
+    scheduleMinimizedMaintenance(0);
   });
 }
 
@@ -2224,6 +2392,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
       window.clearInterval(attachmentTimer);
       return;
     }
+    if (panel.dataset.minimized === "true") return;
     refreshPostAttachmentRow(panel, activePostComposerRoot ?? composer.root);
   }, 1_500);
   panel.querySelector<HTMLButtonElement>("[data-generate-button]")?.addEventListener("click", () => {
@@ -2241,6 +2410,7 @@ window.addEventListener(
   "scroll",
   (event) => {
     closeContentTooltip();
+    freezeRestoreFabDuringScroll();
     // Scroll doesn't bubble, but capture-phase listeners on window still fire
     // for scrolling inside any descendant — including the tone list's own
     // overflow-y:auto. Without this check, scrolling (or clicking its
