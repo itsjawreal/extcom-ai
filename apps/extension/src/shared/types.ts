@@ -26,6 +26,12 @@ export type Tone =
 
 export type ReadImagesMode = "auto" | "off" | "on";
 
+// Visibility of the floating ✦ button on X's right rail (plan §21):
+// "always" also acts as a quick-actions launcher when no panel is open,
+// "minimized" shows it only while a panel is minimized, "off" hides it
+// entirely (the panel's own minimize control still works).
+export type FloatingButtonMode = "always" | "minimized" | "off";
+
 // Engagement goal — what the output should achieve, orthogonal to tone.
 // Mirrors the backend's EngagementObjective; absent means no goal section
 // in the prompt (today's behavior).
@@ -164,6 +170,7 @@ export type ExtensionSettings = {
   // Saved default engagement goal; "none" keeps today's behavior. The
   // panels open with this value and can override it per-session.
   objectiveDefault: EngagementObjective | "none";
+  floatingButton: FloatingButtonMode;
   // Pinned tones shown as quick-pick chips in the popup and the on-page
   // panel, on top of the full tone dropdown. Capped at 5, "auto" excluded
   // (it's already always the first dropdown option).

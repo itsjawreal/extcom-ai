@@ -289,6 +289,62 @@
   top: -2px;
 }
 
+/* Idle launcher (no panel, no drafts) reads quieter than the accent-colored
+   restore state so "drafts are waiting" stays visually distinct. */
+.eks-restore-fab[data-mode="idle"] {
+  color: var(--eks-secondary);
+}
+
+.eks-restore-fab[data-mode="idle"]:hover,
+.eks-restore-fab[data-mode="idle"]:focus-visible {
+  color: var(--eks-accent);
+}
+
+/* Quick-actions popover anchored above the idle fab. */
+.eks-fab-menu {
+  background: var(--eks-bg);
+  border: 1px solid var(--eks-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px var(--eks-shadow);
+  color: var(--eks-text);
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  position: fixed;
+  width: 240px;
+  z-index: 2147483647;
+}
+
+.eks-fab-menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  font: 600 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.eks-fab-menu button:hover,
+.eks-fab-menu button:focus-visible {
+  background: var(--eks-accent-hover);
+  outline: none;
+}
+
+.eks-fab-menu .eks-fab-menu-draft {
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eks-fab-menu-hint {
+  color: var(--eks-muted);
+  font: 400 11px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 4px 4px 2px;
+}
+
 /* Groups Tone, Max length, Drafts/Emoji/Image, and the extra-instruction
    toggle into one visual block instead of four fields floating separately
    on the panel background — the border already signals "these belong

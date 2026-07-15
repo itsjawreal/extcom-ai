@@ -11,6 +11,7 @@ import type {
   ConnectionStatus,
   EngagementObjective,
   ExtensionSettings,
+  FloatingButtonMode,
   GeneratePostRequest,
   GeneratePostResponse,
   GenerateReplyRequest,
@@ -32,6 +33,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   useEmoji: true,
   readImages: "auto",
   objectiveDefault: "none",
+  floatingButton: "always",
   favoriteTones: [],
   blockedTerms: [],
   aiModel: "",
@@ -83,6 +85,10 @@ function normalizeReadImagesMode(value: unknown, fallback: ReadImagesMode): Read
 }
 
 const VALID_OBJECTIVES = new Set<EngagementObjective>(["viral", "replies", "debate", "value"]);
+
+function normalizeFloatingButtonMode(value: unknown): FloatingButtonMode {
+  return value === "minimized" || value === "off" ? value : "always";
+}
 
 function normalizeObjectiveDefault(value: unknown): EngagementObjective | "none" {
   return typeof value === "string" && VALID_OBJECTIVES.has(value as EngagementObjective)
@@ -167,6 +173,7 @@ async function getSettings(): Promise<ExtensionSettings> {
     // Migrate the old boolean setting in place: true = On, false = Off.
     readImages: normalizeReadImagesMode(stored.readImages, DEFAULT_SETTINGS.readImages),
     objectiveDefault: normalizeObjectiveDefault(stored.objectiveDefault),
+    floatingButton: normalizeFloatingButtonMode(stored.floatingButton),
     favoriteTones: normalizeFavoriteTones(stored.favoriteTones),
     blockedTerms: normalizeBlockedTerms(stored.blockedTerms),
     aiModel: String(stored.aiModel ?? DEFAULT_SETTINGS.aiModel),
@@ -251,6 +258,7 @@ async function saveSettings(settings: Partial<ExtensionSettings>): Promise<Exten
   const next = { ...(await getSettings()), ...settings };
   next.readImages = normalizeReadImagesMode(next.readImages, DEFAULT_SETTINGS.readImages);
   next.objectiveDefault = normalizeObjectiveDefault(next.objectiveDefault);
+  next.floatingButton = normalizeFloatingButtonMode(next.floatingButton);
   next.blockedTerms = normalizeBlockedTerms(next.blockedTerms);
   await chrome.storage.local.set(next);
   return next;

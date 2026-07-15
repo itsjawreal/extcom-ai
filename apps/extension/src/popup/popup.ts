@@ -14,6 +14,7 @@ import type {
   ConnectionStatus,
   EngagementObjective,
   ExtensionSettings,
+  FloatingButtonMode,
   HistoryEntry,
   ModelOption,
   ModelsResponse,
@@ -83,6 +84,8 @@ const readImagesGroup = document.getElementById("read-images") as HTMLElement;
 const readImagesButtons = Array.from(readImagesGroup.querySelectorAll<HTMLButtonElement>("button"));
 const engagementGoalGroup = document.getElementById("engagement-goal") as HTMLElement;
 const engagementGoalButtons = Array.from(engagementGoalGroup.querySelectorAll<HTMLButtonElement>("button"));
+const floatingButtonGroup = document.getElementById("floating-button") as HTMLElement;
+const floatingButtonButtons = Array.from(floatingButtonGroup.querySelectorAll<HTMLButtonElement>("button"));
 const saveAdvancedButton = document.getElementById("save-advanced") as HTMLButtonElement;
 const statusToneNode = document.getElementById("status-tone") as HTMLParagraphElement;
 const statusAdvancedNode = document.getElementById("status-advanced") as HTMLParagraphElement;
@@ -119,6 +122,7 @@ let draftCount = 3;
 let useEmoji = true;
 let readImages: ReadImagesMode = "auto";
 let objectiveDefault: EngagementObjective | "none" = "none";
+let floatingButton: FloatingButtonMode = "always";
 let maxLengthMode: "auto" | "manual" = "manual";
 let latestUsageStats: UsageStats = { totalGenerations: 0, totalInserted: 0, history: [] };
 let historyFilter: HistoryFilter = "all";
@@ -374,6 +378,13 @@ function setObjectiveDefault(value: EngagementObjective | "none"): void {
   }
 }
 
+function setFloatingButton(value: FloatingButtonMode): void {
+  floatingButton = value;
+  for (const button of floatingButtonButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.floating === value));
+  }
+}
+
 function setMaxLengthMode(mode: "auto" | "manual"): void {
   maxLengthMode = mode;
   for (const button of maxLengthModeButtons) {
@@ -414,6 +425,14 @@ engagementGoalGroup.addEventListener("click", (event) => {
   setObjectiveDefault(
     goal === "viral" || goal === "replies" || goal === "debate" || goal === "value" ? goal : "none",
   );
+  saveToneSettings();
+});
+
+floatingButtonGroup.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-floating]");
+  if (!button?.dataset.floating) return;
+  const mode = button.dataset.floating;
+  setFloatingButton(mode === "minimized" || mode === "off" ? mode : "always");
   saveToneSettings();
 });
 
@@ -853,6 +872,7 @@ async function loadSettings(statusNode: HTMLElement): Promise<void> {
   setUseEmoji(response.settings.useEmoji);
   setReadImages(response.settings.readImages);
   setObjectiveDefault(response.settings.objectiveDefault ?? "none");
+  setFloatingButton(response.settings.floatingButton ?? "always");
   favoriteTones = response.settings.favoriteTones ?? [];
   renderFavoriteTonesGrid();
   renderQuickTones();
@@ -897,6 +917,7 @@ async function saveSettings(
       useEmoji,
       readImages,
       objectiveDefault,
+      floatingButton,
       favoriteTones,
       blockedTerms: readBlockedTerms(),
       aiModel: pendingAiModelValue,

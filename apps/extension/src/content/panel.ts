@@ -33,8 +33,10 @@ import type {
   GeneratePostResponse,
   GenerateReplyResponse,
   GeneratedReply,
+  HistoryEntry,
   ReadImagesMode,
   Tone,
+  UsageStats,
 } from "../shared/types";
 
 type PanelInput =
@@ -652,10 +654,17 @@ async function regenerateSlot(
 }
 
 const RESTORE_FAB_ID = "eks-restore-fab";
+const FAB_MENU_ID = "eks-fab-menu";
 const RESTORE_FAB_MIN_BOTTOM = 152;
 const TARGET_STALE_ATTRIBUTE = "data-target-stale";
 
+// "always" turns the fab into a permanent launcher (plan §21 revision);
+// "minimized" is the original restore-only behavior; "off" removes it.
+// The saved setting arrives via initFloatingLauncher().
+let floatingButtonMode: "always" | "minimized" | "off" = "minimized";
+
 function removeRestoreFab(): void {
+  closeFabMenu();
   restoreFabObserver?.disconnect();
   restoreFabObserver = null;
   if (restoreFabMaintenanceTimer !== undefined) {
@@ -750,9 +759,14 @@ function restoreFabBottom(): number {
 }
 
 function updateRestoreFabLabel(): void {
-  const panel = activePanel;
   const fab = document.getElementById(RESTORE_FAB_ID);
-  if (!panel || !(fab instanceof HTMLButtonElement)) return;
+  if (!(fab instanceof HTMLButtonElement)) return;
+  if (fab.dataset.mode === "idle") {
+    fab.setAttribute("aria-label", "Extcom AI quick actions");
+    return;
+  }
+  const panel = activePanel;
+  if (!panel) return;
   const title = panel.querySelector("#eks-panel-title, #eks-post-panel-title")?.textContent || "AI panel";
   const draftCount = panel.querySelectorAll(".eks-reply-option").length;
   const drafts = draftCount ? ` (${draftCount} draft${draftCount > 1 ? "s" : ""})` : "";
@@ -768,23 +782,23 @@ function positionRestoreFab(): void {
 }
 
 function scheduleMinimizedMaintenance(delay = 250): void {
-  if (activePanel?.dataset.minimized !== "true" || restoreFabMaintenanceTimer !== undefined) return;
+  if (!document.getElementById(RESTORE_FAB_ID) || restoreFabMaintenanceTimer !== undefined) return;
   restoreFabMaintenanceTimer = window.setTimeout(() => {
     restoreFabMaintenanceTimer = undefined;
-    if (activePanel?.dataset.minimized !== "true") return;
+    if (!document.getElementById(RESTORE_FAB_ID)) return;
     syncPanelPosition();
     if (!restoreFabScrolling) positionRestoreFab();
   }, delay);
 }
 
 function freezeRestoreFabDuringScroll(): void {
-  if (activePanel?.dataset.minimized !== "true") return;
+  if (!document.getElementById(RESTORE_FAB_ID)) return;
   restoreFabScrolling = true;
   if (restoreFabScrollIdleTimer !== undefined) window.clearTimeout(restoreFabScrollIdleTimer);
   restoreFabScrollIdleTimer = window.setTimeout(() => {
     restoreFabScrollIdleTimer = undefined;
     restoreFabScrolling = false;
-    if (activePanel?.dataset.minimized !== "true") return;
+    if (!document.getElementById(RESTORE_FAB_ID)) return;
     syncPanelPosition();
     positionRestoreFab();
   }, 180);
@@ -818,53 +832,232 @@ function clearActiveTargetUnavailable(): void {
   updateRestoreFabLabel();
 }
 
-// Grok-style minimized state (plan §21 MVP): the panel element is hidden,
-// never destroyed, so drafts, control values, and every Generate-time
-// fingerprint survive; a single floating ✦ button restores it. The button
-// exists only while a panel is minimized — never as a permanent launcher.
-function minimizeActivePanel(): void {
-  const panel = activePanel;
-  if (!panel || panel.dataset.minimized === "true") return;
-  closeContentTooltip();
-  closeToneList();
-  removeRestoreFab();
+// Which fab (if any) belongs on screen right now: "restore" while a panel
+// is minimized, "idle" (quick-actions launcher) when no panel exists and
+// the setting is "always", nothing while a panel is open or the setting
+// removes it.
+function fabDesiredMode(): "restore" | "idle" | null {
+  if (floatingButtonMode === "off") return null;
+  if (activePanel?.dataset.minimized === "true") return "restore";
+  if (activePanel) return null;
+  return floatingButtonMode === "always" ? "idle" : null;
+}
 
+function mountFloatingFab(mode: "restore" | "idle"): HTMLButtonElement {
+  removeRestoreFab();
   const fab = document.createElement("button");
   fab.type = "button";
   fab.id = RESTORE_FAB_ID;
   fab.className = "eks-restore-fab";
+  fab.dataset.mode = mode;
   applyCurrentXTheme(fab);
-  const draftCount = panel.querySelectorAll(".eks-reply-option").length;
   const icon = document.createElement("span");
   icon.className = "eks-restore-icon";
   icon.setAttribute("aria-hidden", "true");
   icon.textContent = "✦";
   fab.append(icon);
-  if (draftCount) {
-    const badge = document.createElement("span");
-    badge.className = "eks-restore-badge";
-    badge.setAttribute("aria-hidden", "true");
-    badge.textContent = String(draftCount);
-    fab.append(badge);
+  if (mode === "restore") {
+    const draftCount = activePanel?.querySelectorAll(".eks-reply-option").length ?? 0;
+    if (draftCount) {
+      const badge = document.createElement("span");
+      badge.className = "eks-restore-badge";
+      badge.setAttribute("aria-hidden", "true");
+      badge.textContent = String(draftCount);
+      fab.append(badge);
+    }
+    fab.addEventListener("click", () => restoreMinimizedPanel());
+  } else {
+    fab.addEventListener("click", () => toggleFabMenu(fab));
   }
-  fab.addEventListener("click", () => restoreMinimizedPanel());
   document.body.append(fab);
   updateRestoreFabLabel();
   positionRestoreFab();
-  fab.focus({ preventScroll: true });
+  startRestoreFabTracking();
+  return fab;
+}
+
+// Single reconciliation point: every panel lifecycle change funnels through
+// here so there is never a stale fab, two fabs, or a fab covering an open
+// panel.
+function syncFloatingFab(): void {
+  const desired = fabDesiredMode();
+  const existing = document.getElementById(RESTORE_FAB_ID);
+  if (!desired) {
+    removeRestoreFab();
+    return;
+  }
+  if (existing instanceof HTMLButtonElement && existing.dataset.mode === desired) {
+    updateRestoreFabLabel();
+    return;
+  }
+  mountFloatingFab(desired);
+}
+
+function closeFabMenu(): void {
+  document.getElementById(FAB_MENU_ID)?.remove();
+  document.removeEventListener("pointerdown", onFabMenuOutsidePointerDown, true);
+}
+
+function onFabMenuOutsidePointerDown(event: Event): void {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest(`#${FAB_MENU_ID}, #${RESTORE_FAB_ID}`)) return;
+  closeFabMenu();
+}
+
+// Opens X's own composer (never its final Post button) and hands off to the
+// AI Post panel once our injected button appears in the modal.
+function startNewAiPost(): void {
+  const compose = document.querySelector<HTMLElement>('[data-testid="SideNav_NewTweet_Button"]');
+  if (compose) compose.click();
+  else window.location.assign("/compose/post");
+  const deadline = Date.now() + 4_000;
+  const timer = window.setInterval(() => {
+    const button = document.querySelector<HTMLButtonElement>('[role="dialog"] .eks-ai-post-button');
+    if (button) {
+      window.clearInterval(timer);
+      button.click();
+      return;
+    }
+    if (Date.now() > deadline) window.clearInterval(timer);
+  }, 150);
+}
+
+async function showRecentDrafts(menu: HTMLElement): Promise<void> {
+  menu.replaceChildren();
+  let entries: HistoryEntry[] = [];
+  try {
+    const response = await sendRuntimeMessage<{ ok: true; usageStats?: UsageStats }>({ type: "GET_USAGE_STATS" });
+    entries = (response.usageStats?.history ?? []).slice(0, 3);
+  } catch {
+    const note = document.createElement("p");
+    note.className = "eks-fab-menu-hint";
+    note.textContent = "History unavailable — reload the X tab.";
+    menu.append(note);
+    return;
+  }
+  if (!entries.length) {
+    const note = document.createElement("p");
+    note.className = "eks-fab-menu-hint";
+    note.textContent = "No drafts yet. Generate something first.";
+    menu.append(note);
+    return;
+  }
+  for (const entry of entries) {
+    const draft = entry.drafts[0];
+    if (!draft) continue;
+    const item = document.createElement("button");
+    item.type = "button";
+    item.setAttribute("role", "menuitem");
+    item.className = "eks-fab-menu-draft";
+    item.textContent = draft.length > 70 ? `${draft.slice(0, 70)}…` : draft;
+    item.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(draft);
+        item.textContent = "Copied ✓";
+        window.setTimeout(() => closeFabMenu(), 700);
+      } catch {
+        item.textContent = "Copy failed — check clipboard permission.";
+      }
+    });
+    menu.append(item);
+  }
+  const note = document.createElement("p");
+  note.className = "eks-fab-menu-hint";
+  note.textContent = "Click a draft to copy it. Full history lives in the toolbar popup.";
+  menu.append(note);
+}
+
+function toggleFabMenu(fab: HTMLElement): void {
+  if (document.getElementById(FAB_MENU_ID)) {
+    closeFabMenu();
+    return;
+  }
+  const menu = document.createElement("div");
+  menu.id = FAB_MENU_ID;
+  menu.className = "eks-fab-menu";
+  menu.setAttribute("role", "menu");
+  applyCurrentXTheme(menu);
+
+  const newPost = document.createElement("button");
+  newPost.type = "button";
+  newPost.setAttribute("role", "menuitem");
+  newPost.textContent = "✍ New AI Post";
+  newPost.addEventListener("click", () => {
+    closeFabMenu();
+    startNewAiPost();
+  });
+
+  const recent = document.createElement("button");
+  recent.type = "button";
+  recent.setAttribute("role", "menuitem");
+  recent.textContent = "🕘 Recent drafts";
+  recent.addEventListener("click", () => void showRecentDrafts(menu));
+
+  const hint = document.createElement("p");
+  hint.className = "eks-fab-menu-hint";
+  hint.textContent = "AI Reply and AI Quote open from the ✦ buttons on a post or composer.";
+
+  menu.append(newPost, recent, hint);
+  const rect = fab.getBoundingClientRect();
+  menu.style.right = `${Math.max(8, Math.round(window.innerWidth - rect.right))}px`;
+  menu.style.bottom = `${Math.round(window.innerHeight - rect.top + 8)}px`;
+  document.body.append(menu);
+  document.addEventListener("pointerdown", onFabMenuOutsidePointerDown, true);
+  newPost.focus({ preventScroll: true });
+}
+
+// Reads the saved visibility mode and keeps it live across popup changes.
+// Called once from the content-script entry.
+export function initFloatingLauncher(): void {
+  void (async () => {
+    try {
+      const response = await sendRuntimeMessage<{ ok: boolean; settings?: { floatingButton?: string } }>({
+        type: "GET_SETTINGS",
+      });
+      const mode = response.settings?.floatingButton;
+      floatingButtonMode = mode === "minimized" || mode === "off" || mode === "always" ? mode : "always";
+    } catch {
+      // Service worker unreachable — keep the conservative default.
+    }
+    syncFloatingFab();
+  })();
+  try {
+    chrome.storage?.onChanged?.addListener((changes, area) => {
+      if (area !== "local" || !changes.floatingButton) return;
+      const next = changes.floatingButton.newValue;
+      floatingButtonMode = next === "minimized" || next === "off" || next === "always" ? next : "always";
+      syncFloatingFab();
+    });
+  } catch {
+    // chrome.storage unavailable in a stale context — setting applies on reload.
+  }
+}
+
+// Grok-style minimized state (plan §21): the panel element is hidden, never
+// destroyed, so drafts, control values, and every Generate-time fingerprint
+// survive; the floating ✦ button restores it.
+function minimizeActivePanel(): void {
+  const panel = activePanel;
+  if (!panel || panel.dataset.minimized === "true") return;
+  closeContentTooltip();
+  closeToneList();
   panel.dataset.minimized = "true";
   // `inert` prevents focus/AT interaction without the aria-hidden warning X
   // can emit when React still owns a focused descendant during a transition.
   panel.inert = true;
-  startRestoreFabTracking();
+  const fab = mountFloatingFab("restore");
+  fab.focus({ preventScroll: true });
 }
 
 function restoreMinimizedPanel(): void {
-  removeRestoreFab();
   const panel = activePanel;
-  if (!panel || panel.dataset.minimized !== "true") return;
+  if (!panel || panel.dataset.minimized !== "true") {
+    syncFloatingFab();
+    return;
+  }
   delete panel.dataset.minimized;
   panel.inert = false;
+  syncFloatingFab();
   syncPanelPosition();
   panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.focus({ preventScroll: true });
 }
@@ -875,7 +1068,6 @@ export function closePanel(): void {
   const restoreFocus = Boolean(panel?.contains(document.activeElement));
   closeContentTooltip();
   closeToneList();
-  removeRestoreFab();
   panel?.remove();
   activePanel = null;
   activeAnchor = null;
@@ -883,6 +1075,9 @@ export function closePanel(): void {
   activePostKey = null;
   activePanelKind = null;
   activePostComposerRoot = null;
+  // With no panel left, the fab either disappears or returns to its idle
+  // launcher mode, depending on the saved setting.
+  syncFloatingFab();
   if (restoreFocus && anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
 
@@ -1760,6 +1955,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   activePost = post;
   activePostKey = getPostKey(post);
   activePanelKind = "reply";
+  syncFloatingFab();
   renderUsage(panel);
   panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.focus({ preventScroll: true });
 
@@ -2379,6 +2575,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
   activePanel = panel;
   activeAnchor = anchor;
   activePanelKind = "post";
+  syncFloatingFab();
   activePostComposerRoot = composer.root;
   renderUsage(panel);
   syncPanelTheme();
