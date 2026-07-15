@@ -228,20 +228,22 @@
    never cover their controls. */
 .eks-restore-fab {
   align-items: center;
-  background: var(--eks-bg);
+  /* Match the chunky look of X's own rail bubbles (Grok/Messages): same
+     ~52px footprint, soft dark fill instead of a thin outlined ring. */
+  background: var(--eks-surface);
   border: 1px solid var(--eks-border);
   border-radius: 9999px;
   bottom: 152px;
-  box-shadow: 0 4px 12px var(--eks-shadow);
+  box-shadow: 0 6px 16px var(--eks-shadow);
   color: var(--eks-accent);
   cursor: pointer;
   display: flex;
-  font-size: 18px;
-  height: 44px;
+  font-size: 22px;
+  height: 52px;
   justify-content: center;
   position: fixed;
   right: 16px;
-  width: 44px;
+  width: 52px;
   z-index: 2147483647;
 }
 
@@ -253,13 +255,16 @@
 
 .eks-restore-badge {
   background: var(--eks-accent);
+  border: 2px solid var(--eks-bg);
   border-radius: 9999px;
   color: var(--eks-on-accent);
-  font: 700 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font: 700 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  min-width: 12px;
   padding: 3px 5px;
   position: absolute;
-  right: -4px;
-  top: -4px;
+  right: -2px;
+  text-align: center;
+  top: -2px;
 }
 
 /* Groups Tone, Max length, Drafts/Emoji/Image, and the extra-instruction
