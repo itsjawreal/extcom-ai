@@ -639,12 +639,66 @@ async function regenerateSlot(
   }
 }
 
+const RESTORE_FAB_ID = "eks-restore-fab";
+
+function removeRestoreFab(): void {
+  document.getElementById(RESTORE_FAB_ID)?.remove();
+}
+
+// Grok-style minimized state (plan §21 MVP): the panel element is hidden,
+// never destroyed, so drafts, control values, and every Generate-time
+// fingerprint survive; a single floating ✦ button restores it. The button
+// exists only while a panel is minimized — never as a permanent launcher.
+function minimizeActivePanel(): void {
+  const panel = activePanel;
+  if (!panel || panel.dataset.minimized === "true") return;
+  closeContentTooltip();
+  closeToneList();
+  panel.dataset.minimized = "true";
+  removeRestoreFab();
+
+  const fab = document.createElement("button");
+  fab.type = "button";
+  fab.id = RESTORE_FAB_ID;
+  fab.className = "eks-restore-fab";
+  applyCurrentXTheme(fab);
+  const title = panel.querySelector("#eks-panel-title, #eks-post-panel-title")?.textContent || "AI panel";
+  const draftCount = panel.querySelectorAll(".eks-reply-option").length;
+  fab.setAttribute(
+    "aria-label",
+    draftCount ? `Restore ${title} (${draftCount} draft${draftCount > 1 ? "s" : ""})` : `Restore ${title}`,
+  );
+  const icon = document.createElement("span");
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "✦";
+  fab.append(icon);
+  if (draftCount) {
+    const badge = document.createElement("span");
+    badge.className = "eks-restore-badge";
+    badge.setAttribute("aria-hidden", "true");
+    badge.textContent = String(draftCount);
+    fab.append(badge);
+  }
+  fab.addEventListener("click", () => restoreMinimizedPanel());
+  document.body.append(fab);
+  fab.focus({ preventScroll: true });
+}
+
+function restoreMinimizedPanel(): void {
+  removeRestoreFab();
+  const panel = activePanel;
+  if (!panel || panel.dataset.minimized !== "true") return;
+  delete panel.dataset.minimized;
+  panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.focus({ preventScroll: true });
+}
+
 export function closePanel(): void {
   const panel = activePanel;
   const anchor = activeAnchor;
   const restoreFocus = Boolean(panel?.contains(document.activeElement));
   closeContentTooltip();
   closeToneList();
+  removeRestoreFab();
   panel?.remove();
   activePanel = null;
   activeAnchor = null;
@@ -662,6 +716,9 @@ export function closePanel(): void {
 // out while panel.dataset.hasDrafts is true (see renderReplies). Opening a
 // different post is guarded separately in openPanel for the same reason.
 function attemptClosePanel(): void {
+  // Outside clicks/Escape while minimized must not shake or close an
+  // invisible panel — the floating button is the only interaction surface.
+  if (activePanel?.dataset.minimized === "true") return;
   if (activePanel?.dataset.hasDrafts === "true") {
     shakePanel(activePanel);
     showStatus(activePanel, "Insert or close a draft first.");
@@ -1247,6 +1304,12 @@ async function generateRepliesForPanel(
 }
 
 export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: PanelInput): void {
+  if (activePanel?.dataset.minimized === "true") {
+    restoreMinimizedPanel();
+    // Clicking the same post's button while minimized means "bring it back",
+    // not "toggle it closed"; a different post falls through to the guards.
+    if (activeAnchor === anchor) return;
+  }
   if (activeAnchor === anchor && activePanel) {
     attemptClosePanel();
     return;
@@ -1269,6 +1332,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   panel.innerHTML = `
     <header>
       <strong id="eks-panel-title">AI Reply</strong>
+      <button type="button" class="eks-panel-minimize" data-panel-minimize aria-label="Minimize panel">–</button>
       <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close">×</button>
     </header>
     <div class="eks-panel-body">
@@ -1362,6 +1426,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   // status is the one place every error is guaranteed visible — mirror it.
   if ("error" in input) showStatus(panel, input.error, "error");
   bindSettingsToggle(panel);
+  panel.querySelector("[data-panel-minimize]")?.addEventListener("click", () => minimizeActivePanel());
   panel.querySelector(".eks-panel-close")?.addEventListener("click", () => closePanel());
   panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
 
@@ -1978,6 +2043,10 @@ function bindPostPanelControls(panel: HTMLElement): void {
 }
 
 export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneComposer): void {
+  if (activePanel?.dataset.minimized === "true") {
+    restoreMinimizedPanel();
+    if (activePanelKind === "post" && activeAnchor === anchor) return;
+  }
   if (activePanelKind === "post" && activeAnchor === anchor && activePanel) {
     attemptClosePanel();
     return;
@@ -1996,6 +2065,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
   panel.innerHTML = `
     <header>
       <strong id="eks-post-panel-title">AI Post</strong>
+      <button type="button" class="eks-panel-minimize" data-panel-minimize aria-label="Minimize panel">–</button>
       <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close">×</button>
     </header>
     <div class="eks-panel-body">
@@ -2112,6 +2182,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
     }
   }
 
+  panel.querySelector("[data-panel-minimize]")?.addEventListener("click", () => minimizeActivePanel());
   panel.querySelector("[data-panel-close]")?.addEventListener("click", () => closePanel());
   document.body.append(panel);
   activePanel = panel;

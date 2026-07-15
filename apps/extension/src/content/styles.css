@@ -7,7 +7,7 @@
   font: 14px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list) {
+:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab) {
   --eks-bg: rgb(0, 0, 0);
   --eks-surface: rgb(21, 24, 28);
   --eks-tooltip-bg: rgb(30, 33, 38);
@@ -32,7 +32,7 @@
   --eks-color-scheme: dark;
 }
 
-:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list)[data-eks-theme="dim"] {
+:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab)[data-eks-theme="dim"] {
   --eks-bg: rgb(21, 32, 43);
   --eks-surface: rgb(30, 39, 50);
   --eks-tooltip-bg: rgb(39, 51, 64);
@@ -45,7 +45,7 @@
   --eks-field-value: rgb(139, 152, 165);
 }
 
-:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list)[data-eks-theme="light"] {
+:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab)[data-eks-theme="light"] {
   --eks-bg: rgb(255, 255, 255);
   --eks-surface: rgb(247, 249, 249);
   --eks-tooltip-bg: rgb(255, 255, 255);
@@ -200,7 +200,8 @@
   width: auto;
 }
 
-.eks-reply-panel .eks-panel-close {
+.eks-reply-panel .eks-panel-close,
+.eks-reply-panel .eks-panel-minimize {
   background: transparent;
   border: 0;
   border-radius: 50%;
@@ -209,6 +210,54 @@
   font-size: 24px;
   height: 32px;
   width: 32px;
+}
+
+/* Header is title | minimize | close: the title claims the free space so
+   the two window controls sit together at the right edge. */
+.eks-reply-panel header strong {
+  flex: 1 1 auto;
+}
+
+.eks-reply-panel[data-minimized="true"] {
+  display: none;
+}
+
+/* Floating restore button (plan §21): exists only while a panel is
+   minimized. Docked where the panel's corner was, above X's own rail. */
+.eks-restore-fab {
+  align-items: center;
+  background: var(--eks-bg);
+  border: 1px solid var(--eks-border);
+  border-radius: 9999px;
+  bottom: 88px;
+  box-shadow: 0 4px 12px var(--eks-shadow);
+  color: var(--eks-accent);
+  cursor: pointer;
+  display: flex;
+  font-size: 18px;
+  height: 44px;
+  justify-content: center;
+  position: fixed;
+  right: 16px;
+  width: 44px;
+  z-index: 2147483647;
+}
+
+.eks-restore-fab:hover,
+.eks-restore-fab:focus-visible {
+  background: var(--eks-accent-hover);
+  outline: none;
+}
+
+.eks-restore-badge {
+  background: var(--eks-accent);
+  border-radius: 9999px;
+  color: var(--eks-on-accent);
+  font: 700 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding: 3px 5px;
+  position: absolute;
+  right: -4px;
+  top: -4px;
 }
 
 /* Groups Tone, Max length, Drafts/Emoji/Image, and the extra-instruction
