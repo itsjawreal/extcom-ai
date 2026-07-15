@@ -213,11 +213,18 @@
   background: var(--eks-surface);
   border: 1px solid var(--eks-border);
   border-radius: 12px;
+  /* One vertical rhythm for every row (Mode, Tone, length, config grid,
+     Goal, instruction) instead of per-child margins that made some rows
+     touch and others drift apart across the three panels. */
+  display: grid;
+  gap: 12px;
   margin-bottom: 12px;
   padding: 14px;
 }
 
-.eks-settings-card > *:last-child {
+.eks-settings-card > .eks-tone-label,
+.eks-settings-card > .eks-panel-config,
+.eks-settings-card > .eks-extra-details {
   margin-bottom: 0;
 }
 
@@ -255,19 +262,30 @@
   color: var(--eks-on-accent);
 }
 
+/* Fixed two-column grid: Drafts/Emoji/Read images always land in the same
+   cells instead of reflowing with content width like the old flex-wrap. */
 .eks-panel-config {
   align-items: start;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
+  display: grid;
+  gap: 12px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 10px;
 }
 
-.eks-language-label {
-  flex-basis: 100%;
+/* Wide language pills (Post language / Composer language + English) always
+   get a full row of their own in both the reply and post config grids. */
+.eks-language-label,
+.eks-post-config > .eks-count-label:first-child {
+  grid-column: 1 / -1;
 }
 
 .eks-language-label[hidden] {
+  display: none;
+}
+
+/* Classes above set display on these rows, which would otherwise defeat the
+   hidden attribute (author display beats the UA [hidden] rule). */
+.eks-count-label[hidden] {
   display: none;
 }
 
@@ -312,15 +330,21 @@
   gap: 4px;
 }
 
-/* Five goal pills need to share the row: let them shrink evenly and wrap
-   only when the panel is genuinely too narrow. */
+/* Five equal goal pills on one always-stable row. The old flex-wrap let the
+   last pill drop to its own full-width line on narrow panels. */
 .eks-goal-group {
-  flex-wrap: wrap;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .eks-goal-group button {
-  flex: 1 1 auto;
-  padding: 8px 8px;
+  font-size: 12px;
+  overflow: hidden;
+  padding: 8px 2px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .eks-count-group button {
