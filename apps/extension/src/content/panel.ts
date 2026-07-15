@@ -659,7 +659,8 @@ const RESTORE_FAB_MIN_BOTTOM = 152;
 const TARGET_STALE_ATTRIBUTE = "data-target-stale";
 
 // "always" turns the fab into a permanent launcher (plan §21 revision);
-// "minimized" is the original restore-only behavior; "off" removes it.
+// "minimized" is the original restore-only behavior; "off" hides only the
+// idle launcher while retaining a temporary escape hatch for hidden panels.
 // The saved setting arrives via initFloatingLauncher().
 let floatingButtonMode: "always" | "minimized" | "off" = "minimized";
 
@@ -782,7 +783,10 @@ function positionRestoreFab(): void {
 }
 
 function scheduleMinimizedMaintenance(delay = 250): void {
-  if (!document.getElementById(RESTORE_FAB_ID) || restoreFabMaintenanceTimer !== undefined) return;
+  if (!document.getElementById(RESTORE_FAB_ID)) return;
+  // Trailing debounce: a busy X timeline mutates continuously. Waiting for
+  // its quiet edge avoids repeatedly scanning the rail while it is moving.
+  if (restoreFabMaintenanceTimer !== undefined) window.clearTimeout(restoreFabMaintenanceTimer);
   restoreFabMaintenanceTimer = window.setTimeout(() => {
     restoreFabMaintenanceTimer = undefined;
     if (!document.getElementById(RESTORE_FAB_ID)) return;
@@ -837,8 +841,10 @@ function clearActiveTargetUnavailable(): void {
 // the setting is "always", nothing while a panel is open or the setting
 // removes it.
 function fabDesiredMode(): "restore" | "idle" | null {
-  if (floatingButtonMode === "off") return null;
+  // A minimized panel always needs an escape hatch. `off` disables only the
+  // idle launcher; it must never strand live drafts in a hidden panel.
   if (activePanel?.dataset.minimized === "true") return "restore";
+  if (floatingButtonMode === "off") return null;
   if (activePanel) return null;
   return floatingButtonMode === "always" ? "idle" : null;
 }
@@ -867,6 +873,8 @@ function mountFloatingFab(mode: "restore" | "idle"): HTMLButtonElement {
     }
     fab.addEventListener("click", () => restoreMinimizedPanel());
   } else {
+    fab.setAttribute("aria-haspopup", "menu");
+    fab.setAttribute("aria-expanded", "false");
     fab.addEventListener("click", () => toggleFabMenu(fab));
   }
   document.body.append(fab);
@@ -895,6 +903,7 @@ function syncFloatingFab(): void {
 
 function closeFabMenu(): void {
   document.getElementById(FAB_MENU_ID)?.remove();
+  document.getElementById(RESTORE_FAB_ID)?.setAttribute("aria-expanded", "false");
   document.removeEventListener("pointerdown", onFabMenuOutsidePointerDown, true);
 }
 
@@ -994,6 +1003,7 @@ function toggleFabMenu(fab: HTMLElement): void {
   menu.style.right = `${Math.max(8, Math.round(window.innerWidth - rect.right))}px`;
   menu.style.bottom = `${Math.round(window.innerHeight - rect.top + 8)}px`;
   document.body.append(menu);
+  fab.setAttribute("aria-expanded", "true");
   document.addEventListener("pointerdown", onFabMenuOutsidePointerDown, true);
   newPost.focus({ preventScroll: true });
 }
@@ -1049,7 +1059,11 @@ function restoreMinimizedPanel(): void {
   }
   delete panel.dataset.minimized;
   panel.inert = false;
-  syncFloatingFab();
+  // Restoring makes the panel itself the only interaction surface. Remove
+  // the restore node synchronously instead of waiting for generic mode
+  // reconciliation/storage timing; no floating mode permits a FAB beside an
+  // already-open panel.
+  removeRestoreFab();
   syncPanelPosition();
   panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.focus({ preventScroll: true });
 }
@@ -2593,12 +2607,14 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
 window.addEventListener("resize", () => {
   closeContentTooltip();
   closeToneList();
+  closeFabMenu();
   queuePanelPosition();
 });
 window.addEventListener(
   "scroll",
   (event) => {
     closeContentTooltip();
+    closeFabMenu();
     freezeRestoreFabDuringScroll();
     // Scroll doesn't bubble, but capture-phase listeners on window still fire
     // for scrolling inside any descendant — including the tone list's own
@@ -2618,6 +2634,11 @@ document.addEventListener("keydown", (event) => {
   tooltipKeyboardNavigation = true;
   if (event.key !== "Escape") return;
   closeContentTooltip();
+  if (document.getElementById(FAB_MENU_ID)) {
+    closeFabMenu();
+    document.getElementById(RESTORE_FAB_ID)?.focus({ preventScroll: true });
+    return;
+  }
   if (activeToneList) {
     closeToneList({ restoreFocus: true });
     return;

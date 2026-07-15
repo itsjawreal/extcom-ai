@@ -264,6 +264,21 @@ async function saveSettings(settings: Partial<ExtensionSettings>): Promise<Exten
   return next;
 }
 
+// Popup controls auto-save immediately and users can change several of them
+// faster than storage round-trips complete. Serialize writes in message
+// arrival order so an older request can never finish last and overwrite the
+// newest floating-button/tone/image/goal choice with its stale snapshot.
+let settingsSaveTail: Promise<void> = Promise.resolve();
+
+function enqueueSettingsSave(settings: Partial<ExtensionSettings>): Promise<ExtensionSettings> {
+  const operation = settingsSaveTail.then(() => saveSettings(settings));
+  settingsSaveTail = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return operation;
+}
+
 function truncateForHistory(text: string): string {
   return text.length > HISTORY_TEXT_TRUNCATE ? `${text.slice(0, HISTORY_TEXT_TRUNCATE)}…` : text;
 }
@@ -611,7 +626,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message?.type === "SAVE_SETTINGS") {
         sendResponse({
           ok: true,
-          settings: await saveSettings(message.settings),
+          settings: await enqueueSettingsSave(message.settings),
         } satisfies RuntimeResponse);
         return;
       }

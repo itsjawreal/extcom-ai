@@ -28,8 +28,9 @@ export type ReadImagesMode = "auto" | "off" | "on";
 
 // Visibility of the floating ✦ button on X's right rail (plan §21):
 // "always" also acts as a quick-actions launcher when no panel is open,
-// "minimized" shows it only while a panel is minimized, "off" hides it
-// entirely (the panel's own minimize control still works).
+// "minimized" shows it only while a panel is minimized, and "off" hides
+// the idle launcher. A minimized panel always keeps its temporary restore
+// control so live drafts can never become trapped off-screen.
 export type FloatingButtonMode = "always" | "minimized" | "off";
 
 // Engagement goal — what the output should achieve, orthogonal to tone.
