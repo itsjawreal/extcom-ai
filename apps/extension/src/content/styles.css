@@ -7,7 +7,7 @@
   font: 14px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab) {
+:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab, .eks-fab-menu) {
   --eks-bg: rgb(0, 0, 0);
   --eks-surface: rgb(21, 24, 28);
   --eks-tooltip-bg: rgb(30, 33, 38);
@@ -32,7 +32,7 @@
   --eks-color-scheme: dark;
 }
 
-:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab)[data-eks-theme="dim"] {
+:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab, .eks-fab-menu)[data-eks-theme="dim"] {
   --eks-bg: rgb(21, 32, 43);
   --eks-surface: rgb(30, 39, 50);
   --eks-tooltip-bg: rgb(39, 51, 64);
@@ -45,7 +45,7 @@
   --eks-field-value: rgb(139, 152, 165);
 }
 
-:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab)[data-eks-theme="light"] {
+:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab, .eks-fab-menu)[data-eks-theme="light"] {
   --eks-bg: rgb(255, 255, 255);
   --eks-surface: rgb(247, 249, 249);
   --eks-tooltip-bg: rgb(255, 255, 255);
