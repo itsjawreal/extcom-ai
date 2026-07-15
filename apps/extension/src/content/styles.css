@@ -223,13 +223,15 @@
 }
 
 /* Floating restore button (plan §21): exists only while a panel is
-   minimized. Docked where the panel's corner was, above X's own rail. */
+   minimized. X's own rail occupies the bottom-right corner (Grok bubble
+   around ~88px, Messages below it) — dock above the whole cluster so we
+   never cover their controls. */
 .eks-restore-fab {
   align-items: center;
   background: var(--eks-bg);
   border: 1px solid var(--eks-border);
   border-radius: 9999px;
-  bottom: 88px;
+  bottom: 152px;
   box-shadow: 0 4px 12px var(--eks-shadow);
   color: var(--eks-accent);
   cursor: pointer;

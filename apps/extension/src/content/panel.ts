@@ -640,9 +640,31 @@ async function regenerateSlot(
 }
 
 const RESTORE_FAB_ID = "eks-restore-fab";
+const RESTORE_FAB_MIN_BOTTOM = 152;
 
 function removeRestoreFab(): void {
   document.getElementById(RESTORE_FAB_ID)?.remove();
+}
+
+// X parks its own floating rail (Grok bubble, Messages dock) in the same
+// bottom-right corner, at positions that vary per page and viewport. Measure
+// whatever is actually there and sit above the highest one, instead of
+// hardcoding a pixel guess that lands on top of Grok.
+function restoreFabBottom(): number {
+  let minTop = Number.POSITIVE_INFINITY;
+  const railSelector =
+    '[data-testid="GrokDrawer"], [data-testid="DMDrawer"], button[aria-label*="grok" i], a[aria-label*="grok" i]';
+  for (const element of document.querySelectorAll<HTMLElement>(railSelector)) {
+    const rect = element.getBoundingClientRect();
+    if (!rect.width || !rect.height) continue;
+    // Only the floating cluster hugging the right edge in the lower half of
+    // the viewport competes for this corner.
+    if (rect.right < window.innerWidth - 120) continue;
+    if (rect.top < window.innerHeight * 0.5) continue;
+    minTop = Math.min(minTop, rect.top);
+  }
+  if (!Number.isFinite(minTop)) return RESTORE_FAB_MIN_BOTTOM;
+  return Math.max(RESTORE_FAB_MIN_BOTTOM, Math.round(window.innerHeight - minTop) + 12);
 }
 
 // Grok-style minimized state (plan §21 MVP): the panel element is hidden,
@@ -680,6 +702,7 @@ function minimizeActivePanel(): void {
     fab.append(badge);
   }
   fab.addEventListener("click", () => restoreMinimizedPanel());
+  fab.style.bottom = `${restoreFabBottom()}px`;
   document.body.append(fab);
   fab.focus({ preventScroll: true });
 }
