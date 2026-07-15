@@ -235,6 +235,37 @@
   margin-bottom: 0;
 }
 
+/* display: grid above would defeat the hidden attribute when the card is
+   collapsed after a successful generation. */
+.eks-settings-card[hidden] {
+  display: none;
+}
+
+/* Slim disclosure row that replaces the settings card while collapsed —
+   results sit right below it instead of a full screen of controls. */
+.eks-settings-toggle {
+  align-items: center;
+  background: var(--eks-surface);
+  border: 1px solid var(--eks-border);
+  border-radius: 12px;
+  color: var(--eks-secondary);
+  cursor: pointer;
+  display: flex;
+  font: 600 13px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  width: 100%;
+}
+
+.eks-settings-toggle[hidden] {
+  display: none;
+}
+
+.eks-settings-toggle:hover {
+  color: var(--eks-text);
+}
+
 .eks-tone-label {
   display: grid;
   font: 600 13px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;

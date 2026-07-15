@@ -989,6 +989,28 @@ function openToneList(panel: HTMLElement, trigger: HTMLButtonElement, select: HT
   (list.querySelector<HTMLLIElement>('li[aria-selected="true"]') || autoItem).focus({ preventScroll: true });
 }
 
+// Collapses the settings card behind a slim "Settings" disclosure row so
+// fresh results are visible without scrolling past every control. Called
+// with true automatically after a successful generation; the toggle stays
+// available so the user can reopen the controls at any time.
+function setSettingsCollapsed(panel: HTMLElement, collapsed: boolean): void {
+  const card = panel.querySelector<HTMLElement>(".eks-settings-card");
+  const toggle = panel.querySelector<HTMLButtonElement>("[data-settings-toggle]");
+  if (!card || !toggle) return;
+  toggle.hidden = false;
+  card.hidden = collapsed;
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  const caret = toggle.querySelector<HTMLElement>(".eks-select-caret");
+  if (caret) caret.textContent = collapsed ? "▸" : "▾";
+}
+
+function bindSettingsToggle(panel: HTMLElement): void {
+  panel.querySelector<HTMLButtonElement>("[data-settings-toggle]")?.addEventListener("click", () => {
+    const card = panel.querySelector<HTMLElement>(".eks-settings-card");
+    animatePanelHeight(panel, () => setSettingsCollapsed(panel, !(card?.hidden ?? false)));
+  });
+}
+
 function setDraftCountGroup(panel: HTMLElement, count: number): void {
   panel.querySelectorAll<HTMLButtonElement>("[data-count-group] button").forEach((button) => {
     button.setAttribute("aria-pressed", String(Number(button.dataset.count) === count));
@@ -1210,7 +1232,10 @@ async function generateRepliesForPanel(
       type: "GENERATE_REPLY",
       input: { ...context, tone, count, useEmoji, maxLength, readImages, replyLanguage, extraInstruction, objective },
     });
-    animatePanelHeight(panel, () => renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context));
+    animatePanelHeight(panel, () => {
+      setSettingsCollapsed(panel, true);
+      renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context);
+    });
     renderUsage(panel, response.data.usage, tone === "auto" ? response.data.replies[0]?.tone : undefined);
     showStatus(panel, "Replies generated.");
   } catch (error) {
@@ -1249,6 +1274,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     <div class="eks-panel-body">
     <div data-context></div>
     <div data-reply-controls>
+      <button type="button" class="eks-settings-toggle" data-settings-toggle hidden aria-expanded="true">Settings <span class="eks-select-caret" aria-hidden="true">▾</span></button>
       <div class="eks-settings-card">
         <div class="eks-tone-label">
           Tone
@@ -1335,6 +1361,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   // Context-extraction failure renders in the context block, but the footer
   // status is the one place every error is guaranteed visible — mirror it.
   if ("error" in input) showStatus(panel, input.error, "error");
+  bindSettingsToggle(panel);
   panel.querySelector(".eks-panel-close")?.addEventListener("click", () => closePanel());
   panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
 
@@ -1844,7 +1871,10 @@ async function generatePostsForPanel(panel: HTMLElement, composerRoot: HTMLEleme
   animatePanelHeight(panel, () => renderSkeleton(panel, readDraftCount(panel) ?? 3));
   try {
     const generated = await requestPostDrafts(panel, composerRoot);
-    animatePanelHeight(panel, () => renderPostDrafts(panel, composerRoot, generated.items));
+    animatePanelHeight(panel, () => {
+      setSettingsCollapsed(panel, true);
+      renderPostDrafts(panel, composerRoot, generated.items);
+    });
     renderUsage(
       panel,
       generated.response.usage,
@@ -1969,6 +1999,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
       <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close">×</button>
     </header>
     <div class="eks-panel-body">
+      <button type="button" class="eks-settings-toggle" data-settings-toggle hidden aria-expanded="true">Settings <span class="eks-select-caret" aria-hidden="true">▾</span></button>
       <div class="eks-settings-card">
         <div class="eks-count-label" data-post-mode-row>
           <span class="eks-image-label-heading">
@@ -2062,6 +2093,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
 
   setPostMode(panel, "fresh");
   bindPostPanelControls(panel);
+  bindSettingsToggle(panel);
   panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
 
   // Quote composer (plan §20.3): the title identifies the quote-aware mode,
