@@ -158,6 +158,13 @@
   min-height: 0;
   overflow-y: auto;
   padding: 14px 16px;
+  /* The whole layout used to reflow whenever content crossed the panel
+     height: the appearing scrollbar stole ~10px of content width and every
+     grid re-laid itself out. Reserving the gutter permanently keeps content
+     width identical with and without scroll; the thin scrollbar keeps the
+     reserved lane small. */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 
 /* A real footer bar — solid background + border-top, same treatment as
@@ -339,7 +346,9 @@
 }
 
 .eks-goal-group button {
-  font-size: 12px;
+  /* 11px lets "Default"/"Replies" fit five-across at the stable (gutter-
+     reserved) content width without ellipsizing. */
+  font-size: 11px;
   overflow: hidden;
   padding: 8px 2px;
   text-align: center;
