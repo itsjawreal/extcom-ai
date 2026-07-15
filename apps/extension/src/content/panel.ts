@@ -961,10 +961,6 @@ async function showRecentDrafts(menu: HTMLElement): Promise<void> {
     });
     menu.append(item);
   }
-  const note = document.createElement("p");
-  note.className = "eks-fab-menu-hint";
-  note.textContent = "Click a draft to copy it. Full history lives in the toolbar popup.";
-  menu.append(note);
 }
 
 function toggleFabMenu(fab: HTMLElement): void {
@@ -993,11 +989,7 @@ function toggleFabMenu(fab: HTMLElement): void {
   recent.textContent = "🕘 Recent drafts";
   recent.addEventListener("click", () => void showRecentDrafts(menu));
 
-  const hint = document.createElement("p");
-  hint.className = "eks-fab-menu-hint";
-  hint.textContent = "AI Reply and AI Quote open from the ✦ buttons on a post or composer.";
-
-  menu.append(newPost, recent, hint);
+  menu.append(newPost, recent);
   const rect = fab.getBoundingClientRect();
   menu.style.right = `${Math.max(8, Math.round(window.innerWidth - rect.right))}px`;
   menu.style.bottom = `${Math.round(window.innerHeight - rect.top + 8)}px`;
