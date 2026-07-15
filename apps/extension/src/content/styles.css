@@ -652,6 +652,15 @@
 .eks-panel-usage {
   color: var(--eks-muted);
   font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Basis 0 + shrink keeps this on one stable row beside Generate: without
+     it, the wrap-enabled footer moves the button to a new line whenever the
+     usage text grows (e.g. "AI picked: …"). Overflow shows as an ellipsis;
+     the full text stays available via the title attribute. */
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .eks-reply-option {

@@ -435,11 +435,16 @@ function renderUsage(panel: HTMLElement, usage?: GenerateReplyResponse["usage"],
   if (!usageNode) return;
   if (!usage) {
     usageNode.textContent = "Token & backend live in the toolbar popup.";
+    usageNode.removeAttribute("title");
     return;
   }
   const remaining = usage.remainingToday === null ? "?" : String(usage.remainingToday);
   const toneSuffix = resolvedTone ? ` • AI picked: ${toneLabel(resolvedTone)}` : "";
-  usageNode.textContent = `Plan ${usage.plan} • ${remaining} left today${toneSuffix}`;
+  const text = `Plan ${usage.plan} • ${remaining} left today${toneSuffix}`;
+  usageNode.textContent = text;
+  // The footer keeps this line to a single ellipsized row; the title shows
+  // the full text on hover when it gets cut.
+  usageNode.title = text;
 }
 
 type PanelReply = { reply: GeneratedReply; historyId?: string };
