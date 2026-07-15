@@ -1035,6 +1035,28 @@
           <button type="button" data-images="off" aria-pressed="false">Off</button>
         </div>
       </div>
+      <div class="field-block">
+        <span class="info-icon-anchor"><span id="engagement-goal-label">Engagement goal</span>
+          <button type="button" class="info-icon" aria-label="More info" data-tip="Default goal for what generated replies/posts should achieve, combinable with any tone. Viral leads with a hook (best effort), Replies ends with one easy question, Debate takes a stance that invites pushback, Value delivers a save-worthy takeaway. Default changes nothing. The on-page panel can override this per generation.">i</button>
+        </span>
+        <div class="segmented" id="engagement-goal" role="group" aria-labelledby="engagement-goal-label">
+          <button type="button" data-goal="none" aria-pressed="true">Default</button>
+          <button type="button" data-goal="viral" aria-pressed="false">Viral</button>
+          <button type="button" data-goal="replies" aria-pressed="false">Replies</button>
+          <button type="button" data-goal="debate" aria-pressed="false">Debate</button>
+          <button type="button" data-goal="value" aria-pressed="false">Value</button>
+        </div>
+      </div>
+      <div class="field-block">
+        <span class="info-icon-anchor"><span id="floating-button-label">Floating ✦ button</span>
+          <button type="button" class="info-icon" aria-label="More info" data-tip="Always keeps the ✦ button on X's right rail for quick actions. Minimized shows it only to restore a minimized panel. Off hides the idle launcher; minimizing an open panel still shows a temporary restore button so drafts cannot become trapped.">i</button>
+        </span>
+        <div class="segmented" id="floating-button" role="group" aria-labelledby="floating-button-label">
+          <button type="button" data-floating="always" aria-pressed="true">Always</button>
+          <button type="button" data-floating="minimized" aria-pressed="false">Minimized</button>
+          <button type="button" data-floating="off" aria-pressed="false">Off</button>
+        </div>
+      </div>
     </div>
 
     <div id="tone-subpanel-rules" data-tone-subpanel="rules" role="tabpanel" aria-labelledby="tone-tab-rules" hidden>

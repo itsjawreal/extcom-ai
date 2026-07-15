@@ -22,6 +22,7 @@ Request body:
   "postUrl": "https://x.com/example/status/1",
   "visibleThreadText": [],
   "tone": "smart",
+  "objective": "replies",
   "extraInstruction": "Keep it concise",
   "count": 3,
   "maxLength": 220,
@@ -64,6 +65,11 @@ batch. Each reply in the response echoes the tone actually used
 (`GeneratedReply.tone`, always a concrete tone, never `"auto"`) — with a
 manually-picked tone this just mirrors the request; with `"auto"` it tells
 the caller which tone the AI chose.
+
+`objective` is optional and independent from tone. Valid values are `viral`,
+`replies`, `debate`, and `value`; omitting it preserves the default prompt.
+The objective shapes structure and angle but never overrides safety, language,
+emoji, Never-mention, or character-limit rules.
 
 `count` must be between 1 and 3 (default `3`). `maxLength` must be either an
 integer between 50 and 25,000 characters (default `220`), or the string
@@ -162,6 +168,7 @@ Generates complete standalone X posts rather than replies.
   "mode": "fresh",
   "language": "brief",
   "tone": "auto",
+  "objective": "value",
   "extraInstruction": "End with a useful question",
   "blockedTerms": ["game-changer"],
   "count": 3,
@@ -175,7 +182,8 @@ Generates complete standalone X posts rather than replies.
 non-empty `existingDraft`. `language` is `brief` (follow the brief/draft) or
 `en`. `brief` accepts up to 5,000 characters, `existingDraft` up to 25,000,
 and at least one must be non-empty — unless `mode` is `fresh` and
-`attachedImages` contains at least one valid entry (image-only generation).
+`attachedImages` contains at least one valid entry (image-only generation), or
+`quotedPost` contains readable quote context (quote-only generation).
 Tone, count, length, emoji, model, authentication, quota, token usage, and
 cost behave exactly like `/v1/generate-reply`.
 
@@ -206,6 +214,36 @@ generated post:
 Attachment-specific error codes: `UNSUPPORTED_IMAGE_TYPE`,
 `INVALID_IMAGE_DATA`, `IMAGE_TOO_LARGE`, `IMAGE_PAYLOAD_TOO_LARGE` (HTTP
 413), and `MODEL_VISION_UNSUPPORTED`.
+
+### `quotedPost` (optional)
+
+Context extracted from the target shown in X's Quote composer:
+
+```json
+{
+  "quotedPost": {
+    "text": "The original quoted post",
+    "authorHandle": "@example",
+    "authorName": "Example",
+    "imageUrls": ["https://pbs.twimg.com/media/example.jpg"],
+    "sourceLanguage": "en"
+  }
+}
+```
+
+- `text` is required but may be empty for an image-only quote; max 10,000
+  characters. Author fields are optional.
+- Up to 4 valid HTTPS image URLs are accepted. When present, they are
+  forwarded as visual inputs and fail fast when the selected model is
+  confirmed text-only. The extension omits them when its unified image
+  control is Off; quoted text/author may still be sent.
+- `sourceLanguage`, when present, must be a valid BCP 47 tag and is used as
+  the language fallback for an empty-composer Fresh generation.
+- Quote context is transient request data. The backend does not persist it;
+  extension history stores only a generic `Quoted post` label for quote-only
+  generations, never the target text, author, or images.
+- Author metadata alone is not source material. Fresh with an empty composer
+  requires quoted text or at least one included quoted/attached image.
 
 ```json
 {

@@ -1,3 +1,4 @@
+import { findQuotedPreview } from "./composerQuote";
 import type { AttachedImageInput } from "../shared/types";
 
 // Client-side limits; the backend enforces the same numbers authoritatively
@@ -52,7 +53,11 @@ export type ComposerAttachmentSnapshot = {
 };
 
 function isLikelyAttachmentImage(img: HTMLImageElement): boolean {
-  if (img.closest('[data-testid^="UserAvatar"], [data-testid="toolBar"]')) return false;
+  // X uses several unrelated avatar testids. Timeline/composer avatars start
+  // with UserAvatar, while the embedded quote card uses Tweet-User-Avatar.
+  // Match the stable semantic fragment so a 40x40 quoted-author avatar can
+  // never be counted as the user's attachment.
+  if (img.closest('[data-testid*="Avatar"], [data-testid="toolBar"]')) return false;
   // Emoji, icons, and decorative sprites are far smaller than any real
   // attachment preview X renders.
   const width = img.naturalWidth || img.width;
@@ -83,27 +88,46 @@ export function discoverComposerAttachments(root: HTMLElement): ComposerAttachme
   }
 
   if (!images.length) {
-    // Prefer the spike-confirmed attachment container; fall back to the
-    // whole composer root only when X's markup drifts and the container
-    // disappears, so the size/ancestor filters still have a chance.
-    const previewScope = root.querySelector<HTMLElement>('[data-testid="attachments"]') ?? root;
-    for (const img of previewScope.querySelectorAll<HTMLImageElement>("img")) {
-      const src = img.currentSrc || img.src;
-      const scheme = src.split(":")[0];
-      if (scheme !== "blob" && scheme !== "data" && scheme !== "https") continue;
-      if (!isLikelyAttachmentImage(img)) continue;
-      if (seen.has(src)) continue;
-      seen.add(src);
-      images.push({
-        id: src,
-        source: scheme === "https" ? "remote" : scheme,
-        previewUrl: src,
-        getBytes: async () => {
-          const response = await fetch(src);
-          if (!response.ok) throw new Error(`Preview fetch failed with ${response.status}.`);
-          return response.blob();
-        },
-      });
+    const isQuoteComposer = Boolean(findQuotedPreview(root));
+    // Prefer every spike-confirmed attachment container; X may split the
+    // quoted preview and the user's attachments into sibling containers in
+    // another composer variant. Fall back to the root only when all expected
+    // containers disappear.
+    const attachmentScopes = Array.from(
+      root.querySelectorAll<HTMLElement>('[data-testid="attachments"]'),
+    );
+    const previewScopes = attachmentScopes.length ? attachmentScopes : [root];
+    // A quote composer can mount the quoted preview and the user's own
+    // attachments inside the same container. Excluding the whole preview
+    // container would therefore hide the user's blobs too. Spike 20-A found
+    // the precise boundary: quoted media always sits under tweetPhoto, while
+    // composer attachments never do.
+    for (const previewScope of previewScopes) {
+      for (const img of previewScope.querySelectorAll<HTMLImageElement>("img")) {
+        if (img.closest('[data-testid="tweetPhoto"]')) continue;
+        const src = img.currentSrc || img.src;
+        const scheme = src.split(":")[0];
+        if (scheme !== "blob" && scheme !== "data" && scheme !== "https") continue;
+        // Browser-real scenario 4 established the durable ownership boundary:
+        // the user's composer previews are blob:/data:, while every image
+        // belonging to the embedded quoted post is remote HTTPS. tweetPhoto
+        // handles primary media; this second guard catches avatars, unloaded
+        // media placeholders, and any other remote quote-card assets.
+        if (isQuoteComposer && scheme === "https") continue;
+        if (!isLikelyAttachmentImage(img)) continue;
+        if (seen.has(src)) continue;
+        seen.add(src);
+        images.push({
+          id: src,
+          source: scheme === "https" ? "remote" : scheme,
+          previewUrl: src,
+          getBytes: async () => {
+            const response = await fetch(src);
+            if (!response.ok) throw new Error(`Preview fetch failed with ${response.status}.`);
+            return response.blob();
+          },
+        });
+      }
     }
   }
 

@@ -7,7 +7,7 @@
   font: 14px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list) {
+:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab, .eks-fab-menu) {
   --eks-bg: rgb(0, 0, 0);
   --eks-surface: rgb(21, 24, 28);
   --eks-tooltip-bg: rgb(30, 33, 38);
@@ -32,7 +32,7 @@
   --eks-color-scheme: dark;
 }
 
-:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list)[data-eks-theme="dim"] {
+:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab, .eks-fab-menu)[data-eks-theme="dim"] {
   --eks-bg: rgb(21, 32, 43);
   --eks-surface: rgb(30, 39, 50);
   --eks-tooltip-bg: rgb(39, 51, 64);
@@ -45,7 +45,7 @@
   --eks-field-value: rgb(139, 152, 165);
 }
 
-:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list)[data-eks-theme="light"] {
+:where(.eks-ai-reply-button, .eks-ai-post-button, .eks-reply-panel, .eks-content-tooltip, .eks-select-list, .eks-restore-fab, .eks-fab-menu)[data-eks-theme="light"] {
   --eks-bg: rgb(255, 255, 255);
   --eks-surface: rgb(247, 249, 249);
   --eks-tooltip-bg: rgb(255, 255, 255);
@@ -158,6 +158,13 @@
   min-height: 0;
   overflow-y: auto;
   padding: 14px 16px;
+  /* The whole layout used to reflow whenever content crossed the panel
+     height: the appearing scrollbar stole ~10px of content width and every
+     grid re-laid itself out. Reserving the gutter permanently keeps content
+     width identical with and without scroll; the thin scrollbar keeps the
+     reserved lane small. */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 
 /* A real footer bar — solid background + border-top, same treatment as
@@ -172,6 +179,9 @@
   border-top: 1px solid var(--eks-border);
   display: flex;
   flex: none;
+  /* The status line is the footer's first child and spans the full width;
+     wrapping pushes the usage/Generate pair onto their own row below it. */
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 10px;
   padding: 10px 16px;
@@ -190,7 +200,8 @@
   width: auto;
 }
 
-.eks-reply-panel .eks-panel-close {
+.eks-reply-panel .eks-panel-close,
+.eks-reply-panel .eks-panel-minimize {
   background: transparent;
   border: 0;
   border-radius: 50%;
@@ -199,6 +210,139 @@
   font-size: 24px;
   height: 32px;
   width: 32px;
+}
+
+/* Header is title | minimize | close: the title claims the free space so
+   the two window controls sit together at the right edge. */
+.eks-reply-panel header strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eks-reply-panel .eks-panel-close,
+.eks-reply-panel .eks-panel-minimize {
+  flex: 0 0 auto;
+}
+
+.eks-reply-panel[data-minimized="true"] {
+  display: none;
+}
+
+/* Floating restore button (plan §21): exists only while a panel is
+   minimized. X's own rail occupies the bottom-right corner (Grok bubble
+   around ~88px, Messages below it) — dock above the whole cluster so we
+   never cover their controls. */
+.eks-restore-fab {
+  align-items: center;
+  /* Probe-measured against X's own rail bubbles (GrokDrawer / chat-drawer,
+     2026-07-16): 55x55, radius 16, translucent 65% fill, 1.25px border,
+     0 2px 8px rgba(0,0,0,0.08) shadow, right edge 20px from the layout
+     edge. color-mix reproduces X's rgba(0,0,0,0.65) in dark themes and the
+     matching translucent white in light. */
+  background: color-mix(in srgb, var(--eks-bg) 65%, transparent);
+  border: 1.25px solid var(--eks-border);
+  border-radius: 16px;
+  bottom: 152px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  color: var(--eks-accent);
+  cursor: pointer;
+  display: flex;
+  font-size: 26px;
+  height: 55px;
+  justify-content: center;
+  position: fixed;
+  right: 20px;
+  width: 55px;
+  z-index: 2147483647;
+}
+
+.eks-restore-fab:hover,
+.eks-restore-fab:focus-visible {
+  background: var(--eks-accent-hover);
+  outline: none;
+}
+
+.eks-restore-icon {
+  align-items: center;
+  display: flex;
+  font-size: 33px;
+  height: 33px;
+  justify-content: center;
+  line-height: 1;
+  width: 33px;
+}
+
+.eks-restore-badge {
+  background: var(--eks-accent);
+  border: 2px solid var(--eks-bg);
+  border-radius: 9999px;
+  color: var(--eks-on-accent);
+  font: 700 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  min-width: 12px;
+  padding: 3px 5px;
+  position: absolute;
+  right: -2px;
+  text-align: center;
+  top: -2px;
+}
+
+/* Idle launcher (no panel, no drafts) reads quieter than the accent-colored
+   restore state so "drafts are waiting" stays visually distinct. */
+.eks-restore-fab[data-mode="idle"] {
+  color: var(--eks-secondary);
+}
+
+.eks-restore-fab[data-mode="idle"]:hover,
+.eks-restore-fab[data-mode="idle"]:focus-visible {
+  color: var(--eks-accent);
+}
+
+/* Quick-actions popover anchored above the idle fab. */
+.eks-fab-menu {
+  background: var(--eks-bg);
+  border: 1px solid var(--eks-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px var(--eks-shadow);
+  color: var(--eks-text);
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  position: fixed;
+  width: 240px;
+  z-index: 2147483647;
+}
+
+.eks-fab-menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  font: 600 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.eks-fab-menu button:hover,
+.eks-fab-menu button:focus-visible {
+  background: var(--eks-accent-hover);
+  outline: none;
+}
+
+.eks-fab-menu .eks-fab-menu-draft {
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eks-fab-menu-hint {
+  color: var(--eks-muted);
+  font: 400 11px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 4px 4px 2px;
 }
 
 /* Groups Tone, Max length, Drafts/Emoji/Image, and the extra-instruction
@@ -210,12 +354,50 @@
   background: var(--eks-surface);
   border: 1px solid var(--eks-border);
   border-radius: 12px;
+  /* One vertical rhythm for every row (Mode, Tone, length, config grid,
+     Goal, instruction) instead of per-child margins that made some rows
+     touch and others drift apart across the three panels. */
+  display: grid;
+  gap: 12px;
   margin-bottom: 12px;
   padding: 14px;
 }
 
-.eks-settings-card > *:last-child {
+.eks-settings-card > .eks-tone-label,
+.eks-settings-card > .eks-panel-config,
+.eks-settings-card > .eks-extra-details {
   margin-bottom: 0;
+}
+
+/* display: grid above would defeat the hidden attribute when the card is
+   collapsed after a successful generation. */
+.eks-settings-card[hidden] {
+  display: none;
+}
+
+/* Slim disclosure row that replaces the settings card while collapsed —
+   results sit right below it instead of a full screen of controls. */
+.eks-settings-toggle {
+  align-items: center;
+  background: var(--eks-surface);
+  border: 1px solid var(--eks-border);
+  border-radius: 12px;
+  color: var(--eks-secondary);
+  cursor: pointer;
+  display: flex;
+  font: 600 13px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  width: 100%;
+}
+
+.eks-settings-toggle[hidden] {
+  display: none;
+}
+
+.eks-settings-toggle:hover {
+  color: var(--eks-text);
 }
 
 .eks-tone-label {
@@ -252,19 +434,30 @@
   color: var(--eks-on-accent);
 }
 
+/* Fixed two-column grid: Drafts/Emoji/Read images always land in the same
+   cells instead of reflowing with content width like the old flex-wrap. */
 .eks-panel-config {
   align-items: start;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
+  display: grid;
+  gap: 12px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 10px;
 }
 
-.eks-language-label {
-  flex-basis: 100%;
+/* Wide language pills (Post language / Composer language + English) always
+   get a full row of their own in both the reply and post config grids. */
+.eks-language-label,
+.eks-post-config > .eks-count-label:first-child {
+  grid-column: 1 / -1;
 }
 
 .eks-language-label[hidden] {
+  display: none;
+}
+
+/* Classes above set display on these rows, which would otherwise defeat the
+   hidden attribute (author display beats the UA [hidden] rule). */
+.eks-count-label[hidden] {
   display: none;
 }
 
@@ -272,13 +465,6 @@
   display: grid;
   font: 600 13px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   gap: 6px;
-}
-
-.eks-control-hint {
-  color: var(--eks-muted);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.35;
 }
 
 .eks-image-label-heading {
@@ -314,6 +500,25 @@
 .eks-count-group {
   display: flex;
   gap: 4px;
+}
+
+/* Five equal goal pills on one always-stable row. The old flex-wrap let the
+   last pill drop to its own full-width line on narrow panels. */
+.eks-goal-group {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.eks-goal-group button {
+  /* 11px lets "Default"/"Replies" fit five-across at the stable (gutter-
+     reserved) content width without ellipsizing. */
+  font-size: 11px;
+  overflow: hidden;
+  padding: 8px 2px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .eks-count-group button {
@@ -645,6 +850,15 @@
 .eks-panel-usage {
   color: var(--eks-muted);
   font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Basis 0 + shrink keeps this on one stable row beside Generate: without
+     it, the wrap-enabled footer moves the button to a new line whenever the
+     usage text grows (e.g. "AI picked: …"). Overflow shows as an ellipsis;
+     the full text stays available via the title attribute. */
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .eks-reply-option {
@@ -733,15 +947,18 @@
 }
 
 .eks-panel-note,
-.eks-panel-status {
-  color: var(--eks-muted);
-  font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  margin: 10px 0 0;
-}
-
+/* Lives inside the always-visible footer so generation errors never hide
+   below the panel body's scroll. Empty status collapses to nothing; a set
+   status takes a full-width row above the usage/Generate row. */
 .eks-panel-status {
   color: var(--eks-accent);
-  min-height: 17px;
+  flex-basis: 100%;
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0;
+}
+
+.eks-panel-status:empty {
+  display: none;
 }
 
 .eks-panel-status[data-state="error"] {

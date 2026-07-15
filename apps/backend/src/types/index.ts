@@ -27,6 +27,12 @@ export const TONES = [
 
 export type Tone = (typeof TONES)[number];
 
+// What the output should achieve, orthogonal to tone (how it should sound).
+// Absent means no engagement goal: the prompt gains no goal section at all.
+export const ENGAGEMENT_OBJECTIVES = ["viral", "replies", "debate", "value"] as const;
+
+export type EngagementObjective = (typeof ENGAGEMENT_OBJECTIVES)[number];
+
 export type GenerateReplyRequest = {
   postText: string;
   // BCP 47 language tag captured from X's tweetText element, when available.
@@ -43,6 +49,8 @@ export type GenerateReplyRequest = {
   // applied consistently across every reply in the batch — the resolved
   // tone (never "auto") is echoed back per-reply in GeneratedReply.tone.
   tone: Tone | "auto";
+  // Engagement goal for this batch; combines freely with any tone.
+  objective?: EngagementObjective;
   extraInstruction?: string;
   // User-defined words/phrases that must not appear in generated output.
   // Transient request data: never persisted by the backend.
@@ -73,6 +81,21 @@ export type AttachedImageInput = {
   height: number;
 };
 
+// The tweet being quoted when generating inside X's quote composer (plan
+// §20), extracted by the extension from the composer's preview card.
+// Mirrors the extension contract in apps/extension/src/shared/types.ts.
+export type QuotedPostInput = {
+  // May be "" for an image-only quoted tweet.
+  text: string;
+  authorHandle?: string;
+  authorName?: string;
+  // Up to 4 https X CDN URLs of the quoted tweet's own media — forwarded to
+  // the provider like reply imageUrls, distinct from attachedImages.
+  imageUrls?: string[];
+  // BCP 47 tag when X exposed one on the preview.
+  sourceLanguage?: string;
+};
+
 export type GeneratePostRequest = {
   // A topic/instruction supplied by the user. It may be empty only when an
   // existing composer draft supplies the source material.
@@ -82,6 +105,8 @@ export type GeneratePostRequest = {
   // "brief" means infer the output language from brief/existingDraft.
   language: "brief" | "en";
   tone: Tone | "auto";
+  // Engagement goal for this batch; combines freely with any tone.
+  objective?: EngagementObjective;
   extraInstruction?: string;
   blockedTerms?: string[];
   count: number;
@@ -92,6 +117,9 @@ export type GeneratePostRequest = {
   // Create Post; image-only fresh mode is allowed when at least one entry
   // passes validation. Never persisted or logged.
   attachedImages?: AttachedImageInput[];
+  // Present only for quote-composer generations (plan §20). Fresh mode with
+  // an empty composer is allowed when this is present. Never persisted.
+  quotedPost?: QuotedPostInput;
 };
 
 export type GenerationRequest = GenerateReplyRequest | GeneratePostRequest;

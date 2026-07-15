@@ -9,12 +9,14 @@ import {
   fingerprintAttachments,
   prepareAttachedImages,
 } from "./composerAttachments";
+import { extractQuotedPost, findQuotedPreview, fingerprintQuotedPost } from "./composerQuote";
 import { POST_COMPOSER_SESSION_ATTRIBUTE, type StandaloneComposer } from "./postComposerObserver";
 import {
   autoIncludeImages,
   clampReplyLength,
   MAX_REPLY_LENGTH,
   MIN_REPLY_LENGTH,
+  OBJECTIVE_LABELS,
   REPLY_LENGTH_PRESETS,
   REPLY_LENGTH_SLIDER_MAX,
   replyLengthToSliderPosition,
@@ -25,13 +27,16 @@ import {
 } from "../shared/constants";
 import type {
   AttachedImageInput,
+  EngagementObjective,
   ExtractedPostContext,
   GeneratePostMode,
   GeneratePostResponse,
   GenerateReplyResponse,
   GeneratedReply,
+  HistoryEntry,
   ReadImagesMode,
   Tone,
+  UsageStats,
 } from "../shared/types";
 
 type PanelInput =
@@ -49,6 +54,10 @@ let activePostKey: string | null = null;
 let activePanelKind: "reply" | "post" | null = null;
 let activePostComposerRoot: HTMLElement | null = null;
 let positionQueued = false;
+let restoreFabObserver: MutationObserver | null = null;
+let restoreFabMaintenanceTimer: number | undefined;
+let restoreFabScrollIdleTimer: number | undefined;
+let restoreFabScrolling = false;
 let activeToneList: HTMLElement | null = null;
 let activeTooltipSource: HTMLElement | null = null;
 let tooltipKeyboardNavigation = false;
@@ -149,6 +158,11 @@ function getContentTooltip(): HTMLElement {
   const existing = document.getElementById(TOOLTIP_ID);
   if (existing) {
     applyCurrentXTheme(existing);
+    // Tooltip and panel share the maximum z-index, so paint order falls back
+    // to DOM order. Panels are appended to body on every open — a tooltip
+    // created before the current panel would render behind it. Keep the
+    // tooltip as body's last child so it always paints on top.
+    if (existing !== document.body.lastElementChild) document.body.append(existing);
     return existing;
   }
   const tooltip = document.createElement("div");
@@ -427,11 +441,16 @@ function renderUsage(panel: HTMLElement, usage?: GenerateReplyResponse["usage"],
   if (!usageNode) return;
   if (!usage) {
     usageNode.textContent = "Token & backend live in the toolbar popup.";
+    usageNode.removeAttribute("title");
     return;
   }
   const remaining = usage.remainingToday === null ? "?" : String(usage.remainingToday);
   const toneSuffix = resolvedTone ? ` • AI picked: ${toneLabel(resolvedTone)}` : "";
-  usageNode.textContent = `Plan ${usage.plan} • ${remaining} left today${toneSuffix}`;
+  const text = `Plan ${usage.plan} • ${remaining} left today${toneSuffix}`;
+  usageNode.textContent = text;
+  // The footer keeps this line to a single ellipsized row; the title shows
+  // the full text on hover when it gets cut.
+  usageNode.title = text;
 }
 
 type PanelReply = { reply: GeneratedReply; historyId?: string };
@@ -445,7 +464,15 @@ async function performInsert(
   kind: "reply" | "quote",
   item: PanelReply,
 ): Promise<void> {
-  if (!activePost) return;
+  if (!activePost?.isConnected) {
+    const target = findReanchorTarget();
+    if (!target) {
+      showStatus(panel, "Original post is no longer available. Copy the draft, or return to the post and reopen AI Reply.", "error");
+      return;
+    }
+    activeAnchor = target.anchor;
+    activePost = target.post;
+  }
   const { reply, historyId } = item;
 
   const filledFailureMessage = kind === "reply"
@@ -626,6 +653,421 @@ async function regenerateSlot(
   }
 }
 
+const RESTORE_FAB_ID = "eks-restore-fab";
+const FAB_MENU_ID = "eks-fab-menu";
+const RESTORE_FAB_MIN_BOTTOM = 152;
+const TARGET_STALE_ATTRIBUTE = "data-target-stale";
+
+// "always" turns the fab into a permanent launcher (plan §21 revision);
+// "minimized" is the original restore-only behavior; "off" hides only the
+// idle launcher while retaining a temporary escape hatch for hidden panels.
+// The saved setting arrives via initFloatingLauncher().
+let floatingButtonMode: "always" | "minimized" | "off" = "minimized";
+
+function removeRestoreFab(): void {
+  closeFabMenu();
+  restoreFabObserver?.disconnect();
+  restoreFabObserver = null;
+  if (restoreFabMaintenanceTimer !== undefined) {
+    window.clearTimeout(restoreFabMaintenanceTimer);
+    restoreFabMaintenanceTimer = undefined;
+  }
+  if (restoreFabScrollIdleTimer !== undefined) {
+    window.clearTimeout(restoreFabScrollIdleTimer);
+    restoreFabScrollIdleTimer = undefined;
+  }
+  restoreFabScrolling = false;
+  document.getElementById(RESTORE_FAB_ID)?.remove();
+}
+
+function isInFixedLayer(element: HTMLElement): boolean {
+  let current: HTMLElement | null = element;
+  for (let depth = 0; current && depth < 10; depth += 1, current = current.parentElement) {
+    const position = window.getComputedStyle(current).position;
+    if (position === "fixed" || position === "sticky") return true;
+  }
+  return false;
+}
+
+// X parks its own floating rail (Grok bubble, Messages dock) in the same
+// bottom-right corner, at positions that vary per page and viewport. Measure
+// whatever is actually there and sit above the highest one, instead of
+// hardcoding a pixel guess that lands on top of Grok.
+function restoreFabBottom(): number {
+  const explicitCandidates = new Set<HTMLElement>();
+  const fallbackCandidates = new Set<HTMLElement>();
+  // Probe-confirmed (2026-07-16): Grok bubble = GrokDrawer; Messages bubble
+  // lives under chat-drawer-root/chat-drawer-main ("DMDrawer" does not
+  // exist in current markup). The case-insensitive drawer wildcard covers
+  // both spellings plus future renames.
+  const railSelector = [
+    '[data-testid="GrokDrawer"]',
+    '[data-testid="chat-drawer-root"]',
+    '[data-testid="chat-drawer-main"]',
+    '[data-testid*="drawer" i]',
+    '[data-testid*="grok" i]',
+    '[aria-label*="grok" i]',
+    '[aria-label*="message" i]',
+  ].join(", ");
+  document.querySelectorAll<HTMLElement>(railSelector).forEach((element) => explicitCandidates.add(element));
+  // Geometry fallback for renamed/localized X controls: consider only real
+  // interactive elements inside a fixed/sticky layer. This catches a lazy
+  // floating rail without relying on English aria-labels or guessed testids.
+  document.querySelectorAll<HTMLElement>('button, a, [role="button"]').forEach((element) => {
+    // X timelines can contain hundreds of controls. Cheap geometry checks
+    // must happen before getComputedStyle() walks each ancestor; otherwise a
+    // busy minimized timeline would turn rail tracking into needless work.
+    const rect = element.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    if (rect.right < window.innerWidth - Math.min(120, window.innerWidth * 0.25)) return;
+    // A collapsed X rail is anchored to the viewport floor. Requiring its
+    // control to end near that floor prevents unrelated sticky sidebar
+    // actions from pushing the restore button toward the top of the page.
+    if (rect.bottom < window.innerHeight - 96) return;
+    // Geometry fallback is for Grok/DM bubbles or their dock bar, not an
+    // entire fixed sidebar/overlay. Explicit Drawer candidates below may be
+    // taller because an opened drawer should legitimately reserve its area.
+    if (rect.height > 96 || rect.width > 420) return;
+    if (isInFixedLayer(element)) fallbackCandidates.add(element);
+  });
+
+  const measureTop = (elements: Iterable<HTMLElement>): number => {
+    let top = Number.POSITIVE_INFINITY;
+    for (const element of elements) {
+      if (element.closest(".eks-reply-panel, .eks-restore-fab, .eks-content-tooltip, .eks-select-list")) continue;
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      // Only controls anchored to the bottom-right rail compete for this
+      // corner. The previous lower-half check was too broad and caught sticky
+      // sidebar controls much higher than Grok/Messages.
+      if (rect.right < window.innerWidth - Math.min(120, window.innerWidth * 0.25)) continue;
+      if (rect.bottom < window.innerHeight - 96) continue;
+      top = Math.min(top, rect.top);
+    }
+    return top;
+  };
+
+  // Never mix guessed geometry with a confirmed Grok/DM selector. Sticky X
+  // controls can move briefly during scrolling and previously made the FAB
+  // bounce before returning to the real rail position.
+  const explicitTop = measureTop(explicitCandidates);
+  const minTop = Number.isFinite(explicitTop) ? explicitTop : measureTop(fallbackCandidates);
+  if (!Number.isFinite(minTop)) return RESTORE_FAB_MIN_BOTTOM;
+  return Math.min(
+    Math.max(16, window.innerHeight - 80),
+    Math.max(16, Math.round(window.innerHeight - minTop) + 12),
+  );
+}
+
+function updateRestoreFabLabel(): void {
+  const fab = document.getElementById(RESTORE_FAB_ID);
+  if (!(fab instanceof HTMLButtonElement)) return;
+  if (fab.dataset.mode === "idle") {
+    fab.setAttribute("aria-label", "Extcom AI quick actions");
+    return;
+  }
+  const panel = activePanel;
+  if (!panel) return;
+  const title = panel.querySelector("#eks-panel-title, #eks-post-panel-title")?.textContent || "AI panel";
+  const draftCount = panel.querySelectorAll(".eks-reply-option").length;
+  const drafts = draftCount ? ` (${draftCount} draft${draftCount > 1 ? "s" : ""})` : "";
+  const unavailable = panel.hasAttribute(TARGET_STALE_ATTRIBUTE) ? "; target unavailable" : "";
+  fab.setAttribute("aria-label", `Restore ${title}${drafts}${unavailable}`);
+}
+
+function positionRestoreFab(): void {
+  const fab = document.getElementById(RESTORE_FAB_ID);
+  if (!(fab instanceof HTMLElement)) return;
+  fab.style.bottom = `${restoreFabBottom()}px`;
+  updateRestoreFabLabel();
+}
+
+function scheduleMinimizedMaintenance(delay = 250): void {
+  if (!document.getElementById(RESTORE_FAB_ID)) return;
+  // Trailing debounce: a busy X timeline mutates continuously. Waiting for
+  // its quiet edge avoids repeatedly scanning the rail while it is moving.
+  if (restoreFabMaintenanceTimer !== undefined) window.clearTimeout(restoreFabMaintenanceTimer);
+  restoreFabMaintenanceTimer = window.setTimeout(() => {
+    restoreFabMaintenanceTimer = undefined;
+    if (!document.getElementById(RESTORE_FAB_ID)) return;
+    syncPanelPosition();
+    if (!restoreFabScrolling) positionRestoreFab();
+  }, delay);
+}
+
+function freezeRestoreFabDuringScroll(): void {
+  if (!document.getElementById(RESTORE_FAB_ID)) return;
+  restoreFabScrolling = true;
+  if (restoreFabScrollIdleTimer !== undefined) window.clearTimeout(restoreFabScrollIdleTimer);
+  restoreFabScrollIdleTimer = window.setTimeout(() => {
+    restoreFabScrollIdleTimer = undefined;
+    restoreFabScrolling = false;
+    if (!document.getElementById(RESTORE_FAB_ID)) return;
+    syncPanelPosition();
+    positionRestoreFab();
+  }, 180);
+}
+
+function startRestoreFabTracking(): void {
+  restoreFabObserver?.disconnect();
+  restoreFabObserver = new MutationObserver(() => scheduleMinimizedMaintenance());
+  restoreFabObserver.observe(document.body, { childList: true, subtree: true });
+  scheduleMinimizedMaintenance(0);
+}
+
+function markActiveTargetUnavailable(message: string): void {
+  const panel = activePanel;
+  if (!panel || panel.hasAttribute(TARGET_STALE_ATTRIBUTE)) return;
+  panel.setAttribute(TARGET_STALE_ATTRIBUTE, message);
+  showStatus(panel, message, "error");
+  updateRestoreFabLabel();
+}
+
+function clearActiveTargetUnavailable(): void {
+  const panel = activePanel;
+  if (!panel?.hasAttribute(TARGET_STALE_ATTRIBUTE)) return;
+  const staleMessage = panel.getAttribute(TARGET_STALE_ATTRIBUTE);
+  panel.removeAttribute(TARGET_STALE_ATTRIBUTE);
+  const status = panel.querySelector<HTMLElement>("[data-panel-status]");
+  if (status && status.textContent === staleMessage) {
+    status.textContent = "";
+    status.removeAttribute("data-state");
+  }
+  updateRestoreFabLabel();
+}
+
+// Which fab (if any) belongs on screen right now: "restore" while a panel
+// is minimized, "idle" (quick-actions launcher) when no panel exists and
+// the setting is "always", nothing while a panel is open or the setting
+// removes it.
+function fabDesiredMode(): "restore" | "idle" | null {
+  // A minimized panel always needs an escape hatch. `off` disables only the
+  // idle launcher; it must never strand live drafts in a hidden panel.
+  if (activePanel?.dataset.minimized === "true") return "restore";
+  if (floatingButtonMode === "off") return null;
+  if (activePanel) return null;
+  return floatingButtonMode === "always" ? "idle" : null;
+}
+
+function mountFloatingFab(mode: "restore" | "idle"): HTMLButtonElement {
+  removeRestoreFab();
+  const fab = document.createElement("button");
+  fab.type = "button";
+  fab.id = RESTORE_FAB_ID;
+  fab.className = "eks-restore-fab";
+  fab.dataset.mode = mode;
+  applyCurrentXTheme(fab);
+  const icon = document.createElement("span");
+  icon.className = "eks-restore-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "✦";
+  fab.append(icon);
+  if (mode === "restore") {
+    const draftCount = activePanel?.querySelectorAll(".eks-reply-option").length ?? 0;
+    if (draftCount) {
+      const badge = document.createElement("span");
+      badge.className = "eks-restore-badge";
+      badge.setAttribute("aria-hidden", "true");
+      badge.textContent = String(draftCount);
+      fab.append(badge);
+    }
+    fab.addEventListener("click", () => restoreMinimizedPanel());
+  } else {
+    fab.setAttribute("aria-haspopup", "menu");
+    fab.setAttribute("aria-expanded", "false");
+    fab.addEventListener("click", () => toggleFabMenu(fab));
+  }
+  document.body.append(fab);
+  updateRestoreFabLabel();
+  positionRestoreFab();
+  startRestoreFabTracking();
+  return fab;
+}
+
+// Single reconciliation point: every panel lifecycle change funnels through
+// here so there is never a stale fab, two fabs, or a fab covering an open
+// panel.
+function syncFloatingFab(): void {
+  const desired = fabDesiredMode();
+  const existing = document.getElementById(RESTORE_FAB_ID);
+  if (!desired) {
+    removeRestoreFab();
+    return;
+  }
+  if (existing instanceof HTMLButtonElement && existing.dataset.mode === desired) {
+    updateRestoreFabLabel();
+    return;
+  }
+  mountFloatingFab(desired);
+}
+
+function closeFabMenu(): void {
+  document.getElementById(FAB_MENU_ID)?.remove();
+  document.getElementById(RESTORE_FAB_ID)?.setAttribute("aria-expanded", "false");
+  document.removeEventListener("pointerdown", onFabMenuOutsidePointerDown, true);
+}
+
+function onFabMenuOutsidePointerDown(event: Event): void {
+  const target = event.target as HTMLElement | null;
+  if (target?.closest(`#${FAB_MENU_ID}, #${RESTORE_FAB_ID}`)) return;
+  closeFabMenu();
+}
+
+// Opens X's own composer (never its final Post button) and hands off to the
+// AI Post panel once our injected button appears in the modal.
+function startNewAiPost(): void {
+  const compose = document.querySelector<HTMLElement>('[data-testid="SideNav_NewTweet_Button"]');
+  if (compose) compose.click();
+  else window.location.assign("/compose/post");
+  const deadline = Date.now() + 4_000;
+  const timer = window.setInterval(() => {
+    const button = document.querySelector<HTMLButtonElement>('[role="dialog"] .eks-ai-post-button');
+    if (button) {
+      window.clearInterval(timer);
+      button.click();
+      return;
+    }
+    if (Date.now() > deadline) window.clearInterval(timer);
+  }, 150);
+}
+
+async function showRecentDrafts(menu: HTMLElement): Promise<void> {
+  menu.replaceChildren();
+  let entries: HistoryEntry[] = [];
+  try {
+    const response = await sendRuntimeMessage<{ ok: true; usageStats?: UsageStats }>({ type: "GET_USAGE_STATS" });
+    entries = (response.usageStats?.history ?? []).slice(0, 3);
+  } catch {
+    const note = document.createElement("p");
+    note.className = "eks-fab-menu-hint";
+    note.textContent = "History unavailable — reload the X tab.";
+    menu.append(note);
+    return;
+  }
+  if (!entries.length) {
+    const note = document.createElement("p");
+    note.className = "eks-fab-menu-hint";
+    note.textContent = "No drafts yet. Generate something first.";
+    menu.append(note);
+    return;
+  }
+  for (const entry of entries) {
+    const draft = entry.drafts[0];
+    if (!draft) continue;
+    const item = document.createElement("button");
+    item.type = "button";
+    item.setAttribute("role", "menuitem");
+    item.className = "eks-fab-menu-draft";
+    item.textContent = draft.length > 70 ? `${draft.slice(0, 70)}…` : draft;
+    item.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(draft);
+        item.textContent = "Copied ✓";
+        window.setTimeout(() => closeFabMenu(), 700);
+      } catch {
+        item.textContent = "Copy failed — check clipboard permission.";
+      }
+    });
+    menu.append(item);
+  }
+}
+
+function toggleFabMenu(fab: HTMLElement): void {
+  if (document.getElementById(FAB_MENU_ID)) {
+    closeFabMenu();
+    return;
+  }
+  const menu = document.createElement("div");
+  menu.id = FAB_MENU_ID;
+  menu.className = "eks-fab-menu";
+  menu.setAttribute("role", "menu");
+  applyCurrentXTheme(menu);
+
+  const newPost = document.createElement("button");
+  newPost.type = "button";
+  newPost.setAttribute("role", "menuitem");
+  newPost.textContent = "✍ New AI Post";
+  newPost.addEventListener("click", () => {
+    closeFabMenu();
+    startNewAiPost();
+  });
+
+  const recent = document.createElement("button");
+  recent.type = "button";
+  recent.setAttribute("role", "menuitem");
+  recent.textContent = "🕘 Recent drafts";
+  recent.addEventListener("click", () => void showRecentDrafts(menu));
+
+  menu.append(newPost, recent);
+  const rect = fab.getBoundingClientRect();
+  menu.style.right = `${Math.max(8, Math.round(window.innerWidth - rect.right))}px`;
+  menu.style.bottom = `${Math.round(window.innerHeight - rect.top + 8)}px`;
+  document.body.append(menu);
+  fab.setAttribute("aria-expanded", "true");
+  document.addEventListener("pointerdown", onFabMenuOutsidePointerDown, true);
+  newPost.focus({ preventScroll: true });
+}
+
+// Reads the saved visibility mode and keeps it live across popup changes.
+// Called once from the content-script entry.
+export function initFloatingLauncher(): void {
+  void (async () => {
+    try {
+      const response = await sendRuntimeMessage<{ ok: boolean; settings?: { floatingButton?: string } }>({
+        type: "GET_SETTINGS",
+      });
+      const mode = response.settings?.floatingButton;
+      floatingButtonMode = mode === "minimized" || mode === "off" || mode === "always" ? mode : "always";
+    } catch {
+      // Service worker unreachable — keep the conservative default.
+    }
+    syncFloatingFab();
+  })();
+  try {
+    chrome.storage?.onChanged?.addListener((changes, area) => {
+      if (area !== "local" || !changes.floatingButton) return;
+      const next = changes.floatingButton.newValue;
+      floatingButtonMode = next === "minimized" || next === "off" || next === "always" ? next : "always";
+      syncFloatingFab();
+    });
+  } catch {
+    // chrome.storage unavailable in a stale context — setting applies on reload.
+  }
+}
+
+// Grok-style minimized state (plan §21): the panel element is hidden, never
+// destroyed, so drafts, control values, and every Generate-time fingerprint
+// survive; the floating ✦ button restores it.
+function minimizeActivePanel(): void {
+  const panel = activePanel;
+  if (!panel || panel.dataset.minimized === "true") return;
+  closeContentTooltip();
+  closeToneList();
+  panel.dataset.minimized = "true";
+  // `inert` prevents focus/AT interaction without the aria-hidden warning X
+  // can emit when React still owns a focused descendant during a transition.
+  panel.inert = true;
+  const fab = mountFloatingFab("restore");
+  fab.focus({ preventScroll: true });
+}
+
+function restoreMinimizedPanel(): void {
+  const panel = activePanel;
+  if (!panel || panel.dataset.minimized !== "true") {
+    syncFloatingFab();
+    return;
+  }
+  delete panel.dataset.minimized;
+  panel.inert = false;
+  // Restoring makes the panel itself the only interaction surface. Remove
+  // the restore node synchronously instead of waiting for generic mode
+  // reconciliation/storage timing; no floating mode permits a FAB beside an
+  // already-open panel.
+  removeRestoreFab();
+  syncPanelPosition();
+  panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.focus({ preventScroll: true });
+}
+
 export function closePanel(): void {
   const panel = activePanel;
   const anchor = activeAnchor;
@@ -639,6 +1081,9 @@ export function closePanel(): void {
   activePostKey = null;
   activePanelKind = null;
   activePostComposerRoot = null;
+  // With no panel left, the fab either disappears or returns to its idle
+  // launcher mode, depending on the saved setting.
+  syncFloatingFab();
   if (restoreFocus && anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
 
@@ -649,6 +1094,9 @@ export function closePanel(): void {
 // out while panel.dataset.hasDrafts is true (see renderReplies). Opening a
 // different post is guarded separately in openPanel for the same reason.
 function attemptClosePanel(): void {
+  // Outside clicks/Escape while minimized must not shake or close an
+  // invisible panel — the floating button is the only interaction surface.
+  if (activePanel?.dataset.minimized === "true") return;
   if (activePanel?.dataset.hasDrafts === "true") {
     shakePanel(activePanel);
     showStatus(activePanel, "Insert or close a draft first.");
@@ -674,7 +1122,10 @@ function shakePanel(panel: HTMLElement): void {
 export function syncPanelPosition(): void {
   if (!activePanel || !activeAnchor) return;
   if (activePanelKind === "post") {
-    if (activeAnchor.isConnected) return;
+    if (activeAnchor.isConnected) {
+      clearActiveTargetUnavailable();
+      return;
+    }
     const sessionId = activePostComposerRoot?.getAttribute(POST_COMPOSER_SESSION_ATTRIBUTE);
     const root = activePostComposerRoot?.isConnected
       ? activePostComposerRoot
@@ -685,18 +1136,28 @@ export function syncPanelPosition(): void {
     if (root && anchor) {
       activePostComposerRoot = root;
       activeAnchor = anchor;
+      clearActiveTargetUnavailable();
+    } else {
+      markActiveTargetUnavailable(
+        "Post composer is no longer open. Existing drafts can still be copied; reopen the composer to generate or insert.",
+      );
     }
     return;
   }
-  if (!activeAnchor.isConnected) {
-    const target = findReanchorTarget();
-    if (!target) {
-      closePanel();
-      return;
-    }
-    activeAnchor = target.anchor;
-    activePost = target.post;
+  if (activeAnchor.isConnected && activePost?.isConnected) {
+    clearActiveTargetUnavailable();
+    return;
   }
+  const target = findReanchorTarget();
+  if (!target) {
+    markActiveTargetUnavailable(
+      "Original post is no longer available. Existing drafts can still be copied; return to the post before inserting.",
+    );
+    return;
+  }
+  activeAnchor = target.anchor;
+  activePost = target.post;
+  clearActiveTargetUnavailable();
 }
 
 function jumpToActivePost(): void {
@@ -723,6 +1184,7 @@ function queuePanelPosition(): void {
   window.requestAnimationFrame(() => {
     positionQueued = false;
     syncPanelPosition();
+    scheduleMinimizedMaintenance(0);
   });
 }
 
@@ -976,6 +1438,28 @@ function openToneList(panel: HTMLElement, trigger: HTMLButtonElement, select: HT
   (list.querySelector<HTMLLIElement>('li[aria-selected="true"]') || autoItem).focus({ preventScroll: true });
 }
 
+// Collapses the settings card behind a slim "Settings" disclosure row so
+// fresh results are visible without scrolling past every control. Called
+// with true automatically after a successful generation; the toggle stays
+// available so the user can reopen the controls at any time.
+function setSettingsCollapsed(panel: HTMLElement, collapsed: boolean): void {
+  const card = panel.querySelector<HTMLElement>(".eks-settings-card");
+  const toggle = panel.querySelector<HTMLButtonElement>("[data-settings-toggle]");
+  if (!card || !toggle) return;
+  toggle.hidden = false;
+  card.hidden = collapsed;
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  const caret = toggle.querySelector<HTMLElement>(".eks-select-caret");
+  if (caret) caret.textContent = collapsed ? "▸" : "▾";
+}
+
+function bindSettingsToggle(panel: HTMLElement): void {
+  panel.querySelector<HTMLButtonElement>("[data-settings-toggle]")?.addEventListener("click", () => {
+    const card = panel.querySelector<HTMLElement>(".eks-settings-card");
+    animatePanelHeight(panel, () => setSettingsCollapsed(panel, !(card?.hidden ?? false)));
+  });
+}
+
 function setDraftCountGroup(panel: HTMLElement, count: number): void {
   panel.querySelectorAll<HTMLButtonElement>("[data-count-group] button").forEach((button) => {
     button.setAttribute("aria-pressed", String(Number(button.dataset.count) === count));
@@ -996,6 +1480,35 @@ function setUseEmojiGroup(panel: HTMLElement, value: boolean): void {
 function readUseEmoji(panel: HTMLElement): boolean | undefined {
   const active = panel.querySelector<HTMLButtonElement>('[data-emoji-group] button[aria-pressed="true"]');
   return active ? active.dataset.emoji === "on" : undefined;
+}
+
+function setGoalGroup(panel: HTMLElement, value: EngagementObjective | "none"): void {
+  panel.querySelectorAll<HTMLButtonElement>("[data-goal-group] button").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.goal === value));
+  });
+}
+
+// Always returns an explicit value ("none" included) so the service worker
+// never mistakes a deliberate Default choice for a missing field and applies
+// the saved objectiveDefault over it.
+function readGoal(panel: HTMLElement): EngagementObjective | "none" {
+  const active = panel.querySelector<HTMLButtonElement>('[data-goal-group] button[aria-pressed="true"]');
+  const value = active?.dataset.goal;
+  return value === "viral" || value === "replies" || value === "debate" || value === "value" ? value : "none";
+}
+
+function goalRowMarkup(noun: "reply" | "post"): string {
+  const buttons = (Object.entries(OBJECTIVE_LABELS) as Array<[string, string]>)
+    .map(([value, label]) => `<button type="button" data-goal="${value}" aria-pressed="${value === "none"}">${label}</button>`)
+    .join("");
+  return `
+          <div class="eks-count-label" data-goal-row>
+            <span class="eks-image-label-heading">
+              <span>Goal</span>
+              <button type="button" class="eks-tooltip-info" data-goal-info aria-label="About engagement goals" data-tooltip="What this ${noun} should achieve, combinable with any tone. Viral leads with a hook (best effort), Replies ends with one easy question, Debate takes a stance that invites pushback, Value delivers a save-worthy takeaway. Default changes nothing.">i</button>
+            </span>
+            <div class="eks-count-group eks-goal-group" data-goal-group role="group" aria-label="Engagement goal">${buttons}</div>
+          </div>`;
 }
 
 function setReadImagesGroup(panel: HTMLElement, value: ReadImagesMode): void {
@@ -1101,6 +1614,7 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
         maxReplyLength?: number | "auto";
         useEmoji?: boolean;
         readImages?: ReadImagesMode;
+        objectiveDefault?: EngagementObjective | "none";
         favoriteTones?: Tone[];
       };
     }>({ type: "GET_SETTINGS" });
@@ -1127,6 +1641,9 @@ async function initPanelSettings(panel: HTMLElement): Promise<void> {
       }
       if (response.settings.readImages) {
         setReadImagesGroup(panel, response.settings.readImages);
+      }
+      if (response.settings.objectiveDefault) {
+        setGoalGroup(panel, response.settings.objectiveDefault);
       }
     }
     // The quick-tone chips themselves aren't a "current value" to protect
@@ -1159,11 +1676,15 @@ async function generateRepliesForPanel(
     const readImages = readReadImages(panel);
     const replyLanguage = readReplyLanguage(panel);
     const extraInstruction = readExtraInstruction(panel);
+    const objective = readGoal(panel);
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse; historyId?: string }>({
       type: "GENERATE_REPLY",
-      input: { ...context, tone, count, useEmoji, maxLength, readImages, replyLanguage, extraInstruction },
+      input: { ...context, tone, count, useEmoji, maxLength, readImages, replyLanguage, extraInstruction, objective },
     });
-    animatePanelHeight(panel, () => renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context));
+    animatePanelHeight(panel, () => {
+      setSettingsCollapsed(panel, true);
+      renderReplies(panel, toPanelReplies(response.data.replies, response.historyId), context);
+    });
     renderUsage(panel, response.data.usage, tone === "auto" ? response.data.replies[0]?.tone : undefined);
     showStatus(panel, "Replies generated.");
   } catch (error) {
@@ -1175,6 +1696,12 @@ async function generateRepliesForPanel(
 }
 
 export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: PanelInput): void {
+  if (activePanel?.dataset.minimized === "true") {
+    restoreMinimizedPanel();
+    // Clicking the same post's button while minimized means "bring it back",
+    // not "toggle it closed"; a different post falls through to the guards.
+    if (activeAnchor === anchor) return;
+  }
   if (activeAnchor === anchor && activePanel) {
     attemptClosePanel();
     return;
@@ -1197,11 +1724,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   panel.innerHTML = `
     <header>
       <strong id="eks-panel-title">AI Reply</strong>
+      <button type="button" class="eks-panel-minimize" data-panel-minimize aria-label="Minimize panel">–</button>
       <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close">×</button>
     </header>
     <div class="eks-panel-body">
     <div data-context></div>
     <div data-reply-controls>
+      <button type="button" class="eks-settings-toggle" data-settings-toggle hidden aria-expanded="true">Settings <span class="eks-select-caret" aria-hidden="true">▾</span></button>
       <div class="eks-settings-card">
         <div class="eks-tone-label">
           Tone
@@ -1267,6 +1796,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
             </div>
           </div>
         </div>
+        ${goalRowMarkup("reply")}
         <details class="eks-extra-details">
           <summary>Add instruction for this reply</summary>
           <textarea data-extra-instruction rows="2" placeholder="e.g. mention the airdrop"></textarea>
@@ -1275,15 +1805,20 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
       <div data-reply-list></div>
       <p class="eks-panel-note">Reply posting stays manual. Extension never clicks X/Twitter's final publish button.</p>
     </div>
-    <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
     </div>
     <footer class="eks-panel-footer">
+      <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
       <span class="eks-panel-usage" data-usage></span>
       <button type="button" class="eks-generate-fab" data-generate-button>Generate</button>
     </footer>
   `;
 
   renderContext(panel, input);
+  // Context-extraction failure renders in the context block, but the footer
+  // status is the one place every error is guaranteed visible — mirror it.
+  if ("error" in input) showStatus(panel, input.error, "error");
+  bindSettingsToggle(panel);
+  panel.querySelector("[data-panel-minimize]")?.addEventListener("click", () => minimizeActivePanel());
   panel.querySelector(".eks-panel-close")?.addEventListener("click", () => closePanel());
   panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
 
@@ -1399,6 +1934,13 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
     setReadImagesGroup(panel, button.dataset.images === "on" ? "on" : button.dataset.images === "off" ? "off" : "auto");
   });
 
+  panel.querySelector("[data-goal-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-goal]");
+    if (!button?.dataset.goal) return;
+    panel.dataset.controlsTouched = "true";
+    setGoalGroup(panel, button.dataset.goal as EngagementObjective | "none");
+  });
+
   // Take manual control of the disclosure toggle instead of letting the
   // browser's default <details> behavior race the height measurement —
   // preventDefault, then flip .open ourselves inside the same mutation the
@@ -1419,6 +1961,7 @@ export function openPanel(anchor: HTMLButtonElement, post: HTMLElement, input: P
   activePost = post;
   activePostKey = getPostKey(post);
   activePanelKind = "reply";
+  syncFloatingFab();
   renderUsage(panel);
   panel.querySelector<HTMLButtonElement>("[data-panel-close]")?.focus({ preventScroll: true });
 
@@ -1437,17 +1980,36 @@ type PostPanelDraft = {
   // Present only when images were actually sent; Insert/Replace re-checks it
   // so text written for one image never lands next to another (plan §18.9).
   attachmentFingerprint?: string;
+  // null binds a normal AI Post draft to a non-quote composer; a string
+  // binds AI Quote output to the exact quoted text + author seen at Generate.
+  quotedPostFingerprint: string | null;
 };
 
-// Shows the Read attached images control only while the composer actually
-// has supported attachments (plan §18.3), and keeps its count current.
+// Shows one image control for every visual source available to AI Post/Quote.
+// Quoted media and user attachments remain separately discovered, but the
+// user's Auto/On/Off choice applies to both under one compact control.
 function refreshPostAttachmentRow(panel: HTMLElement, composerRoot: HTMLElement): void {
   const row = panel.querySelector<HTMLElement>("[data-attachment-row]");
   if (!row) return;
   const liveRoot = resolveLiveComposerRoot(composerRoot) ?? composerRoot;
-  const count = discoverComposerAttachments(liveRoot).images.length;
+  const attachedCount = discoverComposerAttachments(liveRoot).images.length;
+  const quotedPreview = findQuotedPreview(liveRoot);
+  const quotedCount = quotedPreview ? extractQuotedPost(quotedPreview)?.imageUrls?.length ?? 0 : 0;
+  const count = attachedCount + quotedCount;
   const label = row.querySelector<HTMLElement>("[data-attachment-label]");
-  if (label) label.textContent = count ? `Read attached images (${count})` : "Read attached images";
+  if (label) {
+    label.textContent = quotedCount && attachedCount
+      ? "Read images (quoted + attached)"
+      : quotedCount
+        ? `Read quoted images (${quotedCount})`
+        : attachedCount
+          ? `Read attached images (${attachedCount})`
+          : "Read images";
+  }
+  const info = row.querySelector<HTMLElement>("[data-images-info]");
+  if (info) {
+    info.dataset.tooltip = "Auto reads available quoted and attached images for an empty/short composer or when its text refers to visual content. On always sends all available images; Off never sends any image. Images are read only after you press Generate.";
+  }
   if (row.hidden !== (count === 0)) {
     animatePanelHeight(panel, () => {
       row.hidden = count === 0;
@@ -1519,21 +2081,47 @@ async function requestPostDrafts(
 
   const liveRoot = resolveLiveComposerRoot(composerRoot) ?? composerRoot;
   const discovered = discoverComposerAttachments(liveRoot).images;
+  // Read quoted context at Generate time, like attachments. Keep image
+  // discovery separate so one Auto/On/Off decision can be applied to both.
+  const quotedPreview = findQuotedPreview(liveRoot);
+  const extractedQuotedPost = quotedPreview ? extractQuotedPost(quotedPreview) ?? undefined : undefined;
+  const quotedImageCount = extractedQuotedPost?.imageUrls?.length ?? 0;
   const imageMode = readReadImages(panel) ?? "auto";
-  // Every mode may use attached media as context (rewrite/continue grounding,
-  // plan §18.2); only generation with an empty composer is fresh-specific.
+  const availableImageCount = discovered.length + quotedImageCount;
+  // Every mode may use visual context. Auto reuses the existing heuristic,
+  // now with hasImages covering both quoted media and user attachments.
   const includeImages = imageMode === "on" ||
-    (imageMode === "auto" && autoIncludeImages(existingDraft, discovered.length > 0));
+    (imageMode === "auto" && autoIncludeImages(existingDraft, availableImageCount > 0));
 
-  if (!existingDraft && !(mode === "fresh" && includeImages && discovered.length)) {
-    if (mode !== "fresh" && discovered.length) {
+  // Off (and Auto when the heuristic says no) removes only image URLs; quote
+  // text/author/language remain useful context. The service worker/backend
+  // therefore cannot accidentally send a quoted image behind the toggle.
+  const quotedPost = extractedQuotedPost
+    ? { ...extractedQuotedPost, imageUrls: includeImages ? extractedQuotedPost.imageUrls : undefined }
+    : undefined;
+  const quotedPostFingerprint = extractedQuotedPost ? fingerprintQuotedPost(extractedQuotedPost) : null;
+  const quotedTextAvailable = Boolean(extractedQuotedPost?.text.trim());
+  const includedImageCount = includeImages ? availableImageCount : 0;
+
+  if (!existingDraft && !(mode === "fresh" && (quotedTextAvailable || includedImageCount > 0))) {
+    if (mode !== "fresh" && extractedQuotedPost) {
+      throw new Error(
+        `${mode === "rewrite" ? "Rewrite" : "Continue"} edits composer text. Type your take first, or switch to Fresh to write a comment on the quoted post.`,
+      );
+    }
+    if (mode !== "fresh" && availableImageCount) {
       throw new Error(
         `${mode === "rewrite" ? "Rewrite" : "Continue"} edits composer text, so images alone aren't enough. Type a draft first, or switch to Fresh for an image-only post.`,
       );
     }
-    if (mode === "fresh" && discovered.length && !includeImages) {
+    if (mode === "fresh" && quotedImageCount && !quotedTextAvailable && !includeImages) {
       throw new Error(
-        'Type a topic in the composer, or set "Read attached images" to Auto or On to generate from the attached image.',
+        'This quoted post has no text. Set Read quoted images to Auto or On, or type a topic in the composer.',
+      );
+    }
+    if (mode === "fresh" && availableImageCount && !includeImages) {
+      throw new Error(
+        'Type a topic in the composer, or set Read images to Auto or On to generate from the available image.',
       );
     }
     throw new Error(`Type a topic or draft in X's "What's happening?" composer first.`);
@@ -1564,11 +2152,13 @@ async function requestPostDrafts(
       mode,
       language: readPostLanguage(panel),
       tone,
+      objective: readGoal(panel),
       count: countOverride ?? readDraftCount(panel),
       maxLength,
       useEmoji: readUseEmoji(panel),
       extraInstruction: readExtraInstruction(panel),
       attachedImages,
+      quotedPost,
     },
   });
 
@@ -1578,6 +2168,7 @@ async function requestPostDrafts(
       historyId: response.historyId,
       expectedComposerText: existingDraft,
       attachmentFingerprint,
+      quotedPostFingerprint,
     })),
     response: response.data,
     requestedTone: tone,
@@ -1595,10 +2186,22 @@ async function insertPostDraft(panel: HTMLElement, composerRoot: HTMLElement, it
       return;
     }
   }
+  const liveRoot = resolveLiveComposerRoot(composerRoot) ?? composerRoot;
+  const livePreview = findQuotedPreview(liveRoot);
+  const liveQuotedPost = livePreview ? extractQuotedPost(livePreview) : null;
+  const liveQuoteFingerprint = liveQuotedPost ? fingerprintQuotedPost(liveQuotedPost) : null;
+  if (liveQuoteFingerprint !== item.quotedPostFingerprint) {
+    showStatus(panel, "Quoted post changed. Regenerate for the current quote before inserting.", "error");
+    return;
+  }
   try {
     const liveComposerRoot = await insertPostIntoComposer(composerRoot, item.expectedComposerText, item.post.text);
     if (item.historyId) {
-      sendRuntimeMessageQuietly({ type: "RECORD_INSERT", historyId: item.historyId, kind: "post" });
+      sendRuntimeMessageQuietly({
+        type: "RECORD_INSERT",
+        historyId: item.historyId,
+        kind: item.quotedPostFingerprint === null ? "post" : "quote",
+      });
     }
     activePostComposerRoot = liveComposerRoot;
     const liveAnchor = liveComposerRoot.querySelector<HTMLButtonElement>(".eks-ai-post-button");
@@ -1726,7 +2329,10 @@ async function generatePostsForPanel(panel: HTMLElement, composerRoot: HTMLEleme
   animatePanelHeight(panel, () => renderSkeleton(panel, readDraftCount(panel) ?? 3));
   try {
     const generated = await requestPostDrafts(panel, composerRoot);
-    animatePanelHeight(panel, () => renderPostDrafts(panel, composerRoot, generated.items));
+    animatePanelHeight(panel, () => {
+      setSettingsCollapsed(panel, true);
+      renderPostDrafts(panel, composerRoot, generated.items);
+    });
     renderUsage(
       panel,
       generated.response.usage,
@@ -1809,6 +2415,12 @@ function bindPostPanelControls(panel: HTMLElement): void {
     panel.dataset.controlsTouched = "true";
     setReadImagesGroup(panel, button.dataset.images as ReadImagesMode);
   });
+  panel.querySelector("[data-goal-group]")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-goal]");
+    if (!button?.dataset.goal) return;
+    panel.dataset.controlsTouched = "true";
+    setGoalGroup(panel, button.dataset.goal as EngagementObjective | "none");
+  });
   panel.querySelector("[data-post-language-group]")?.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-post-language]");
     if (!button) return;
@@ -1824,6 +2436,10 @@ function bindPostPanelControls(panel: HTMLElement): void {
 }
 
 export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneComposer): void {
+  if (activePanel?.dataset.minimized === "true") {
+    restoreMinimizedPanel();
+    if (activePanelKind === "post" && activeAnchor === anchor) return;
+  }
   if (activePanelKind === "post" && activeAnchor === anchor && activePanel) {
     attemptClosePanel();
     return;
@@ -1842,27 +2458,33 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
   panel.innerHTML = `
     <header>
       <strong id="eks-post-panel-title">AI Post</strong>
+      <button type="button" class="eks-panel-minimize" data-panel-minimize aria-label="Minimize panel">–</button>
       <button type="button" class="eks-panel-close" data-panel-close="true" aria-label="Close">×</button>
     </header>
     <div class="eks-panel-body">
+      <button type="button" class="eks-settings-toggle" data-settings-toggle hidden aria-expanded="true">Settings <span class="eks-select-caret" aria-hidden="true">▾</span></button>
       <div class="eks-settings-card">
         <div class="eks-count-label" data-post-mode-row>
-          Mode
+          <span class="eks-image-label-heading">
+            <span>Mode</span>
+            <button type="button" class="eks-tooltip-info" data-post-mode-info aria-label="About generation modes" data-tooltip="Fresh uses the composer as an idea; Rewrite and Continue treat it as a draft.">i</button>
+          </span>
           <div class="eks-count-group eks-post-mode-group" data-post-mode-group role="group" aria-label="Post generation mode">
             <button type="button" data-post-mode="fresh" aria-pressed="true">Fresh</button>
             <button type="button" data-post-mode="rewrite" aria-pressed="false">Rewrite</button>
             <button type="button" data-post-mode="continue" aria-pressed="false">Continue</button>
           </div>
-          <span class="eks-control-hint">Fresh uses the composer as an idea; Rewrite and Continue treat it as a draft.</span>
         </div>
         <div class="eks-count-label" data-attachment-row hidden>
-          <span data-attachment-label>Read attached images</span>
-          <div class="eks-count-group" data-images-group role="group" aria-label="Read attached composer images">
+          <span class="eks-image-label-heading">
+            <span data-attachment-label>Read attached images</span>
+            <button type="button" class="eks-tooltip-info" data-images-info aria-label="About reading images" data-tooltip="Auto reads available quoted and attached images when they help. On always sends all available images; Off never sends any image. Images are read only after you press Generate.">i</button>
+          </span>
+          <div class="eks-count-group" data-images-group role="group" aria-label="Read images for generation">
             <button type="button" data-images="auto" aria-pressed="true">Auto</button>
             <button type="button" data-images="on" aria-pressed="false">On</button>
             <button type="button" data-images="off" aria-pressed="false">Off</button>
           </div>
-          <span class="eks-control-hint">Attached images are read and sent to your backend/AI provider only when you press Generate. They are never uploaded, changed, or posted by the extension.</span>
         </div>
         <div class="eks-tone-label">
           Tone
@@ -1916,6 +2538,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
             </div>
           </div>
         </div>
+        ${goalRowMarkup("post")}
         <details class="eks-extra-details">
           <summary>Add instruction for this post</summary>
           <textarea data-extra-instruction rows="2" maxlength="500" placeholder="e.g. end with a question"></textarea>
@@ -1923,9 +2546,9 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
       </div>
       <div data-reply-list></div>
       <p class="eks-panel-note">Posting stays manual. Extension never clicks X/Twitter's final Post button.</p>
-      <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
     </div>
     <footer class="eks-panel-footer">
+      <p class="eks-panel-status" data-panel-status aria-live="polite"></p>
       <span class="eks-panel-usage" data-usage></span>
       <button type="button" class="eks-generate-fab" data-generate-button>Generate</button>
     </footer>
@@ -1933,11 +2556,32 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
 
   setPostMode(panel, "fresh");
   bindPostPanelControls(panel);
+  bindSettingsToggle(panel);
+  panel.querySelectorAll<HTMLElement>(".eks-tooltip-info[data-tooltip]").forEach(bindContentTooltip);
+
+  // Quote composer (plan §20.3): the title identifies the quote-aware mode,
+  // while the existing Mode info tooltip explains its behavior without
+  // repeating quoted content inside an already compact settings card.
+  const quotedPreview = findQuotedPreview(composer.root);
+  if (quotedPreview) {
+    const title = panel.querySelector<HTMLElement>("#eks-post-panel-title");
+    if (title) title.textContent = "AI Quote";
+    const quoted = extractQuotedPost(quotedPreview);
+    if (quoted) {
+      const modeInfo = panel.querySelector<HTMLElement>("[data-post-mode-info]");
+      if (modeInfo) {
+        modeInfo.dataset.tooltip = "Quoted text and author are read automatically; image reading follows the image control. Fresh writes your take on the quote; Rewrite and Continue edit your composer draft.";
+      }
+    }
+  }
+
+  panel.querySelector("[data-panel-minimize]")?.addEventListener("click", () => minimizeActivePanel());
   panel.querySelector("[data-panel-close]")?.addEventListener("click", () => closePanel());
   document.body.append(panel);
   activePanel = panel;
   activeAnchor = anchor;
   activePanelKind = "post";
+  syncFloatingFab();
   activePostComposerRoot = composer.root;
   renderUsage(panel);
   syncPanelTheme();
@@ -1951,6 +2595,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
       window.clearInterval(attachmentTimer);
       return;
     }
+    if (panel.dataset.minimized === "true") return;
     refreshPostAttachmentRow(panel, activePostComposerRoot ?? composer.root);
   }, 1_500);
   panel.querySelector<HTMLButtonElement>("[data-generate-button]")?.addEventListener("click", () => {
@@ -1962,12 +2607,15 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
 window.addEventListener("resize", () => {
   closeContentTooltip();
   closeToneList();
+  closeFabMenu();
   queuePanelPosition();
 });
 window.addEventListener(
   "scroll",
   (event) => {
     closeContentTooltip();
+    closeFabMenu();
+    freezeRestoreFabDuringScroll();
     // Scroll doesn't bubble, but capture-phase listeners on window still fire
     // for scrolling inside any descendant — including the tone list's own
     // overflow-y:auto. Without this check, scrolling (or clicking its
@@ -1986,6 +2634,11 @@ document.addEventListener("keydown", (event) => {
   tooltipKeyboardNavigation = true;
   if (event.key !== "Escape") return;
   closeContentTooltip();
+  if (document.getElementById(FAB_MENU_ID)) {
+    closeFabMenu();
+    document.getElementById(RESTORE_FAB_ID)?.focus({ preventScroll: true });
+    return;
+  }
   if (activeToneList) {
     closeToneList({ restoreFocus: true });
     return;

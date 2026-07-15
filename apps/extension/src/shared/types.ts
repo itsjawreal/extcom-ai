@@ -26,6 +26,18 @@ export type Tone =
 
 export type ReadImagesMode = "auto" | "off" | "on";
 
+// Visibility of the floating ✦ button on X's right rail (plan §21):
+// "always" also acts as a quick-actions launcher when no panel is open,
+// "minimized" shows it only while a panel is minimized, and "off" hides
+// the idle launcher. A minimized panel always keeps its temporary restore
+// control so live drafts can never become trapped off-screen.
+export type FloatingButtonMode = "always" | "minimized" | "off";
+
+// Engagement goal — what the output should achieve, orthogonal to tone.
+// Mirrors the backend's EngagementObjective; absent means no goal section
+// in the prompt (today's behavior).
+export type EngagementObjective = "viral" | "replies" | "debate" | "value";
+
 export type ContentKind = "reply" | "quote" | "post";
 
 export type GeneratedReply = {
@@ -56,6 +68,7 @@ export type GenerateReplyRequest = ExtractedPostContext & {
   // applied consistently across every reply in the batch — the resolved
   // tone (never "auto") is echoed back per-reply in GeneratedReply.tone.
   tone: Tone | "auto";
+  objective?: EngagementObjective;
   extraInstruction?: string;
   blockedTerms?: string[];
   count: number;
@@ -80,12 +93,26 @@ export type AttachedImageInput = {
   height: number;
 };
 
+// The tweet being quoted in X's quote composer, extracted from the preview
+// card at Generate time (plan §20). Mirrors the backend contract — keep in
+// sync with apps/backend/src/types/index.ts.
+export type QuotedPostInput = {
+  // May be "" for an image-only quoted tweet.
+  text: string;
+  authorHandle?: string;
+  authorName?: string;
+  // Up to 4 https X CDN URLs of the quoted tweet's own media.
+  imageUrls?: string[];
+  sourceLanguage?: string;
+};
+
 export type GeneratePostRequest = {
   brief: string;
   existingDraft?: string;
   mode: GeneratePostMode;
   language: "brief" | "en";
   tone: Tone | "auto";
+  objective?: EngagementObjective;
   extraInstruction?: string;
   blockedTerms?: string[];
   count: number;
@@ -95,6 +122,8 @@ export type GeneratePostRequest = {
   // Up to 4 prepared composer attachments; bytes are read only after the
   // user selects Generate and are never persisted anywhere.
   attachedImages?: AttachedImageInput[];
+  // Present only when generating inside a quote composer (plan §20).
+  quotedPost?: QuotedPostInput;
 };
 
 export type ModelOption = {
@@ -139,6 +168,10 @@ export type ExtensionSettings = {
   draftCount: number;
   useEmoji: boolean;
   readImages: ReadImagesMode;
+  // Saved default engagement goal; "none" keeps today's behavior. The
+  // panels open with this value and can override it per-session.
+  objectiveDefault: EngagementObjective | "none";
+  floatingButton: FloatingButtonMode;
   // Pinned tones shown as quick-pick chips in the popup and the on-page
   // panel, on top of the full tone dropdown. Capped at 5, "auto" excluded
   // (it's already always the first dropdown option).
@@ -168,6 +201,8 @@ export type HistoryEntry = {
   postText: string;
   postUrl?: string;
   tone: Tone;
+  // Engagement goal used for this generation, when one was set.
+  objective?: EngagementObjective;
   drafts: string[];
   inserted: boolean;
   // Only set once inserted — which composer the draft was inserted into.

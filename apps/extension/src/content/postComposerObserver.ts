@@ -49,9 +49,13 @@ function resolveComposer(editable: HTMLElement): StandaloneComposer | null {
   const dialog = editable.closest<HTMLElement>('[role="dialog"]');
   if (dialog) {
     if (!/^\/compose\/post\/?$/.test(window.location.pathname)) return null;
-    // A quote composer uses the same route, but mounts the quoted post inside
-    // the dialog. It belongs to the existing Quote flow, not Create Post.
-    if (dialog.querySelector('[data-testid="tweet"]')) return null;
+    // Quote composers share this route and dialog shape, with the quoted
+    // tweet mounted inside the attachments container. AI Post owns them by
+    // design (plan §20): the panel detects the quoted preview via
+    // composerQuote.findQuotedPreview() and turns quote-aware. No exclusion
+    // here — an old `[data-testid="tweet"]` check used to skip quote
+    // dialogs, but spike 20-A confirmed current markup never matches it and
+    // the accidental inclusion is now the intended behavior.
     if (!dialog.querySelector(MODAL_PUBLISH_SELECTOR)) return null;
     return { root: dialog, editable };
   }

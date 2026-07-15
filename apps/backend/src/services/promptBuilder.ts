@@ -1,6 +1,7 @@
 import {
   TONES,
   isGeneratePostRequest,
+  type EngagementObjective,
   type GenerationRequest,
   type GeneratePostRequest,
   type GenerateReplyRequest,
@@ -34,6 +35,31 @@ const TONE_GUIDANCE: Record<Tone, string> = {
   coach_motivational: "Drill-sergeant-lite pump-up energy — \"no excuses, let's go\" urgency without cheesiness.",
 };
 
+// Engagement goals (plan §19): what the output should achieve, orthogonal to
+// tone. Each entry states concrete mechanics, not vibes — a goal that just
+// says "make it viral" measurably does nothing.
+const OBJECTIVE_GUIDANCE: Record<EngagementObjective, string> = {
+  viral:
+    "Maximize shareability (best effort — never mention or promise virality in the output itself). The first line must stand alone as a hook: a specific claim, number, or contrarian statement, never setup or throat-clearing — the timeline preview shows only about two lines and decides whether anyone reads on. Commit to one sharp idea instead of several half-developed ones. Prefer concrete nouns and numbers over abstractions. End on a line worth quoting.",
+  replies:
+    "Maximize direct replies. Build brief context, then end with exactly one genuine, low-barrier question that can be answered in a single sentence — ask for opinions or experiences, not homework. The question must grow out of the content, never feel bolted on. The question is the one non-compressible part of this goal: at a tight character limit, cut the context and keep the question — even the whole output being just a short question is a success, while an output with no question is a failure. If the selected tone already produces a question (e.g. engager_question), still write exactly one question in total, not two.",
+  debate:
+    "Provoke substantive disagreement. Take one defensible, clearly stated contrarian position and deliberately leave one honest opening for pushback. Acknowledge the strongest opposing point in passing rather than strawmanning it. Never hostile, never rage-bait, never punching down. If the selected tone is warm or agreeable, keep that delivery while still committing fully to the stance.",
+  value:
+    "Maximize bookmarks and saves. Deliver a complete, immediately usable takeaway — a framework, a checklist-like structure, or a non-obvious insight — so it is worth saving. Prefer short lines and paragraph breaks over a prose wall when the length allows. Never withhold the payoff or tease a follow-up instead of delivering. With brevity-built tones, compress the takeaway rather than forcing length.",
+};
+
+// Returns "" when no objective is set so prompts stay byte-identical to the
+// pre-objective output (plan §19.8 inert-when-absent gate). The non-empty
+// form supplies its own surrounding blank lines to preserve section spacing.
+function objectiveSection(objective: EngagementObjective | undefined, outputNoun: "reply" | "post"): string {
+  if (!objective) return "";
+  return `\nEngagement goal for every ${outputNoun}:
+${objective} — ${OBJECTIVE_GUIDANCE[objective]}
+This goal shapes angle and structure only. It never overrides the safety rules, Never mention rules, emoji preference, required language, or character limit. The character limit always wins over this goal: deliver the goal's mechanic *within* the limit by compressing — at a tight limit, a complete short hook, question, or takeaway beats a longer one that gets cut off mid-sentence. If the selected tone is Auto, pick the tone that best serves this goal for this specific ${outputNoun}.
+`;
+}
+
 export const SYSTEM_PROMPT = `You are an expert social reply assistant for X/Twitter.
 
 Generate natural, human-sounding replies to the supplied post. Length should follow what the character limit and tone in the user message call for — do not default to the shortest possible reaction just because that's the norm for a typical tweet reply.
@@ -42,6 +68,7 @@ Rules:
 - Do not sound like a bot. Write like a real person casually typing, not a formal report: vary sentence length, use short fragments and natural pauses (commas, dashes, or a line break between two ideas) instead of one long, evenly-paced run-on sentence every time.
 - Don't force textbook capitalization or a trailing period/question mark just to look "complete" or "correct". For casual, blunt, or chaotic tones (e.g. degen, funny, roast, hot_take, sarcastic_dry, ct_maxi, alpha_drop, unhinged_degen, unhinged_meme, bold_populist, one_liner, short_alpha), a lowercase sentence start and no ending punctuation is often the more natural, human choice — not a mistake to correct. Formal, respectful, philosophical, wholesome, coach_motivational, or corporate-parody tones should keep standard capitalization and punctuation.
 - A short setup clause, a line break, then a punchline is a natural human structure real tweets use — reach for it instead of always writing one single flowing sentence, when the reply length allows it.
+- Lead with the reply's strongest, most specific element — a concrete detail, number, or take — instead of warming up with filler openers like "honestly", "I mean", or "great point". Brevity tones (one_liner, single_word, short_alpha) are already all hook; leave them untouched.
 - Comma splices and casual run-on joins (two short clauses linked by a comma instead of a formal conjunction) are fine for casual tones — don't over-correct toward semicolons or "and"/"but" every time.
 - Avoid overused AI tells: don't lean on the em dash ("—") as a crutch, and skip stock phrases like "it's worth noting", "at the end of the day", "not just X, but Y", or "double-edged sword". Commit to the point directly instead of softening it with hedges like "arguably" or "potentially" unless a qualifier is genuinely needed.
 - When asked for more than one reply, make them genuinely distinct from each other — different opening words, different structure, different angle on the post — not the same sentence reworded with synonyms.
@@ -65,9 +92,11 @@ Write natural, human-sounding original posts from the supplied brief or draft. A
 
 Rules:
 - Write like a real person composing directly on X, not a formal report or marketing bot. Match the requested tone and vary hooks, structure, and angle across multiple drafts.
+- The opening line must carry the post's strongest specific element — a claim, number, or concrete detail — never setup or throat-clearing: the timeline preview shows only the first couple of lines and decides whether anyone reads on. This shapes the first line only; brevity tones (one_liner, single_word, short_alpha) stay their natural selves.
 - Follow the requested mode exactly: Fresh develops the source into a new post; Rewrite preserves its core meaning and factual claims while improving expression; Continue extends the draft without repeating its opening and returns the complete combined post.
 - Never invent concrete facts, quotes, statistics, links, personal experiences, or news that the brief/draft did not provide.
 - Attached images are media the user will publish together with this post — treat their visible content as source material, like the brief. Ground any claim about them in what is actually legible; never guess exact chart values, tickers, names, or small text you cannot read, and never mention that an AI looked at the image.
+- If the user message includes a "Quoted post" section, the draft is quote-tweet commentary published directly above that post: add the user's own take, reaction, or context — never merely paraphrase or summarize content the reader can already see below it, never address the quoted author as if replying to them, and never invent details beyond the quoted text and its images.
 - Do not use hashtags unless requested. Do not make financial guarantees or claim insider information.
 - Do not harass, threaten, dox, impersonate, target protected groups, or produce spam.
 - Never instruct software to publish or auto-post.
@@ -141,17 +170,38 @@ function postLanguageGuidance(input: GeneratePostRequest): string {
   if (input.language === "en") {
     return "English (en) — explicit user override. Write every draft in natural, conversational English even when the source uses another language.";
   }
-  return "Same language as the source brief/existing draft. Infer it only from that source, then write directly like a native speaker on social media, matching its register. Never make the result feel translated from English. If brief and existing draft differ, follow the existing draft's language.";
+  const quotedFallback = input.quotedPost
+    ? " When brief and existing draft are both absent, infer the language from the quoted post instead."
+    : "";
+  return `Same language as the source brief/existing draft. Infer it only from that source, then write directly like a native speaker on social media, matching its register. Never make the result feel translated from English. If brief and existing draft differ, follow the existing draft's language.${quotedFallback}`;
 }
 
 function postModeGuidance(input: GeneratePostRequest): string {
+  const quoted = Boolean(input.quotedPost);
   if (input.mode === "rewrite") {
-    return "Rewrite — preserve the source draft's core meaning, factual claims, and point of view. Improve wording, flow, hook, and structure without adding unsupported claims.";
+    return `Rewrite — preserve the source draft's core meaning, factual claims, and point of view. Improve wording, flow, hook, and structure without adding unsupported claims.${quoted ? " Keep the rewritten take consistent with the quoted post it comments on." : ""}`;
   }
   if (input.mode === "continue") {
-    return "Continue — extend the existing draft naturally without restating its opening. Return the complete combined post (original plus continuation), polished as one coherent final draft.";
+    return `Continue — extend the existing draft naturally without restating its opening. Return the complete combined post (original plus continuation), polished as one coherent final draft.${quoted ? " The continuation must stay consistent with the quoted post the draft comments on." : ""}`;
   }
-  return "Fresh post — use the brief and/or existing draft only as source material, then compose a new standalone post from scratch.";
+  return quoted
+    ? "Fresh post — compose the user's own quote-tweet commentary on the quoted post below, using the brief and/or existing draft as the angle when present."
+    : "Fresh post — use the brief and/or existing draft only as source material, then compose a new standalone post from scratch.";
+}
+
+// Returns "" when no quoted post is present so non-quote prompts stay
+// byte-identical (same inert-when-absent contract as objectiveSection).
+function quotedPostSection(quoted: GeneratePostRequest["quotedPost"]): string {
+  if (!quoted) return "";
+  const author = [quoted.authorName, quoted.authorHandle].filter(Boolean).join(" ") || "Unknown";
+  const imageNote = quoted.imageUrls?.length
+    ? `\n(${quoted.imageUrls.length} image${quoted.imageUrls.length > 1 ? "s" : ""} from the quoted post ${quoted.imageUrls.length > 1 ? "are" : "is"} attached below as visual context.)`
+    : "";
+  const languageNote = quoted.sourceLanguage ? `\nLanguage detected by X on the quoted post: ${quoted.sourceLanguage}` : "";
+  return `\nQuoted post (every draft will be published as a quote-tweet directly above it):
+Author: ${author}
+${quoted.text || "(No caption text — an image-only post.)"}${imageNote}${languageNote}
+`;
 }
 
 // personaVoice comes from PERSONA.md (services/persona.ts) — an optional,
@@ -179,7 +229,7 @@ ${thread}
 
 Selected tone:
 ${toneSection(input.tone)}
-
+${objectiveSection(input.objective, "reply")}
 Required reply language:
 ${languageGuidance(input)}
 
@@ -205,9 +255,13 @@ export function buildPostPrompt(input: GeneratePostRequest, personaVoice?: strin
     : "None";
 
   const imageCount = input.attachedImages?.length ?? 0;
-  const briefFallback = input.existingDraft || !imageCount
+  const briefFallback = input.existingDraft
     ? "None — use the existing draft as source material."
-    : "None — write the post from the attached image(s) below.";
+    : imageCount
+      ? "None — write the post from the attached image(s) below."
+      : input.quotedPost
+        ? "None — write the user's own take on the quoted post below."
+        : "None — use the existing draft as source material.";
 
   return `${personaSection}Brief / topic:
 ${input.brief || briefFallback}
@@ -215,13 +269,13 @@ ${input.brief || briefFallback}
 Existing composer draft:
 ${input.existingDraft || "None"}
 ${imageCount ? `\nAttached media (${imageCount} image${imageCount > 1 ? "s" : ""}, shown below):\nThe user is publishing ${imageCount > 1 ? "these images" : "this image"} with the post. Use what ${imageCount > 1 ? "they visibly show" : "it visibly shows"} as source material for the post.\n` : ""}
-
+${quotedPostSection(input.quotedPost)}
 Writing mode:
 ${postModeGuidance(input)}
 
 Selected tone:
 ${toneSection(input.tone, "post")}
-
+${objectiveSection(input.objective, "post")}
 Required post language:
 ${postLanguageGuidance(input)}
 

@@ -1,6 +1,6 @@
 # Privacy Policy — Extcom AI
 
-Effective date: 2026-07-13
+Effective date: 2026-07-15
 
 Extcom AI is a self-hosted browser extension. There is no company
 server, no account system, and no telemetry. This page describes exactly
@@ -8,7 +8,7 @@ what data the extension touches and where it goes.
 
 ## What the extension does
 
-Extcom AI adds "AI Reply" to posts and "AI Post" to X/Twitter's
+Extcom AI adds "AI Reply" to posts and "AI Post" / "AI Quote" to X/Twitter's
 standalone composer. When you click AI Reply, the extension reads the visible content of that specific post
 (and, where detected, its immediate reply-chain context) and sends it to a
 backend server that you deploy and control, along with the generation
@@ -18,6 +18,8 @@ and returns draft replies. When you click AI Post, the text you typed in that
 specific X composer is sent through the same self-hosted backend to generate
 standalone post drafts. You review and manually insert
 every draft — the extension never clicks X's final Reply/Post button.
+In a Quote composer, AI Quote also reads the quoted post shown by X so the
+draft can comment on it instead of treating it as unrelated text.
 
 ## Data the extension reads
 
@@ -35,6 +37,13 @@ every draft — the extension never clicks X's final Reply/Post button.
   extension storage or history, not on the backend, not in logs. Setting
   the control to Off prevents attachment bytes from ever being read. The
   extension never adds, removes, uploads, or posts media.
+- In X's Quote composer, the visible quoted post's text, author, language tag,
+  and up to four image URLs. The panel detects this context locally so it can
+  identify AI Quote and show the correct image control; nothing is sent until
+  you press Generate. When the image control is Auto/On, selected image URLs
+  are included; Off prevents quoted and attached images from being sent while
+  quoted text and author remain context. Sent context is discarded after that
+  generation and is not written to extension history or backend storage.
 - Nothing outside the currently active X/Twitter tab. The extension has no
   access to any other tab, any other website, your browsing history, or
   your X/Twitter login credentials.

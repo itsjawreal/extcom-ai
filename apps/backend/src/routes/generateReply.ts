@@ -10,6 +10,7 @@ import { consumeRateLimit, refundRateLimit } from "../services/rateLimit.js";
 import { assertSafeRequest } from "../services/safety.js";
 import { readJsonBody, sendError, sendJson } from "../serverUtils.js";
 import {
+  ENGAGEMENT_OBJECTIVES,
   TONES,
   type GenerateReplyRequest,
   type GenerateReplyResponse,
@@ -88,6 +89,13 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     (body.tone !== "auto" && !TONES.includes(body.tone as never))
   ) {
     throw new Error(`tone must be "auto" or one of: ${TONES.join(", ")}.`);
+  }
+
+  if (
+    body.objective !== undefined &&
+    (typeof body.objective !== "string" || !ENGAGEMENT_OBJECTIVES.includes(body.objective as never))
+  ) {
+    throw new Error(`objective must be omitted or one of: ${ENGAGEMENT_OBJECTIVES.join(", ")}.`);
   }
 
   const count = body.count === undefined ? 3 : body.count;
@@ -170,6 +178,7 @@ export function validateGenerateRequest(value: unknown): GenerateReplyRequest {
     sourceLanguage,
     replyLanguage,
     tone: body.tone as GenerateReplyRequest["tone"],
+    objective: body.objective as GenerateReplyRequest["objective"],
     count: Number(count),
     maxLength: maxLength === "auto" ? "auto" : Number(maxLength),
     useEmoji,
