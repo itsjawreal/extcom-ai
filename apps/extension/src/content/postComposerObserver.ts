@@ -1,3 +1,5 @@
+import { findQuotedPreview } from "./composerQuote";
+
 export const POST_COMPOSER_PROCESSED_ATTRIBUTE = "data-eks-ai-post-processed";
 export const POST_COMPOSER_SESSION_ATTRIBUTE = "data-eks-ai-post-session";
 
@@ -15,10 +17,15 @@ export type StandaloneComposer = {
   editable: HTMLElement;
 };
 
-type ComposerKind = "inline" | "modal";
+// "quote" is a distinct session kind (plan §20/§21 canary follow-up): a
+// quote composer and a plain modal share the same route and dialog shape,
+// but a session must never carry over between them — a stale AI Quote panel
+// re-anchoring to a plain modal would claim quote-awareness it doesn't have.
+type ComposerKind = "inline" | "modal" | "quote";
 
 function composerKind(root: HTMLElement): ComposerKind {
-  return root.matches('[role="dialog"]') ? "modal" : "inline";
+  if (!root.matches('[role="dialog"]')) return "inline";
+  return findQuotedPreview(root) ? "quote" : "modal";
 }
 
 function isVisible(element: HTMLElement): boolean {
@@ -149,7 +156,7 @@ export function observePostComposers(
     // composer never disappeared for a completed scan. Once a scan sees no
     // composer, a later one is a new user session and must not receive drafts
     // generated for the closed composer.
-    for (const kind of ["inline", "modal"] as const) {
+    for (const kind of ["inline", "modal", "quote"] as const) {
       const candidates = composers.filter(({ root }) => composerKind(root) === kind);
       const previous = sessions.get(kind);
       if (candidates.length === 0) {

@@ -113,6 +113,13 @@ export function discoverComposerAttachments(root: HTMLElement): ComposerAttachme
         // belonging to the embedded quoted post is remote HTTPS. tweetPhoto
         // handles primary media; this second guard catches avatars, unloaded
         // media placeholders, and any other remote quote-card assets.
+        // ACCEPTED TRADE-OFF (review 2026-07-16): if X ever serves the
+        // user's OWN attachments as https inside a quote composer (e.g. a
+        // reopened saved draft re-served from CDN — not observed in any
+        // spike), they would be misclassified as quote assets and skipped.
+        // The inverse error — uploading someone else's quoted media as the
+        // user's attachment bytes — is worse, so https stays quote-owned
+        // until a spike shows a real own-https case to distinguish.
         if (isQuoteComposer && scheme === "https") continue;
         if (!isLikelyAttachmentImage(img)) continue;
         if (seen.has(src)) continue;

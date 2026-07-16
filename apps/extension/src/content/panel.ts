@@ -56,6 +56,7 @@ let activePostComposerRoot: HTMLElement | null = null;
 let positionQueued = false;
 let restoreFabObserver: MutationObserver | null = null;
 let restoreFabMaintenanceTimer: number | undefined;
+let restoreFabIdleTimer: number | undefined;
 let restoreFabScrollIdleTimer: number | undefined;
 let restoreFabScrolling = false;
 let activeToneList: HTMLElement | null = null;
@@ -112,6 +113,12 @@ export function syncPanelTheme(): void {
   if (activeToneList) applyXTheme(activeToneList, theme);
   const tooltip = document.getElementById(TOOLTIP_ID);
   if (tooltip) applyXTheme(tooltip, theme);
+  // Long-lived floating overlays must follow live theme switches too — the
+  // fab and its menu can be on screen for the whole browsing session.
+  const fab = document.getElementById(RESTORE_FAB_ID);
+  if (fab) applyXTheme(fab, theme);
+  const fabMenu = document.getElementById(FAB_MENU_ID);
+  if (fabMenu) applyXTheme(fabMenu, theme);
   document.querySelectorAll<HTMLElement>(".eks-ai-reply-button, .eks-ai-post-button, .eks-post-panel").forEach((button) => {
     applyXTheme(button, theme);
   });
@@ -623,9 +630,12 @@ async function regenerateSlot(
     const readImages = readReadImages(panel);
     const replyLanguage = readReplyLanguage(panel);
     const extraInstruction = readExtraInstruction(panel);
+    // Same explicit goal the batch Generate sends — omitting it would let
+    // the saved objectiveDefault silently override the on-screen selection.
+    const objective = readGoal(panel);
     const response = await sendRuntimeMessage<{ ok: true; data: GenerateReplyResponse; historyId?: string }>({
       type: "GENERATE_REPLY",
-      input: { ...context, tone, count: 1, useEmoji, maxLength, readImages, replyLanguage, extraInstruction },
+      input: { ...context, tone, count: 1, useEmoji, maxLength, readImages, replyLanguage, extraInstruction, objective },
     });
 
     // Ignore response if this slot was regenerated again while we were waiting.
@@ -668,6 +678,10 @@ function removeRestoreFab(): void {
   closeFabMenu();
   restoreFabObserver?.disconnect();
   restoreFabObserver = null;
+  if (restoreFabIdleTimer !== undefined) {
+    window.clearInterval(restoreFabIdleTimer);
+    restoreFabIdleTimer = undefined;
+  }
   if (restoreFabMaintenanceTimer !== undefined) {
     window.clearTimeout(restoreFabMaintenanceTimer);
     restoreFabMaintenanceTimer = undefined;
@@ -694,8 +708,22 @@ function isInFixedLayer(element: HTMLElement): boolean {
 // whatever is actually there and sit above the highest one, instead of
 // hardcoding a pixel guess that lands on top of Grok.
 function restoreFabBottom(): number {
-  const explicitCandidates = new Set<HTMLElement>();
-  const fallbackCandidates = new Set<HTMLElement>();
+  const measureTop = (elements: Iterable<HTMLElement>): number => {
+    let top = Number.POSITIVE_INFINITY;
+    for (const element of elements) {
+      if (element.closest(".eks-reply-panel, .eks-restore-fab, .eks-content-tooltip, .eks-select-list")) continue;
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      // Only controls anchored to the bottom-right rail compete for this
+      // corner. A broader lower-half check caught sticky sidebar controls
+      // much higher than Grok/Messages.
+      if (rect.right < window.innerWidth - Math.min(120, window.innerWidth * 0.25)) continue;
+      if (rect.bottom < window.innerHeight - 96) continue;
+      top = Math.min(top, rect.top);
+    }
+    return top;
+  };
+
   // Probe-confirmed (2026-07-16): Grok bubble = GrokDrawer; Messages bubble
   // lives under chat-drawer-root/chat-drawer-main ("DMDrawer" does not
   // exist in current markup). The case-insensitive drawer wildcard covers
@@ -709,49 +737,32 @@ function restoreFabBottom(): number {
     '[aria-label*="grok" i]',
     '[aria-label*="message" i]',
   ].join(", ");
-  document.querySelectorAll<HTMLElement>(railSelector).forEach((element) => explicitCandidates.add(element));
-  // Geometry fallback for renamed/localized X controls: consider only real
-  // interactive elements inside a fixed/sticky layer. This catches a lazy
-  // floating rail without relying on English aria-labels or guessed testids.
-  document.querySelectorAll<HTMLElement>('button, a, [role="button"]').forEach((element) => {
-    // X timelines can contain hundreds of controls. Cheap geometry checks
-    // must happen before getComputedStyle() walks each ancestor; otherwise a
-    // busy minimized timeline would turn rail tracking into needless work.
-    const rect = element.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    if (rect.right < window.innerWidth - Math.min(120, window.innerWidth * 0.25)) return;
-    // A collapsed X rail is anchored to the viewport floor. Requiring its
-    // control to end near that floor prevents unrelated sticky sidebar
-    // actions from pushing the restore button toward the top of the page.
-    if (rect.bottom < window.innerHeight - 96) return;
-    // Geometry fallback is for Grok/DM bubbles or their dock bar, not an
-    // entire fixed sidebar/overlay. Explicit Drawer candidates below may be
-    // taller because an opened drawer should legitimately reserve its area.
-    if (rect.height > 96 || rect.width > 420) return;
-    if (isInFixedLayer(element)) fallbackCandidates.add(element);
-  });
+  const explicitTop = measureTop(document.querySelectorAll<HTMLElement>(railSelector));
 
-  const measureTop = (elements: Iterable<HTMLElement>): number => {
-    let top = Number.POSITIVE_INFINITY;
-    for (const element of elements) {
-      if (element.closest(".eks-reply-panel, .eks-restore-fab, .eks-content-tooltip, .eks-select-list")) continue;
+  // Geometry fallback for renamed/localized X controls: only pay for the
+  // whole-page scan when the confirmed selectors found nothing — which is
+  // rare on x.com, where the drawer rail is nearly always present. Never mix
+  // guessed geometry with a confirmed selector: sticky X controls can move
+  // briefly during scrolling and previously made the fab bounce.
+  let minTop = explicitTop;
+  if (!Number.isFinite(minTop)) {
+    const fallbackCandidates = new Set<HTMLElement>();
+    document.querySelectorAll<HTMLElement>('button, a, [role="button"]').forEach((element) => {
+      // Cheap geometry checks must happen before getComputedStyle() walks
+      // each ancestor on a busy timeline.
       const rect = element.getBoundingClientRect();
-      if (!rect.width || !rect.height) continue;
-      // Only controls anchored to the bottom-right rail compete for this
-      // corner. The previous lower-half check was too broad and caught sticky
-      // sidebar controls much higher than Grok/Messages.
-      if (rect.right < window.innerWidth - Math.min(120, window.innerWidth * 0.25)) continue;
-      if (rect.bottom < window.innerHeight - 96) continue;
-      top = Math.min(top, rect.top);
-    }
-    return top;
-  };
+      if (!rect.width || !rect.height) return;
+      if (rect.right < window.innerWidth - Math.min(120, window.innerWidth * 0.25)) return;
+      // A collapsed X rail is anchored to the viewport floor; requiring
+      // that keeps unrelated sticky sidebar actions out.
+      if (rect.bottom < window.innerHeight - 96) return;
+      // Bubbles/dock bars only, not an entire fixed sidebar/overlay.
+      if (rect.height > 96 || rect.width > 420) return;
+      if (isInFixedLayer(element)) fallbackCandidates.add(element);
+    });
+    minTop = measureTop(fallbackCandidates);
+  }
 
-  // Never mix guessed geometry with a confirmed Grok/DM selector. Sticky X
-  // controls can move briefly during scrolling and previously made the FAB
-  // bounce before returning to the real rail position.
-  const explicitTop = measureTop(explicitCandidates);
-  const minTop = Number.isFinite(explicitTop) ? explicitTop : measureTop(fallbackCandidates);
   if (!Number.isFinite(minTop)) return RESTORE_FAB_MIN_BOTTOM;
   return Math.min(
     Math.max(16, window.innerHeight - 80),
@@ -778,7 +789,9 @@ function updateRestoreFabLabel(): void {
 function positionRestoreFab(): void {
   const fab = document.getElementById(RESTORE_FAB_ID);
   if (!(fab instanceof HTMLElement)) return;
-  fab.style.bottom = `${restoreFabBottom()}px`;
+  const bottom = `${restoreFabBottom()}px`;
+  // Skip the style write (and its invalidation) when nothing moved.
+  if (fab.style.bottom !== bottom) fab.style.bottom = bottom;
   updateRestoreFabLabel();
 }
 
@@ -808,18 +821,44 @@ function freezeRestoreFabDuringScroll(): void {
   }, 180);
 }
 
-function startRestoreFabTracking(): void {
+// Restore mode tracks aggressively (a minimized panel must follow X's rail
+// and its own target through DOM churn). Idle mode is a permanent launcher:
+// a body-wide MutationObserver would run for the whole browsing session, so
+// it settles for a slow timer plus the window resize hook.
+const IDLE_FAB_REPOSITION_MS = 8_000;
+
+function startRestoreFabTracking(mode: "restore" | "idle"): void {
   restoreFabObserver?.disconnect();
-  restoreFabObserver = new MutationObserver(() => scheduleMinimizedMaintenance());
-  restoreFabObserver.observe(document.body, { childList: true, subtree: true });
-  scheduleMinimizedMaintenance(0);
+  restoreFabObserver = null;
+  if (restoreFabIdleTimer !== undefined) {
+    window.clearInterval(restoreFabIdleTimer);
+    restoreFabIdleTimer = undefined;
+  }
+  if (mode === "restore") {
+    restoreFabObserver = new MutationObserver(() => scheduleMinimizedMaintenance());
+    restoreFabObserver.observe(document.body, { childList: true, subtree: true });
+    scheduleMinimizedMaintenance(0);
+    return;
+  }
+  restoreFabIdleTimer = window.setInterval(() => {
+    if (!document.getElementById(RESTORE_FAB_ID)) return;
+    if (!restoreFabScrolling) positionRestoreFab();
+  }, IDLE_FAB_REPOSITION_MS);
 }
 
 function markActiveTargetUnavailable(message: string): void {
   const panel = activePanel;
-  if (!panel || panel.hasAttribute(TARGET_STALE_ATTRIBUTE)) return;
+  if (!panel) return;
+  const alreadyMarked = panel.hasAttribute(TARGET_STALE_ATTRIBUTE);
   panel.setAttribute(TARGET_STALE_ATTRIBUTE, message);
-  showStatus(panel, message, "error");
+  const status = panel.querySelector<HTMLElement>("[data-panel-status]");
+  // The footer status is a single shared line: a later transient message
+  // ("Copied.", "Replies generated.") can overwrite the warning. Re-assert
+  // it once the line frees up (info statuses auto-clear after 3.5s), but
+  // never stomp whatever message is currently showing.
+  if (!alreadyMarked || !status?.textContent) {
+    showStatus(panel, message, "error");
+  }
   updateRestoreFabLabel();
 }
 
@@ -880,7 +919,7 @@ function mountFloatingFab(mode: "restore" | "idle"): HTMLButtonElement {
   document.body.append(fab);
   updateRestoreFabLabel();
   positionRestoreFab();
-  startRestoreFabTracking();
+  startRestoreFabTracking(mode);
   return fab;
 }
 
@@ -2006,10 +2045,6 @@ function refreshPostAttachmentRow(panel: HTMLElement, composerRoot: HTMLElement)
           ? `Read attached images (${attachedCount})`
           : "Read images";
   }
-  const info = row.querySelector<HTMLElement>("[data-images-info]");
-  if (info) {
-    info.dataset.tooltip = "Auto reads available quoted and attached images for an empty/short composer or when its text refers to visual content. On always sends all available images; Off never sends any image. Images are read only after you press Generate.";
-  }
   if (row.hidden !== (count === 0)) {
     animatePanelHeight(panel, () => {
       row.hidden = count === 0;
@@ -2093,15 +2128,21 @@ async function requestPostDrafts(
   const includeImages = imageMode === "on" ||
     (imageMode === "auto" && autoIncludeImages(existingDraft, availableImageCount > 0));
 
+  const quotedTextAvailable = Boolean(extractedQuotedPost?.text.trim());
   // Off (and Auto when the heuristic says no) removes only image URLs; quote
-  // text/author/language remain useful context. The service worker/backend
-  // therefore cannot accidentally send a quoted image behind the toggle.
-  const quotedPost = extractedQuotedPost
+  // text/author/language remain useful context. But a quote with neither
+  // readable text nor enabled images is an empty husk the backend drops
+  // silently — the prompt would lose all quote-tweet framing while the panel
+  // still says AI Quote. Drop it here and tell the user instead.
+  const quotedPost = extractedQuotedPost && (quotedTextAvailable || (includeImages && quotedImageCount > 0))
     ? { ...extractedQuotedPost, imageUrls: includeImages ? extractedQuotedPost.imageUrls : undefined }
     : undefined;
   const quotedPostFingerprint = extractedQuotedPost ? fingerprintQuotedPost(extractedQuotedPost) : null;
-  const quotedTextAvailable = Boolean(extractedQuotedPost?.text.trim());
   const includedImageCount = includeImages ? availableImageCount : 0;
+
+  if (extractedQuotedPost && !quotedPost && existingDraft) {
+    showStatus(panel, "Quoted post has no readable text and image reading is off — generating from your draft only.");
+  }
 
   if (!existingDraft && !(mode === "fresh" && (quotedTextAvailable || includedImageCount > 0))) {
     if (mode !== "fresh" && extractedQuotedPost) {
@@ -2478,7 +2519,7 @@ export function openPostPanel(anchor: HTMLButtonElement, composer: StandaloneCom
         <div class="eks-count-label" data-attachment-row hidden>
           <span class="eks-image-label-heading">
             <span data-attachment-label>Read attached images</span>
-            <button type="button" class="eks-tooltip-info" data-images-info aria-label="About reading images" data-tooltip="Auto reads available quoted and attached images when they help. On always sends all available images; Off never sends any image. Images are read only after you press Generate.">i</button>
+            <button type="button" class="eks-tooltip-info" data-images-info aria-label="About reading images" data-tooltip="Auto reads available quoted and attached images for an empty/short composer or when its text refers to visual content. On always sends all available images; Off never sends any image. Images are read only after you press Generate.">i</button>
           </span>
           <div class="eks-count-group" data-images-group role="group" aria-label="Read images for generation">
             <button type="button" data-images="auto" aria-pressed="true">Auto</button>
@@ -2609,6 +2650,9 @@ window.addEventListener("resize", () => {
   closeToneList();
   closeFabMenu();
   queuePanelPosition();
+  // The idle fab has no MutationObserver; resize is one of its two
+  // reposition triggers (the other is the slow interval).
+  if (document.getElementById(RESTORE_FAB_ID)) positionRestoreFab();
 });
 window.addEventListener(
   "scroll",

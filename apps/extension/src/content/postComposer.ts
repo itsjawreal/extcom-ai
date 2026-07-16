@@ -4,6 +4,7 @@ import {
   resolveEditableTarget,
 } from "./replyComposer";
 import { findStandaloneComposers, POST_COMPOSER_SESSION_ATTRIBUTE } from "./postComposerObserver";
+import { findQuotedPreview } from "./composerQuote";
 
 function normalizeComposerSnapshot(text: string): string {
   // Both values come from getComposerText(), so their DOM representation is
@@ -35,10 +36,15 @@ function findLiveComposer(initialRoot: HTMLElement): { root: HTMLElement; editab
   // swaps the root and the user acts inside that tiny window, transfer the
   // still-valid session eagerly. A completed scan with no composer removes
   // the old root's session id, so a genuinely new composer cannot enter here.
+  // Quote-ness must match too: a quote composer and a plain modal are both
+  // dialogs, but drafts written above a quoted tweet must never transfer to
+  // a composer without one (or vice versa).
   const expectedModal = initialRoot.matches('[role="dialog"]');
+  const expectedQuote = Boolean(findQuotedPreview(initialRoot));
   const replacement = composers.find(({ root }) =>
     !root.hasAttribute(POST_COMPOSER_SESSION_ATTRIBUTE) &&
-    root.matches('[role="dialog"]') === expectedModal
+    root.matches('[role="dialog"]') === expectedModal &&
+    Boolean(findQuotedPreview(root)) === expectedQuote
   );
   if (!replacement) return null;
   replacement.root.setAttribute(POST_COMPOSER_SESSION_ATTRIBUTE, sessionId);

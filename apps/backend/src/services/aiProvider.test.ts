@@ -1104,3 +1104,61 @@ test("post requests forward validated composer attachments to the provider in or
     else process.env.OPENAI_API_KEY = previousKey;
   }
 });
+
+test("caps combined attached and quoted images at the 4-image ceiling, own attachments first", async () => {
+  resetModelCatalogCache();
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  const previousFetch = globalThis.fetch;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  let requestBody: Record<string, unknown> | undefined;
+
+  globalThis.fetch = mockCatalogAndCompletion(
+    [{ id: "vision/model", supported_parameters: ["structured_outputs"] }],
+    (body) => { requestBody = body; },
+  );
+
+  try {
+    await generateWithOpenRouter({
+      brief: "chart take",
+      mode: "fresh",
+      language: "brief",
+      tone: "smart",
+      count: 1,
+      maxLength: 220,
+      useEmoji: false,
+      model: "vision/model",
+      attachedImages: [
+        { dataUrl: "data:image/png;base64,A1", mimeType: "image/png", width: 10, height: 10 },
+        { dataUrl: "data:image/png;base64,A2", mimeType: "image/png", width: 10, height: 10 },
+        { dataUrl: "data:image/png;base64,A3", mimeType: "image/png", width: 10, height: 10 },
+      ],
+      quotedPost: {
+        text: "quoted",
+        imageUrls: [
+          "https://pbs.twimg.com/media/q1.jpg",
+          "https://pbs.twimg.com/media/q2.jpg",
+          "https://pbs.twimg.com/media/q3.jpg",
+        ],
+      },
+    });
+
+    const messages = requestBody?.messages as Array<{ role: string; content: unknown }>;
+    const userContent = messages.find((message) => message.role === "user")?.content as Array<{
+      type: string;
+      image_url?: { url: string };
+    }>;
+    assert.deepEqual(
+      userContent.filter((block) => block.type === "image_url").map((block) => block.image_url?.url),
+      [
+        "data:image/png;base64,A1",
+        "data:image/png;base64,A2",
+        "data:image/png;base64,A3",
+        "https://pbs.twimg.com/media/q1.jpg",
+      ],
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
+  }
+});

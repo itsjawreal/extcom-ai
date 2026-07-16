@@ -163,7 +163,9 @@ function extractPostUrl(post: HTMLElement): string | undefined {
   }
 }
 
-function normalizeLanguageTag(value: string | null | undefined): string | undefined {
+// Exported for composerQuote.ts: the quoted-preview lang attr needs the same
+// legacy-tag canonicalization and malformed-value tolerance as post text.
+export function normalizeLanguageTag(value: string | null | undefined): string | undefined {
   const candidate = value?.trim();
   if (!candidate || candidate.toLowerCase() === "und") return undefined;
   try {

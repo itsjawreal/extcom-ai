@@ -9,6 +9,8 @@
 // [data-testid="tweetPhoto"]. A plain modal has none of these (scenario 5
 // control), so their presence is the detection predicate.
 
+import { normalizeLanguageTag } from "./extractPost";
+
 export type QuotedPostContext = {
   // May be "" for an image-only quoted tweet.
   text: string;
@@ -83,13 +85,16 @@ export function extractQuotedPost(preview: HTMLElement): QuotedPostContext | nul
 
   if (!text && !authorHandle && !imageUrls.length) return null;
 
-  const sourceLanguage = textNode?.getAttribute("lang") || undefined;
+  // Canonicalizes legacy tags ("in"→"id", "iw"→"he") and drops malformed
+  // values — a raw attr would make the backend's BCP 47 validation reject
+  // the whole quote generation instead of degrading to no-language.
+  const sourceLanguage = normalizeLanguageTag(textNode?.getAttribute("lang"));
   return {
     text,
     authorHandle,
     authorName,
     imageUrls: imageUrls.length ? imageUrls : undefined,
-    sourceLanguage: sourceLanguage && sourceLanguage !== "und" ? sourceLanguage : undefined,
+    sourceLanguage,
   };
 }
 
