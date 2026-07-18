@@ -433,6 +433,9 @@ function setControlsDisabled(panel: HTMLElement, disabled: boolean): void {
 function setPanelLoading(panel: HTMLElement, loading: boolean): void {
   const generateButton = panel.querySelector<HTMLButtonElement>("[data-generate-button]");
   if (generateButton) generateButton.textContent = loading ? "Generating..." : "Generate";
+  // Read by syncPanelPosition: a panel with an in-flight generation must not
+  // be auto-closed when its composer briefly drops out of the DOM.
+  panel.dataset.loading = String(loading);
   setControlsDisabled(panel, loading);
 }
 
@@ -1179,6 +1182,17 @@ export function syncPanelPosition(): void {
       activePostComposerRoot = root;
       activeAnchor = anchor;
       clearActiveTargetUnavailable();
+    } else if (
+      activePanel?.dataset.hasDrafts !== "true" &&
+      activePanel?.dataset.loading !== "true"
+    ) {
+      // The composer was closed or posted and the panel holds nothing worth
+      // keeping (drafts are cleared after Insert) — a lingering empty panel
+      // with a red error is pure clutter, so close it. With drafts, the
+      // copy-only stale state below stays; mid-generation, the panel stays
+      // so the in-flight request can land.
+      closePanel();
+      return;
     } else {
       markActiveTargetUnavailable(
         "Post composer is no longer open. Existing drafts can still be copied; reopen the composer to generate or insert.",
