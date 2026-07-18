@@ -69,6 +69,14 @@ let themeSyncQueued = false;
 let sessionTone: Tone | "auto" | null = null;
 
 const TOOLTIP_ID = "eks-content-tooltip";
+// Declared before the theme block: syncPanelTheme() references these ids and
+// is called once at module top level (line ~148) — declaring them lower in
+// the file put them in the temporal dead zone during that call, which threw
+// and killed the whole content script at load.
+const RESTORE_FAB_ID = "eks-restore-fab";
+const FAB_MENU_ID = "eks-fab-menu";
+const RESTORE_FAB_MIN_BOTTOM = 152;
+const TARGET_STALE_ATTRIBUTE = "data-target-stale";
 const TOOLTIP_GAP = 6;
 const TOOLTIP_VIEWPORT_MARGIN = 8;
 
@@ -662,11 +670,6 @@ async function regenerateSlot(
     setControlsDisabled(panel, false);
   }
 }
-
-const RESTORE_FAB_ID = "eks-restore-fab";
-const FAB_MENU_ID = "eks-fab-menu";
-const RESTORE_FAB_MIN_BOTTOM = 152;
-const TARGET_STALE_ATTRIBUTE = "data-target-stale";
 
 // "always" turns the fab into a permanent launcher (plan §21 revision);
 // "minimized" is the original restore-only behavior; "off" hides only the
